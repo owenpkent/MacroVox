@@ -1,0 +1,29 @@
+{
+  "audio": {
+    "sampleRate": 16000,
+    "channels": 1,
+    "bitDepth": 16,
+    "device": "default"
+  },
+  "deepgram": {
+    "model": "nova-2",
+    "language": "en",
+    "interimResults": true,
+    "punctuate": false,
+    "smartFormat": false,
+    "vad": true,
+    "endpointing": 300
+  },
+  "mapping": {
+    "dedupeWindow": 500,
+    "fuzzyThreshold": 0.8,
+    "minConfidence": 0.5
+  },
+  "ahk": {
+    "path": "AutoHotkey.exe",
+    "scriptPath": "ahk/MacroVox.ahk",
+    "timeout": 5000
+  },
+  "defaultProfile": "premiere",
+  "logLevel": "info"
+}

@@ -1,0 +1,42 @@
+{
+  "name": "macrovox",
+  "version": "0.1.0",
+  "description": "Voice-controlled macro engine for Windows using Deepgram and AutoHotkey",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "node --test src/**/*.test.js",
+    "test:mapper": "node test-mapper.js",
+    "test:audio": "node test-audio.js",
+    "test:deepgram": "node test-deepgram.js",
+    "test:ahk": "node test-ahk.js",
+    "test:all": "npm run test:mapper && npm run test:audio && npm run test:deepgram && npm run test:ahk",
+    "test:e2e": "node test-e2e.js",
+    "measure-latency": "node measure-latency.js",
+    "list-profiles": "node src/index.js --list-profiles",
+    "add-command": "node add-command.js"
+  },
+  "keywords": [
+    "voice",
+    "macro",
+    "deepgram",
+    "autohotkey",
+    "windows"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@deepgram/sdk": "^3.5.0",
+    "dotenv": "^16.3.1",
+    "fastest-levenshtein": "^1.0.16",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

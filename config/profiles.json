@@ -1,0 +1,59 @@
+{
+  "profiles": {
+    "premiere": {
+      "name": "Adobe Premiere Pro",
+      "target": {
+        "ahk_exe": "Adobe Premiere Pro.exe"
+      },
+      "commands": {
+        "undo": {
+          "keys": "^z",
+          "description": "Undo last action"
+        },
+        "control victor": {
+          "keys": "^v",
+          "description": "Paste (Ctrl+V)"
+        },
+        "control charlie": {
+          "keys": "^c",
+          "description": "Copy (Ctrl+C)"
+        },
+        "redo": {
+          "keys": "^y",
+          "description": "Redo last action"
+        },
+        "cut": {
+          "keys": "^k",
+          "description": "Cut/split clip"
+        }
+      }
+    },
+    "resolve": {
+      "name": "DaVinci Resolve",
+      "target": {
+        "ahk_exe": "Resolve.exe"
+      },
+      "commands": {
+        "undo": {
+          "keys": "^z",
+          "description": "Undo"
+        }
+      }
+    },
+    "gaming": {
+      "name": "Gaming Mode",
+      "target": {},
+      "commands": {
+        "reload": {
+          "keys": "r",
+          "description": "Reload"
+        },
+        "jump": {
+          "keys": "Space",
+          "description": "Jump"
+        }
+      }
+    }
+  },
+  "defaultProfile": "premiere"
+}
