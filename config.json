@@ -1,0 +1,21 @@
+{
+  "output_folder": "C:/Users/Owen/OneDrive - Rocky Mountain Inventions/Apps/ASR Cloud Uploads/asr voice/Threadmaster",
+  "sample_rate": 44100,
+  "channels": 1,
+  "format": "wav",
+  "device": 1,
+  "device_name": "Microphone (5- Shure MV7+)",
+  "theme": "dark",
+  "filename_template": "{timestamp}_{label}",
+  "timestamp_format": "%Y%m%d_%H%M%S",
+  "tags": [
+    {
+      "name": "IDEA",
+      "color": "#00d4aa"
+    },
+    {
+      "name": "ATDEV",
+      "color": "#00d4aa"
+    }
+  ]
+}

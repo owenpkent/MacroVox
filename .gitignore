@@ -14,3 +14,11 @@ build/
 ffmpeg-*/
 AutoHotkey_*/
 sox-*/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/

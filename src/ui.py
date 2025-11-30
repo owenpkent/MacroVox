@@ -1,0 +1,612 @@
+"""
+Voice Memo Recorder - Main GUI Application
+Expanse-inspired futuristic interface
+"""
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QFont
+from PySide6.QtWidgets import (
+    QApplication,
+    QColorDialog,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFormLayout,
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
+
+from .recorder import VoiceRecorder
+from .settings import Settings
+from .themes import DEFAULT_TAGS, get_theme
+
+
+class FlowLayout(QHBoxLayout):
+    """Simple flow layout that wraps widgets."""
+    pass
+
+
+class TagButton(QPushButton):
+    """A clickable tag button with color."""
+    
+    removed = Signal(str)
+    
+    def __init__(self, name: str, color: str, parent=None):
+        super().__init__(name, parent)
+        self.tag_name = name
+        self.tag_color = color
+        self.selected = False
+        self._apply_style()
+        
+    def _apply_style(self):
+        """Apply color-based styling."""
+        if self.selected:
+            self.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {self.tag_color};
+                    color: #0a0e14;
+                    border: 2px solid {self.tag_color};
+                    padding: 6px 12px;
+                    border-radius: 2px;
+                    font-size: 10px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 1px;
+                }}
+                QPushButton:hover {{
+                    opacity: 0.9;
+                }}
+            """)
+        else:
+            self.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: transparent;
+                    color: {self.tag_color};
+                    border: 1px solid {self.tag_color};
+                    padding: 6px 12px;
+                    border-radius: 2px;
+                    font-size: 10px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 1px;
+                }}
+                QPushButton:hover {{
+                    background-color: {self.tag_color}22;
+                }}
+            """)
+    
+    def set_selected(self, selected: bool):
+        """Set selection state."""
+        self.selected = selected
+        self._apply_style()
+
+    def contextMenuEvent(self, event):
+        """Right-click to remove tag."""
+        self.removed.emit(self.tag_name)
+
+
+class TagEditor(QDialog):
+    """Dialog for adding/editing tags."""
+    
+    def __init__(self, parent=None, name: str = "", color: str = "#00d4aa"):
+        super().__init__(parent)
+        self.setWindowTitle("Add Tag" if not name else "Edit Tag")
+        self.setMinimumWidth(300)
+        self.tag_color = color
+        self._setup_ui(name)
+    
+    def _setup_ui(self, name: str):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(16)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Name input
+        name_layout = QHBoxLayout()
+        name_label = QLabel("Name:")
+        self.name_input = QLineEdit(name)
+        self.name_input.setPlaceholderText("TAG NAME")
+        name_layout.addWidget(name_label)
+        name_layout.addWidget(self.name_input)
+        layout.addLayout(name_layout)
+        
+        # Color picker
+        color_layout = QHBoxLayout()
+        color_label = QLabel("Color:")
+        self.color_btn = QPushButton()
+        self.color_btn.setObjectName("colorBtn")
+        self.color_btn.setFixedSize(60, 30)
+        self.color_btn.setStyleSheet(f"background-color: {self.tag_color};")
+        self.color_btn.clicked.connect(self._pick_color)
+        color_layout.addWidget(color_label)
+        color_layout.addWidget(self.color_btn)
+        color_layout.addStretch()
+        layout.addLayout(color_layout)
+        
+        # Preview
+        self.preview = TagButton(name or "PREVIEW", self.tag_color)
+        self.preview.setEnabled(False)
+        preview_layout = QHBoxLayout()
+        preview_layout.addStretch()
+        preview_layout.addWidget(self.preview)
+        preview_layout.addStretch()
+        layout.addLayout(preview_layout)
+        
+        self.name_input.textChanged.connect(self._update_preview)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(cancel_btn)
+        
+        save_btn = QPushButton("Save")
+        save_btn.clicked.connect(self._save)
+        save_btn.setDefault(True)
+        btn_layout.addWidget(save_btn)
+        
+        layout.addLayout(btn_layout)
+    
+    def _pick_color(self):
+        """Open color picker."""
+        color = QColorDialog.getColor(QColor(self.tag_color), self)
+        if color.isValid():
+            self.tag_color = color.name()
+            self.color_btn.setStyleSheet(f"background-color: {self.tag_color};")
+            self._update_preview()
+    
+    def _update_preview(self):
+        """Update preview button."""
+        name = self.name_input.text().upper() or "PREVIEW"
+        self.preview.tag_name = name
+        self.preview.tag_color = self.tag_color
+        self.preview.setText(name)
+        self.preview._apply_style()
+    
+    def _save(self):
+        """Validate and save."""
+        if not self.name_input.text().strip():
+            return
+        self.accept()
+    
+    def get_tag(self) -> dict:
+        """Return tag data."""
+        return {
+            "name": self.name_input.text().strip().upper(),
+            "color": self.tag_color
+        }
+
+
+class SettingsDialog(QDialog):
+    """Settings dialog for configuring the recorder."""
+
+    def __init__(self, settings: Settings, parent=None):
+        super().__init__(parent)
+        self.settings = settings
+        self.tags = list(settings.get("tags", DEFAULT_TAGS))
+        self.setWindowTitle("SETTINGS")
+        self.setMinimumWidth(480)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 24, 24, 24)
+
+        # Output folder
+        folder_group = QGroupBox("OUTPUT LOCATION")
+        folder_layout = QHBoxLayout(folder_group)
+        
+        self.folder_input = QLineEdit(self.settings.get("output_folder"))
+        self.folder_input.setReadOnly(True)
+        folder_layout.addWidget(self.folder_input)
+        
+        browse_btn = QPushButton("BROWSE")
+        browse_btn.clicked.connect(self._browse_folder)
+        folder_layout.addWidget(browse_btn)
+        layout.addWidget(folder_group)
+
+        # Audio settings
+        audio_group = QGroupBox("AUDIO")
+        audio_layout = QFormLayout(audio_group)
+
+        self.mic_combo = QComboBox()
+        self._populate_microphones()
+        audio_layout.addRow("MICROPHONE", self.mic_combo)
+
+        self.format_combo = QComboBox()
+        for fmt in VoiceRecorder.get_supported_formats():
+            self.format_combo.addItem(fmt.upper(), fmt)
+        current_fmt = self.settings.get("format", "wav")
+        idx = self.format_combo.findData(current_fmt)
+        if idx >= 0:
+            self.format_combo.setCurrentIndex(idx)
+        audio_layout.addRow("FORMAT", self.format_combo)
+
+        layout.addWidget(audio_group)
+
+        # Tags management
+        tags_group = QGroupBox("TAGS")
+        tags_layout = QVBoxLayout(tags_group)
+        
+        self.tags_container = QWidget()
+        self.tags_flow = QHBoxLayout(self.tags_container)
+        self.tags_flow.setSpacing(8)
+        self.tags_flow.setContentsMargins(0, 0, 0, 0)
+        self._rebuild_tags()
+        
+        tags_scroll = QScrollArea()
+        tags_scroll.setWidget(self.tags_container)
+        tags_scroll.setWidgetResizable(True)
+        tags_scroll.setFixedHeight(50)
+        tags_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        tags_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        tags_layout.addWidget(tags_scroll)
+        
+        tags_btn_layout = QHBoxLayout()
+        add_tag_btn = QPushButton("+ ADD TAG")
+        add_tag_btn.clicked.connect(self._add_tag)
+        tags_btn_layout.addWidget(add_tag_btn)
+        tags_btn_layout.addStretch()
+        
+        reset_tags_btn = QPushButton("RESET")
+        reset_tags_btn.clicked.connect(self._reset_tags)
+        tags_btn_layout.addWidget(reset_tags_btn)
+        tags_layout.addLayout(tags_btn_layout)
+        
+        layout.addWidget(tags_group)
+
+        # Appearance
+        appearance_group = QGroupBox("APPEARANCE")
+        appearance_layout = QFormLayout(appearance_group)
+
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItem("DARK", "dark")
+        self.theme_combo.addItem("LIGHT", "light")
+        current_theme = self.settings.get("theme", "dark")
+        idx = self.theme_combo.findData(current_theme)
+        if idx >= 0:
+            self.theme_combo.setCurrentIndex(idx)
+        appearance_layout.addRow("THEME", self.theme_combo)
+
+        layout.addWidget(appearance_group)
+
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        cancel_btn = QPushButton("CANCEL")
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(cancel_btn)
+
+        save_btn = QPushButton("SAVE")
+        save_btn.clicked.connect(self._save_settings)
+        save_btn.setDefault(True)
+        btn_layout.addWidget(save_btn)
+
+        layout.addLayout(btn_layout)
+
+    def _rebuild_tags(self):
+        """Rebuild tag buttons."""
+        # Clear existing
+        while self.tags_flow.count():
+            item = self.tags_flow.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        for tag in self.tags:
+            btn = TagButton(tag["name"], tag["color"])
+            btn.removed.connect(self._remove_tag)
+            btn.setToolTip("Right-click to remove")
+            self.tags_flow.addWidget(btn)
+        
+        self.tags_flow.addStretch()
+
+    def _add_tag(self):
+        """Add a new tag."""
+        dialog = TagEditor(self)
+        dialog.setStyleSheet(self.styleSheet())
+        if dialog.exec() == QDialog.Accepted:
+            tag = dialog.get_tag()
+            # Check for duplicates
+            if not any(t["name"] == tag["name"] for t in self.tags):
+                self.tags.append(tag)
+                self._rebuild_tags()
+
+    def _remove_tag(self, name: str):
+        """Remove a tag."""
+        self.tags = [t for t in self.tags if t["name"] != name]
+        self._rebuild_tags()
+
+    def _reset_tags(self):
+        """Reset to default tags."""
+        self.tags = list(DEFAULT_TAGS)
+        self._rebuild_tags()
+
+    def _populate_microphones(self):
+        """Populate microphone dropdown."""
+        self.mic_combo.clear()
+        self.mic_combo.addItem("Default", None)
+        
+        devices = VoiceRecorder.get_input_devices()
+        current_device = self.settings.get("device")
+        
+        for dev in devices:
+            self.mic_combo.addItem(dev["name"], dev["id"])
+            if dev["id"] == current_device:
+                self.mic_combo.setCurrentIndex(self.mic_combo.count() - 1)
+
+    def _browse_folder(self):
+        """Open folder browser dialog."""
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Select Output Folder",
+            self.folder_input.text(),
+        )
+        if folder:
+            self.folder_input.setText(folder)
+
+    def _save_settings(self):
+        """Save settings and close dialog."""
+        self.settings.update(
+            output_folder=self.folder_input.text(),
+            device=self.mic_combo.currentData(),
+            device_name=self.mic_combo.currentText(),
+            format=self.format_combo.currentData(),
+            theme=self.theme_combo.currentData(),
+            tags=self.tags,
+        )
+        self.accept()
+
+
+class VoiceMemoApp(QMainWindow):
+    """Main application window for voice memo recording."""
+
+    def __init__(self):
+        super().__init__()
+        self.settings = Settings()
+        self.recorder = VoiceRecorder(self.settings.to_dict())
+        self.recording_duration = 0
+        self.timer = QTimer()
+        self.timer.timeout.connect(self._update_duration)
+        self.selected_tags: list[str] = []
+        self.tag_buttons: dict[str, TagButton] = {}
+        self._setup_ui()
+        self._apply_theme()
+
+    def _setup_ui(self):
+        """Initialize the user interface."""
+        self.setWindowTitle("VOICE MEMO")
+        self.setMinimumSize(460, 380)
+        self.setMaximumSize(520, 440)
+
+        central = QWidget()
+        self.setCentralWidget(central)
+        layout = QVBoxLayout(central)
+        layout.setSpacing(12)
+        layout.setContentsMargins(28, 28, 28, 28)
+
+        # Status label
+        self.status_label = QLabel("READY")
+        self.status_label.setObjectName("statusLabel")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.status_label)
+
+        # Duration label
+        self.duration_label = QLabel("00:00")
+        self.duration_label.setAlignment(Qt.AlignCenter)
+        self.duration_label.setObjectName("durationLabel")
+        layout.addWidget(self.duration_label)
+
+        # Device info
+        device_name = self.settings.get("device_name", "Default")
+        self.device_label = QLabel(f"◉ {device_name}")
+        self.device_label.setObjectName("deviceLabel")
+        self.device_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.device_label)
+
+        layout.addSpacing(8)
+
+        # Tags section
+        tags_label = QLabel("TAGS")
+        tags_label.setObjectName("statusLabel")
+        layout.addWidget(tags_label)
+
+        self.tags_frame = QFrame()
+        self.tags_frame.setObjectName("tagsFrame")
+        self.tags_layout = QHBoxLayout(self.tags_frame)
+        self.tags_layout.setSpacing(8)
+        self.tags_layout.setContentsMargins(12, 10, 12, 10)
+        self._rebuild_tag_buttons()
+        layout.addWidget(self.tags_frame)
+
+        # Label input field
+        self.label_input = QLineEdit()
+        self.label_input.setPlaceholderText("Additional label (optional)...")
+        layout.addWidget(self.label_input)
+
+        layout.addSpacing(4)
+
+        # Button row
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
+
+        # Record button
+        self.record_btn = QPushButton("● REC")
+        self.record_btn.setObjectName("recordBtn")
+        self.record_btn.setMinimumHeight(48)
+        self.record_btn.clicked.connect(self._toggle_recording)
+        button_layout.addWidget(self.record_btn, 2)
+
+        # Open folder button
+        self.folder_btn = QPushButton("◫")
+        self.folder_btn.setObjectName("folderBtn")
+        self.folder_btn.setMinimumHeight(48)
+        self.folder_btn.setFixedWidth(48)
+        self.folder_btn.setToolTip("Open output folder")
+        self.folder_btn.clicked.connect(self._open_output_folder)
+        button_layout.addWidget(self.folder_btn)
+
+        # Settings button
+        self.settings_btn = QPushButton("⚙")
+        self.settings_btn.setObjectName("settingsBtn")
+        self.settings_btn.setMinimumHeight(48)
+        self.settings_btn.setFixedWidth(48)
+        self.settings_btn.setToolTip("Settings")
+        self.settings_btn.clicked.connect(self._open_settings)
+        button_layout.addWidget(self.settings_btn)
+
+        layout.addLayout(button_layout)
+
+    def _rebuild_tag_buttons(self):
+        """Rebuild tag buttons from settings."""
+        # Clear existing
+        while self.tags_layout.count():
+            item = self.tags_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        self.tag_buttons.clear()
+        tags = self.settings.get("tags", DEFAULT_TAGS)
+        
+        for tag in tags:
+            btn = TagButton(tag["name"], tag["color"])
+            btn.clicked.connect(lambda checked, n=tag["name"]: self._toggle_tag(n))
+            if tag["name"] in self.selected_tags:
+                btn.set_selected(True)
+            self.tag_buttons[tag["name"]] = btn
+            self.tags_layout.addWidget(btn)
+        
+        self.tags_layout.addStretch()
+
+    def _toggle_tag(self, name: str):
+        """Toggle tag selection."""
+        btn = self.tag_buttons.get(name)
+        if not btn:
+            return
+        
+        if name in self.selected_tags:
+            self.selected_tags.remove(name)
+            btn.set_selected(False)
+        else:
+            self.selected_tags.append(name)
+            btn.set_selected(True)
+
+    def _get_label(self) -> str:
+        """Get combined label from tags and input."""
+        parts = self.selected_tags.copy()
+        extra = self.label_input.text().strip()
+        if extra:
+            parts.append(extra)
+        return "_".join(parts) if parts else ""
+
+    def _apply_theme(self):
+        """Apply the current theme."""
+        theme = self.settings.get("theme", "dark")
+        self.setStyleSheet(get_theme(theme))
+
+    def _toggle_recording(self):
+        """Start or stop recording based on current state."""
+        if self.recorder.is_recording:
+            self._stop_recording()
+        else:
+            self._start_recording()
+
+    def _start_recording(self):
+        """Start recording audio."""
+        label = self._get_label()
+        filepath = self.recorder.start_recording(label)
+
+        self.record_btn.setText("■ STOP")
+        self.record_btn.setProperty("recording", True)
+        self.record_btn.style().unpolish(self.record_btn)
+        self.record_btn.style().polish(self.record_btn)
+
+        self.status_label.setText("● RECORDING")
+        self.recording_duration = 0
+        self.timer.start(1000)
+        self.label_input.setEnabled(False)
+        self.settings_btn.setEnabled(False)
+        self.tags_frame.setEnabled(False)
+
+    def _stop_recording(self):
+        """Stop recording audio."""
+        self.timer.stop()
+        filepath = self.recorder.stop_recording()
+
+        self.record_btn.setText("● REC")
+        self.record_btn.setProperty("recording", False)
+        self.record_btn.style().unpolish(self.record_btn)
+        self.record_btn.style().polish(self.record_btn)
+
+        filename = Path(filepath).name if filepath else "Unknown"
+        self.status_label.setText(f"SAVED: {filename}")
+        self.label_input.setEnabled(True)
+        self.label_input.clear()
+        self.settings_btn.setEnabled(True)
+        self.tags_frame.setEnabled(True)
+        
+        # Clear selected tags
+        for btn in self.tag_buttons.values():
+            btn.set_selected(False)
+        self.selected_tags.clear()
+
+    def _update_duration(self):
+        """Update the duration display."""
+        self.recording_duration += 1
+        minutes = self.recording_duration // 60
+        seconds = self.recording_duration % 60
+        self.duration_label.setText(f"{minutes:02d}:{seconds:02d}")
+
+    def _open_output_folder(self):
+        """Open the output folder in the system file explorer."""
+        folder = self.recorder.get_output_folder()
+        if sys.platform == "win32":
+            os.startfile(folder)
+        elif sys.platform == "darwin":
+            subprocess.run(["open", folder])
+        else:
+            subprocess.run(["xdg-open", folder])
+
+    def _open_settings(self):
+        """Open the settings dialog."""
+        dialog = SettingsDialog(self.settings, self)
+        dialog.setStyleSheet(self.styleSheet())
+        
+        if dialog.exec() == QDialog.Accepted:
+            self.recorder.update_config(**self.settings.to_dict())
+            self._apply_theme()
+            device_name = self.settings.get("device_name", "Default")
+            self.device_label.setText(f"◉ {device_name}")
+            self._rebuild_tag_buttons()
+
+    def closeEvent(self, event):
+        """Handle window close - stop recording if active."""
+        if self.recorder.is_recording:
+            self._stop_recording()
+        event.accept()
+
+
+def main():
+    """Application entry point."""
+    app = QApplication(sys.argv)
+    app.setApplicationName("Voice Memo")
+    
+    window = VoiceMemoApp()
+    window.show()
+
+    sys.exit(app.exec())
