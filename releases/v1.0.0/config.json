@@ -1,0 +1,17 @@
+{
+  "output_folder": "~/VoiceMemos/Inbox",
+  "sample_rate": 44100,
+  "channels": 1,
+  "format": "wav",
+  "device": null,
+  "device_name": "Default",
+  "theme": "dark",
+  "filename_template": "{timestamp}_{label}",
+  "timestamp_format": "%Y%m%d_%H%M%S",
+  "tags": [
+    {"name": "IDEA", "color": "#00d4aa"},
+    {"name": "TODO", "color": "#ff6b35"},
+    {"name": "NOTE", "color": "#4da6ff"},
+    {"name": "URGENT", "color": "#ff3366"}
+  ]
+}
