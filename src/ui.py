@@ -1,6 +1,6 @@
 """
-Voice Memo Recorder - Main GUI Application
-Expanse-inspired futuristic interface
+MacroVox - Voice-to-Text Workstation
+IDE-inspired multi-panel interface with DeepGram integration
 """
 
 import os
@@ -25,10 +25,12 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QPushButton,
     QScrollArea,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
 
+from .panels import FileBrowserPanel, OutputPanel, TerminalPanel
 from .recorder import VoiceRecorder
 from .settings import Settings
 from .themes import DEFAULT_TAGS, get_theme
@@ -373,8 +375,16 @@ class SettingsDialog(QDialog):
         self.accept()
 
 
+class RecorderPanel(QFrame):
+    """Recorder panel widget containing the recording controls."""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("recorderPanel")
+
+
 class VoiceMemoApp(QMainWindow):
-    """Main application window for voice memo recording."""
+    """Main application window - IDE-style voice-to-text workstation."""
 
     def __init__(self):
         super().__init__()
@@ -387,18 +397,73 @@ class VoiceMemoApp(QMainWindow):
         self.tag_buttons: dict[str, TagButton] = {}
         self._setup_ui()
         self._apply_theme()
+        self._connect_panels()
 
     def _setup_ui(self):
-        """Initialize the user interface."""
-        self.setWindowTitle("VOICE MEMO")
-        self.setMinimumSize(460, 380)
-        self.setMaximumSize(520, 440)
+        """Initialize the IDE-style user interface."""
+        self.setWindowTitle("MACROVOX")
+        self.setMinimumSize(1200, 700)
+        self.resize(1400, 800)
 
         central = QWidget()
         self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
+        main_layout = QHBoxLayout(central)
+        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Main horizontal splitter (3 columns)
+        self.main_splitter = QSplitter(Qt.Horizontal)
+        main_layout.addWidget(self.main_splitter)
+
+        # Left panel: File Browser
+        self.file_browser = FileBrowserPanel(self.recorder.get_output_folder())
+        self.file_browser.setMinimumWidth(200)
+        self.main_splitter.addWidget(self.file_browser)
+
+        # Middle section: Terminal (top) + Recorder (bottom)
+        middle_widget = QWidget()
+        middle_layout = QVBoxLayout(middle_widget)
+        middle_layout.setSpacing(0)
+        middle_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Vertical splitter for middle section
+        self.middle_splitter = QSplitter(Qt.Vertical)
+        middle_layout.addWidget(self.middle_splitter)
+        
+        # Terminal panel (top)
+        self.terminal = TerminalPanel()
+        self.terminal.setMinimumHeight(150)
+        self.middle_splitter.addWidget(self.terminal)
+        
+        # Recorder panel (bottom)
+        self.recorder_panel = self._create_recorder_panel()
+        self.recorder_panel.setMinimumHeight(280)
+        self.middle_splitter.addWidget(self.recorder_panel)
+        
+        # Set middle splitter proportions (60% terminal, 40% recorder)
+        self.middle_splitter.setSizes([350, 350])
+        
+        self.main_splitter.addWidget(middle_widget)
+
+        # Right panel: Output
+        self.output_panel = OutputPanel()
+        self.output_panel.setMinimumWidth(250)
+        self.main_splitter.addWidget(self.output_panel)
+
+        # Set main splitter proportions (20% left, 50% middle, 30% right)
+        self.main_splitter.setSizes([250, 600, 350])
+
+    def _create_recorder_panel(self) -> QFrame:
+        """Create the recorder panel with controls."""
+        panel = RecorderPanel()
+        layout = QVBoxLayout(panel)
         layout.setSpacing(12)
-        layout.setContentsMargins(28, 28, 28, 28)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        # Header
+        header = QLabel("RECORDER")
+        header.setObjectName("panelHeader")
+        layout.addWidget(header)
 
         # Status label
         self.status_label = QLabel("READY")
@@ -419,7 +484,7 @@ class VoiceMemoApp(QMainWindow):
         self.device_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.device_label)
 
-        layout.addSpacing(8)
+        layout.addSpacing(4)
 
         # Tags section
         tags_label = QLabel("TAGS")
@@ -471,6 +536,39 @@ class VoiceMemoApp(QMainWindow):
         button_layout.addWidget(self.settings_btn)
 
         layout.addLayout(button_layout)
+        layout.addStretch()
+        
+        return panel
+
+    def _connect_panels(self):
+        """Connect panel signals for inter-panel communication."""
+        # When a file is selected in the browser, log it in terminal
+        self.file_browser.file_selected.connect(
+            lambda path: self.terminal.log(f"Selected: {Path(path).name}", "info")
+        )
+        
+        # Terminal command handling
+        self.terminal.command_entered.connect(self._handle_terminal_command)
+        
+    def _handle_terminal_command(self, command: str):
+        """Handle commands from the terminal."""
+        cmd_lower = command.lower().strip()
+        
+        if cmd_lower == "record" or cmd_lower == "rec":
+            if not self.recorder.is_recording:
+                self._start_recording()
+                self.terminal.log("Recording started", "success")
+            else:
+                self.terminal.log("Already recording", "warning")
+        elif cmd_lower == "stop":
+            if self.recorder.is_recording:
+                self._stop_recording()
+                self.terminal.log("Recording stopped", "success")
+            else:
+                self.terminal.log("Not recording", "warning")
+        elif cmd_lower == "refresh":
+            self.file_browser.refresh()
+            self.terminal.log("File list refreshed", "success")
 
     def _rebuild_tag_buttons(self):
         """Rebuild tag buttons from settings."""
@@ -542,6 +640,10 @@ class VoiceMemoApp(QMainWindow):
         self.label_input.setEnabled(False)
         self.settings_btn.setEnabled(False)
         self.tags_frame.setEnabled(False)
+        
+        # Update terminal
+        self.terminal.log(f"Recording started: {Path(filepath).name}", "info")
+        self.terminal.set_status("RECORDING", True)
 
     def _stop_recording(self):
         """Stop recording audio."""
@@ -564,6 +666,11 @@ class VoiceMemoApp(QMainWindow):
         for btn in self.tag_buttons.values():
             btn.set_selected(False)
         self.selected_tags.clear()
+        
+        # Update terminal and refresh file browser
+        self.terminal.log(f"Saved: {filename}", "success")
+        self.terminal.set_status("READY", True)
+        self.file_browser.refresh()
 
     def _update_duration(self):
         """Update the duration display."""
@@ -593,6 +700,10 @@ class VoiceMemoApp(QMainWindow):
             device_name = self.settings.get("device_name", "Default")
             self.device_label.setText(f"◉ {device_name}")
             self._rebuild_tag_buttons()
+            
+            # Update file browser with new output folder
+            self.file_browser.set_folder(self.recorder.get_output_folder())
+            self.terminal.log("Settings updated", "info")
 
     def closeEvent(self, event):
         """Handle window close - stop recording if active."""
@@ -604,7 +715,7 @@ class VoiceMemoApp(QMainWindow):
 def main():
     """Application entry point."""
     app = QApplication(sys.argv)
-    app.setApplicationName("Voice Memo")
+    app.setApplicationName("MacroVox")
     
     window = VoiceMemoApp()
     window.show()

@@ -249,6 +249,202 @@ QPushButton#colorBtn {
 QPushButton#colorBtn:hover {
     border-color: #00d4aa;
 }
+
+/* === IDE PANEL STYLES === */
+
+/* Panel Headers */
+QLabel#panelHeader {
+    color: #546e7a;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    padding-bottom: 4px;
+}
+
+/* Splitter handles */
+QSplitter::handle {
+    background-color: #1a2633;
+}
+
+QSplitter::handle:horizontal {
+    width: 2px;
+}
+
+QSplitter::handle:vertical {
+    height: 2px;
+}
+
+QSplitter::handle:hover {
+    background-color: #00d4aa;
+}
+
+/* File Browser Panel */
+QFrame#fileBrowserPanel {
+    background-color: #0d1117;
+    border-right: 1px solid #1a2633;
+}
+
+QTreeWidget#fileTree {
+    background-color: transparent;
+    border: none;
+    color: #b0bec5;
+    font-size: 12px;
+}
+
+QTreeWidget#fileTree::item {
+    padding: 4px 8px;
+    border-radius: 2px;
+}
+
+QTreeWidget#fileTree::item:hover {
+    background-color: #1a2633;
+}
+
+QTreeWidget#fileTree::item:selected {
+    background-color: #263340;
+    color: #00d4aa;
+}
+
+QTreeWidget#fileTree::branch {
+    background-color: transparent;
+}
+
+QPushButton#refreshBtn {
+    background-color: transparent;
+    border: 1px solid #263340;
+    color: #546e7a;
+    padding: 6px 12px;
+    font-size: 10px;
+}
+
+QPushButton#refreshBtn:hover {
+    border-color: #00d4aa;
+    color: #00d4aa;
+}
+
+/* Terminal Panel */
+QFrame#terminalPanel {
+    background-color: #0a0e14;
+    border-bottom: 1px solid #1a2633;
+}
+
+QTextEdit#terminalOutput {
+    background-color: #0d1117;
+    border: 1px solid #1a2633;
+    border-radius: 2px;
+    color: #b0bec5;
+    font-family: 'Consolas', 'Roboto Mono', monospace;
+    font-size: 12px;
+    padding: 8px;
+}
+
+QLabel#terminalPrompt {
+    color: #00d4aa;
+    font-family: 'Consolas', 'Roboto Mono', monospace;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+QLineEdit#terminalInput {
+    background-color: #0d1117;
+    border: 1px solid #1a2633;
+    border-radius: 2px;
+    color: #00d4aa;
+    font-family: 'Consolas', 'Roboto Mono', monospace;
+    font-size: 12px;
+    padding: 6px 10px;
+}
+
+QLineEdit#terminalInput:focus {
+    border-color: #00d4aa;
+}
+
+QLabel#statusIndicator {
+    color: #4ade80;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Output Panel */
+QFrame#outputPanel {
+    background-color: #0d1117;
+    border-left: 1px solid #1a2633;
+}
+
+QTextEdit#outputText {
+    background-color: #0a0e14;
+    border: 1px solid #1a2633;
+    border-radius: 2px;
+    color: #b0bec5;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 13px;
+    padding: 12px;
+    line-height: 1.5;
+}
+
+QTextEdit#outputText:focus {
+    border-color: #00d4aa;
+}
+
+QLabel#wordCount {
+    color: #37474f;
+    font-size: 10px;
+    font-family: 'Consolas', monospace;
+}
+
+QPushButton#copyBtn {
+    background-color: #00d4aa;
+    border: none;
+    border-radius: 2px;
+    color: #0a0e14;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 8px 16px;
+}
+
+QPushButton#copyBtn:hover {
+    background-color: #00e6b8;
+}
+
+QPushButton#copyBtn[copied="true"] {
+    background-color: #4ade80;
+}
+
+QPushButton#clearBtn {
+    background-color: transparent;
+    border: 1px solid #263340;
+    color: #546e7a;
+    padding: 6px 12px;
+    font-size: 10px;
+}
+
+QPushButton#clearBtn:hover {
+    border-color: #ff3366;
+    color: #ff3366;
+}
+
+/* Recorder Panel (center bottom) */
+QFrame#recorderPanel {
+    background-color: #0a0e14;
+    border-top: 1px solid #1a2633;
+}
+
+/* Search input in file browser */
+QLineEdit#searchInput {
+    background-color: #0a0e14;
+    border: 1px solid #1a2633;
+    border-radius: 2px;
+    color: #b0bec5;
+    font-size: 11px;
+    padding: 6px 10px;
+}
+
+QLineEdit#searchInput:focus {
+    border-color: #00d4aa;
+}
 """
 
 LIGHT_THEME = """
