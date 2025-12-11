@@ -15,12 +15,12 @@
 
 ## New Dependencies
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| **PyGithub** | 2.x | GitHub API client |
-| **deepgram-sdk** | 3.x | Streaming speech-to-text |
-| **anthropic** | 0.40.x | Claude API (tool use) |
-| **websockets** | 12.x | For Deepgram streaming |
+| Technology | Version | Purpose | Status |
+|------------|---------|---------|--------|
+| **pywinpty** | 2.x+ | Windows PTY for real terminal | ✅ Implemented |
+| **deepgram-sdk** | 5.x | File-based speech-to-text | ✅ Implemented |
+| **keyring** | 25.x | Secure API key storage (Windows Credential Manager) | ✅ Implemented |
+| **anthropic** | 0.40.x | Claude API (tool use) | ✅ Implemented |
 
 ---
 
@@ -31,23 +31,21 @@ PySide6>=6.6.0
 sounddevice>=0.4.6
 soundfile>=0.12.1
 numpy>=1.24.0
+pywinpty>=2.0.0
 
-# New for GitHub + Voice + LLM
-PyGithub>=2.1.0
-deepgram-sdk>=3.0.0
+# Voice transcription (pinned to v5.x for API stability)
+deepgram-sdk>=5.0.0,<6.0.0
+
+# LLM for command interpretation
 anthropic>=0.40.0
-websockets>=12.0
-python-dotenv>=1.0.0
+
+# Secure API key storage
+keyring>=25.0.0
 ```
 
 ---
 
 ## Why These Choices
-
-### PyGithub
-- Mature, well-documented
-- Handles auth, pagination, rate limits
-- Simple file CRUD operations
 
 ### Deepgram SDK (Python)
 - Official SDK with streaming support
@@ -73,50 +71,27 @@ Existing MacroVox                    New Components
 └─────────────────┘                 └─────────────────┘
 
 ┌─────────────────┐                 ┌─────────────────┐
-│ FileBrowserPanel│ ──────────────▶ │ GitHubBrowser   │
-│   (local files) │   extend for    │ (repo files)    │
-└─────────────────┘                 └─────────────────┘
-
-┌─────────────────┐                 ┌─────────────────┐
-│   OutputPanel   │ ──────────────▶ │   EditorPanel   │
-│   (read-only)   │   replace with  │ (edit + save)   │
+│  TerminalPanel  │ ──────────────▶ │ CommandExecutor │
+│   (display)     │   connect to    │ (subprocess)    │
 └─────────────────┘                 └─────────────────┘
 
         NEW                         ┌─────────────────┐
                                     │  ClaudeService  │
                                     │  (tool calling) │
                                     └─────────────────┘
-
-        NEW                         ┌─────────────────┐
-                                    │  GitHubService  │
-                                    │  (PyGithub)     │
-                                    └─────────────────┘
 ```
 
 ---
 
-## Authentication
+## API Key Storage
 
-### Phase 1: Personal Access Token (Simple)
-1. User creates PAT on GitHub (Settings → Developer → Tokens)
-2. Paste into MacroVox settings
-3. Store in config.json (gitignored) or system keyring
+API keys are stored securely using `keyring` (Windows Credential Manager).
 
-### Phase 2 (Later): Device Flow
-1. App shows code + URL
-2. User visits URL, enters code
-3. App polls for token
-4. No redirect needed (desktop-friendly)
+**No `.env` file needed** - keys are entered via Settings UI and stored in the OS credential store.
 
----
+| Key | Storage Location |
+|-----|------------------|
+| `macrovox_deepgram_api_key` | Windows Credential Manager |
+| `macrovox_anthropic_api_key` | Windows Credential Manager |
 
-## Environment Variables
-
-```bash
-# .env (gitignored)
-GITHUB_TOKEN=ghp_xxxxxxxxxxxx
-DEEPGRAM_API_KEY=xxxxxxxxxxxxxxxx
-ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxx
-```
-
-Load with `python-dotenv` or store in config.json.
+See `docs/DEEPGRAM_SDK_NOTES.md` for SDK-specific implementation notes.

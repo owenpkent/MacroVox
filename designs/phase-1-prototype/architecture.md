@@ -11,11 +11,11 @@
 │  │                      Main Window                        │    │
 │  │                                                         │    │
 │  │   ┌─────────┐  ┌──────────┐  ┌─────────┐  ┌─────────┐  │    │
-│  │   │  Repo   │  │   File   │  │  Editor │  │  Voice  │  │    │
-│  │   │ Selector│  │   Tree   │  │  Panel  │  │   Bar   │  │    │
+│  │   │  File   │  │ Terminal │  │  Output │  │  Voice  │  │    │
+│  │   │ Browser │  │  Panel   │  │  Panel  │  │   Bar   │  │    │
 │  │   └────┬────┘  └────┬─────┘  └────┬────┘  └────┬────┘  │    │
 │  │        │            │             │            │        │    │
-│  │        │      (existing)    (new/extend)  (new/extend)  │    │
+│  │   (existing)   (existing)    (existing)   (new/extend)  │    │
 │  │        └────────────┴──────┬──────┴────────────┘        │    │
 │  │                            │                            │    │
 │  │                     ┌──────▼──────┐                     │    │
@@ -28,17 +28,17 @@
 │         │                     │                     │           │
 │         ▼                     ▼                     ▼           │
 │  ┌─────────────┐      ┌─────────────┐      ┌─────────────┐     │
-│  │  GitHub     │      │  Deepgram   │      │   Claude    │     │
-│  │  Service    │      │  Service    │      │   Service   │     │
-│  │  (PyGithub) │      │  (stream)   │      │  (tools)    │     │
+│  │  Terminal   │      │  Deepgram   │      │   Claude    │     │
+│  │  Executor   │      │  Service    │      │   Service   │     │
+│  │ (subprocess)│      │  (stream)   │      │  (tools)    │     │
 │  └──────┬──────┘      └──────┬──────┘      └──────┬──────┘     │
 │         │                    │                    │             │
 └─────────┼────────────────────┼────────────────────┼─────────────┘
           │                    │                    │
           ▼                    ▼                    ▼
    ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-   │  GitHub     │     │  Deepgram   │     │  Anthropic  │
-   │  REST API   │     │  WebSocket  │     │  REST API   │
+   │   Local     │     │  Deepgram   │     │  Anthropic  │
+   │   Shell     │     │  WebSocket  │     │  REST API   │
    └─────────────┘     └─────────────┘     └─────────────┘
 ```
 
@@ -55,8 +55,8 @@
        ▼
 ┌──────────────┐     ┌──────────────┐
 │ Deepgram     │────▶│  Transcript  │
-│ (streaming)  │     │  "create a   │
-└──────────────┘     │  file..."    │
+│ (streaming)  │     │  "list all   │
+└──────────────┘     │  py files"   │
                      └──────┬───────┘
                             │
                             ▼
@@ -69,8 +69,8 @@
       │                                           │
       ▼                                           ▼
 ┌───────────────┐                        ┌─────────────────┐
-│ Current repo  │                        │ Current file    │
-│ + branch      │                        │ (if open)       │
+│ Working dir   │                        │ Recent commands │
+│ (cwd)         │                        │ (history)       │
 └───────────────┘                        └─────────────────┘
       │                                           │
       └─────────────────────┬─────────────────────┘
@@ -83,7 +83,7 @@
                             │
                             ▼
                      ┌──────────────┐
-                     │   Action     │
+                     │   Command    │
                      │   Executor   │
                      └──────┬───────┘
                             │
@@ -91,15 +91,15 @@
          │                  │                  │
          ▼                  ▼                  ▼
   ┌────────────┐    ┌────────────┐    ┌────────────┐
-  │ createFile │    │ editFile   │    │ navigate   │
+  │ run_command│    │ change_dir │    │ confirm    │
   └────────────┘    └────────────┘    └────────────┘
          │                  │                  │
          └──────────────────┼──────────────────┘
                             │
                             ▼
                      ┌──────────────┐
-                     │   GitHub     │
-                     │   API call   │
+                     │   Local      │
+                     │   Shell      │
                      └──────────────┘
 ```
 
@@ -112,52 +112,49 @@ Claude receives these tools via the Anthropic SDK:
 ```python
 tools = [
     {
-        "name": "create_file",
-        "description": "Create a new file in the repository",
+        "name": "run_command",
+        "description": "Execute a shell command in the terminal",
         "input_schema": {
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "File path relative to repo root"},
-                "content": {"type": "string", "description": "Initial file content"},
-                "commit_message": {"type": "string", "description": "Commit message"}
+                "command": {"type": "string", "description": "The shell command to execute"},
+                "requires_confirmation": {
+                    "type": "boolean", 
+                    "description": "True if command is destructive (delete, install, etc.)"
+                },
+                "explanation": {"type": "string", "description": "Brief explanation of what this command does"}
             },
-            "required": ["path", "content"]
+            "required": ["command"]
         }
     },
     {
-        "name": "edit_file",
-        "description": "Edit/append to an existing file",
+        "name": "change_directory",
+        "description": "Change the working directory for subsequent commands",
         "input_schema": {
             "type": "object",
             "properties": {
-                "path": {"type": "string"},
-                "new_content": {"type": "string", "description": "New file content"},
-                "commit_message": {"type": "string"}
-            },
-            "required": ["path", "new_content"]
-        }
-    },
-    {
-        "name": "delete_file",
-        "description": "Delete a file (will prompt for confirmation)",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "path": {"type": "string"},
-                "commit_message": {"type": "string"}
+                "path": {"type": "string", "description": "Directory path (absolute or relative)"}
             },
             "required": ["path"]
         }
     },
     {
-        "name": "navigate",
-        "description": "Open a file or folder in the UI",
+        "name": "run_multiple",
+        "description": "Execute multiple commands in sequence",
         "input_schema": {
             "type": "object",
             "properties": {
-                "path": {"type": "string"}
+                "commands": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of commands to run in order"
+                },
+                "stop_on_error": {
+                    "type": "boolean",
+                    "description": "Stop execution if a command fails"
+                }
             },
-            "required": ["path"]
+            "required": ["commands"]
         }
     }
 ]
@@ -165,24 +162,38 @@ tools = [
 
 ---
 
-## Screen Flow
+## Screen Layout
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Login     │────▶│  Repo List  │────▶│  File Tree  │
-│   Screen    │     │             │     │             │
-└─────────────┘     └─────────────┘     └──────┬──────┘
-                                               │
-                                               ▼
-                                        ┌─────────────┐
-                                        │   Editor    │
-                                        │   View      │
-                                        └─────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  ▼ MACROVOX                                                    ─ □ ✕       │
+├───────────────┬───────────────────────────────────────┬─────────────────────┤
+│               │                                       │                     │
+│   FILE        │   TERMINAL                            │   OUTPUT            │
+│   BROWSER     │   ─────────────────────────────────   │   ─────────────     │
+│               │   > dir *.py /s                       │                     │
+│   📁 Current  │   Processing voice input...          │   Transcribed text  │
+│   ├── src/    │   ✓ Command executed                 │   appears here.     │
+│   │   └── ... │   > _                                 │                     │
+│   ├── docs/   │                                       │   Ready for editing │
+│   └── ...     │                                       │   and copying.      │
+│               │                                       │                     │
+│               ├───────────────────────────────────────┤                     │
+│   Working Dir:│                                       │                     │
+│   C:\Projects │   VOICE INPUT                         │                     │
+│               │   ─────────────────────────────────   │                     │
+│   [Change...] │                                       │                     │
+│               │   🎙️  "list all python files..."     │                     │
+│               │                                       │                     │
+│               │   [ ● REC ]  [⚙]                      │                     │
+│               │                                       │                     │
+└───────────────┴───────────────────────────────────────┴─────────────────────┘
+```
 
-All screens have:
+All panels have access to:
 ┌─────────────────────────────────────────────┐
 │            [Voice Input Bar]                │
-│  🎙️  "create a readme file..."             │
+│  🎙️  "show git status..."                  │
 └─────────────────────────────────────────────┘
 ```
 
@@ -206,17 +217,15 @@ MacroVox/
 │   │
 │   ├── panels/
 │   │   ├── __init__.py
-│   │   ├── file_browser.py     # Existing (extend for GitHub)
+│   │   ├── file_browser.py     # Existing
 │   │   ├── output_panel.py     # Existing
-│   │   ├── terminal.py         # Existing
-│   │   └── editor_panel.py     # NEW: text editor + save
+│   │   └── terminal.py         # Existing (extend for command execution)
 │   │
 │   └── services/               # NEW folder
 │       ├── __init__.py
-│       ├── github_service.py   # PyGithub wrapper
 │       ├── deepgram_service.py # Streaming STT
 │       ├── claude_service.py   # LLM + tool calling
-│       └── action_executor.py  # Execute tool results
+│       └── command_executor.py # Execute shell commands
 │
 └── designs/                # Planning docs
 ```
@@ -232,48 +241,52 @@ class AppState(QObject):
     """Central state management with Qt signals."""
     
     # Signals
-    repo_changed = Signal(object)      # Repository selected
-    file_changed = Signal(str, str)    # path, content
+    cwd_changed = Signal(str)          # Working directory changed
+    command_started = Signal(str)      # Command execution started
+    command_finished = Signal(str, int)# Command output, exit code
     transcript_updated = Signal(str)   # Real-time transcript
-    action_executed = Signal(dict)     # Tool call result
     error_occurred = Signal(str)       # Error message
     
     def __init__(self):
         super().__init__()
-        self.github_token: str | None = None
-        self.current_repo: Repository | None = None
-        self.current_branch: str = "main"
-        self.current_file_path: str | None = None
-        self.current_file_content: str | None = None
+        self.working_directory: str = os.getcwd()
+        self.command_history: list[str] = []
         self.voice_status: str = "idle"  # idle, listening, processing
         self.transcript: str = ""
+        self.pending_confirmation: dict | None = None  # Command awaiting user OK
 ```
 
 ---
 
-## PyGithub Usage
+## Command Execution
 
 ```python
-from github import Github
+import subprocess
+import os
 
-# Auth
-g = Github(token)
-user = g.get_user()
-
-# List repos
-repos = user.get_repos()
-
-# Get file content
-repo = g.get_repo("owner/repo")
-file = repo.get_contents("path/to/file.md")
-content = file.decoded_content.decode()
-
-# Create/update file
-repo.create_file("path.md", "commit msg", "content")
-repo.update_file("path.md", "commit msg", "new content", file.sha)
-
-# Delete file
-repo.delete_file("path.md", "commit msg", file.sha)
+class CommandExecutor:
+    def __init__(self, cwd: str = None):
+        self.cwd = cwd or os.getcwd()
+    
+    def run(self, command: str) -> tuple[str, int]:
+        """Execute command and return (output, exit_code)."""
+        result = subprocess.run(
+            command,
+            shell=True,
+            cwd=self.cwd,
+            capture_output=True,
+            text=True
+        )
+        output = result.stdout + result.stderr
+        return output, result.returncode
+    
+    def change_dir(self, path: str) -> bool:
+        """Change working directory."""
+        new_path = os.path.join(self.cwd, path) if not os.path.isabs(path) else path
+        if os.path.isdir(new_path):
+            self.cwd = os.path.abspath(new_path)
+            return True
+        return False
 ```
 
 ---
@@ -282,9 +295,8 @@ repo.delete_file("path.md", "commit msg", file.sha)
 
 | Error | User Sees | Recovery |
 |-------|-----------|----------|
-| No GitHub token | "Enter GitHub token in settings" | Settings dialog |
-| Invalid token | "GitHub authentication failed" | Re-enter token |
 | Voice service error | "Couldn't connect to Deepgram" | Check API key |
 | LLM error | "Claude request failed" | Retry button |
-| GitHub API error | "Couldn't save file" | Show details |
-| File conflict | "File was modified externally" | Refresh + retry |
+| Command failed | "Command exited with error" | Show output, allow retry |
+| Invalid directory | "Directory not found" | Show current dir, suggest alternatives |
+| Permission denied | "Access denied" | Explain, suggest running as admin |

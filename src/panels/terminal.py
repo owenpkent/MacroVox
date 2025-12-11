@@ -1,12 +1,14 @@
 """
 MacroVox Terminal Panel
-Terminal-style console for AI tools and DeepGram status
+Real terminal emulation using pywinpty
 """
 
+import html
+import re
 from datetime import datetime
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QTextCursor
+from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtGui import QTextCursor, QKeyEvent
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -17,19 +19,27 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..services.command_executor import CommandExecutor
+
 
 class TerminalPanel(QFrame):
-    """Terminal panel for AI console and status messages."""
+    """Terminal panel with real PTY support."""
     
     command_entered = Signal(str)  # Emits when user enters a command
     
-    def __init__(self, parent=None):
+    def __init__(self, cwd: str = None, parent=None):
         super().__init__(parent)
         self.setObjectName("terminalPanel")
         self.command_history: list[str] = []
         self.history_index = -1
+        
+        # Initialize command executor
+        self._executor = CommandExecutor(cwd=cwd, parent=self)
+        self._executor.output_received.connect(self._on_output)
+        self._executor.error_occurred.connect(self._on_error)
+        
         self._setup_ui()
-        self._show_welcome()
+        self._start_shell()
         
     def _setup_ui(self):
         """Initialize the terminal UI."""
@@ -75,10 +85,18 @@ class TerminalPanel(QFrame):
         
         layout.addLayout(input_layout)
         
+    def _start_shell(self):
+        """Start the PTY shell session."""
+        if self._executor.start():
+            self.set_status("CONNECTED", True)
+        else:
+            self.set_status("DISCONNECTED", False)
+            self.log("Failed to start shell. Is pywinpty installed?", "error")
+            
     def _show_welcome(self):
         """Show welcome message."""
         self.log("MacroVox Terminal v1.0", "info")
-        self.log("Type 'help' for available commands", "dim")
+        self.log("Real shell session active", "dim")
         self.log("─" * 40, "dim")
         
     def log(self, message: str, level: str = "normal"):
@@ -128,39 +146,68 @@ class TerminalPanel(QFrame):
         self.command_history.append(command)
         self.history_index = len(self.command_history)
         
-        # Log and emit
-        self.log_command(command)
+        # Emit signal
         self.command_entered.emit(command)
         
-        # Handle built-in commands
-        self._handle_builtin(command)
+        # Handle built-in commands first
+        if not self._handle_builtin(command):
+            # Send to real shell
+            self._executor.send_command(command)
         
         # Clear input
         self.input_line.clear()
         
-    def _handle_builtin(self, command: str):
-        """Handle built-in terminal commands."""
+    def _handle_builtin(self, command: str) -> bool:
+        """
+        Handle built-in terminal commands.
+        
+        Returns:
+            True if command was handled as built-in, False to pass to shell.
+        """
         cmd_lower = command.lower().strip()
         
-        if cmd_lower == "help":
-            self.log("Available commands:", "info")
-            self.log("  help     - Show this help message", "dim")
-            self.log("  clear    - Clear terminal output", "dim")
-            self.log("  status   - Show connection status", "dim")
-            self.log("  version  - Show version info", "dim")
-        elif cmd_lower == "clear":
+        if cmd_lower == "clear":
             self.output.clear()
-            self._show_welcome()
-        elif cmd_lower == "status":
-            self.log("DeepGram: Not connected", "warning")
-            self.log("AI Console: Ready", "info")
-        elif cmd_lower == "version":
-            self.log("MacroVox Terminal v1.0.0", "info")
-        else:
-            self.log(f"Unknown command: {command}", "dim")
-            self.log("Type 'help' for available commands", "dim")
+            return True
+        
+        # All other commands go to the real shell
+        return False
+    
+    @Slot(str)
+    def _on_output(self, data: str):
+        """Handle output from the PTY."""
+        # Strip ANSI escape codes for cleaner display
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        clean_data = ansi_escape.sub('', data)
+        
+        # Escape HTML and preserve whitespace
+        escaped = html.escape(clean_data)
+        
+        # Convert newlines to HTML breaks
+        formatted = escaped.replace('\n', '<br>').replace('\r', '')
+        
+        if formatted.strip():
+            self.output.insertHtml(f'<span style="color: #b0bec5; font-family: Consolas, monospace;">{formatted}</span>')
+            
+            # Scroll to bottom
+            cursor = self.output.textCursor()
+            cursor.movePosition(QTextCursor.End)
+            self.output.setTextCursor(cursor)
+    
+    @Slot(str)
+    def _on_error(self, error: str):
+        """Handle errors from the PTY."""
+        self.log(error, "error")
             
     def clear(self):
         """Clear the terminal output."""
         self.output.clear()
-        self._show_welcome()
+        
+    def send_command(self, command: str):
+        """Send a command to the terminal programmatically."""
+        self._executor.send_command(command)
+        
+    def stop(self):
+        """Stop the terminal session."""
+        self._executor.stop()
+        self.set_status("DISCONNECTED", False)

@@ -5,92 +5,89 @@
 
 ---
 
-## Day 1: GitHub Integration
+## Day 1: Project Setup + Command Executor
 
 ### Setup
-- [ ] Add new dependencies to requirements.txt (PyGithub, anthropic, deepgram-sdk)
-- [ ] Create `src/services/` folder
-- [ ] Create `.env` file for API keys
-- [ ] Add settings UI for GitHub token input
+- [x] Add new dependencies to requirements.txt (pywinpty, deepgram-sdk, keyring)
+- [x] Create `src/services/` folder
+- [x] Secure API key storage via keyring (Windows Credential Manager)
+- [x] Add settings UI for API key inputs (Deepgram, Anthropic)
 
-### GitHub Service
-- [ ] Create `github_service.py`
-- [ ] Authenticate with personal access token
-- [ ] List user's repositories
-- [ ] Add repo selector dropdown to UI
+### Command Executor Service
+- [x] Create `command_executor.py` with pywinpty PTY support
+- [x] Implement real shell session (persistent cmd.exe)
+- [x] Background thread for output reading
+- [x] Qt signals for async output handling
 
-**Day 1 Deliverable**: Can enter GitHub token and see list of repos.
-
----
-
-## Day 2: File Browser + Editor
-
-### Extend FileBrowserPanel
-- [ ] Connect to GitHub repo instead of local filesystem
-- [ ] Load repo file tree via PyGithub
-- [ ] Display folders and files
-- [ ] Click file → load content
-
-### Editor Panel
-- [ ] Create `editor_panel.py` (QTextEdit-based)
-- [ ] Display file content when selected
-- [ ] Add Save button → commit to GitHub
-- [ ] Show current file path in header
-
-**Day 2 Deliverable**: Can browse GitHub repo files and edit/save them.
+**Day 1 Deliverable**: ✅ Can execute shell commands in real PTY session.
 
 ---
 
-## Day 3: Deepgram Streaming
+## Day 2: Terminal Panel Integration
 
-### Replace File-Based Recording
-- [ ] Create `deepgram_service.py`
-- [ ] WebSocket connection to Deepgram
-- [ ] Stream audio from sounddevice (existing)
-- [ ] Receive real-time transcripts
+### Extend Terminal Panel
+- [x] Connect terminal panel to CommandExecutor
+- [x] Display command output in real-time
+- [x] Show connection status indicator
+- [ ] Add "Change Directory" button/dialog
+
+### Output Handling
+- [x] Stream PTY output to terminal display
+- [x] ANSI escape code stripping
+- [x] HTML formatting for display
+
+**Day 2 Deliverable**: ✅ Real terminal with persistent shell session working.
+
+---
+
+## Day 3: Deepgram Transcription
+
+### File-Based Transcription (Implemented)
+- [x] Create `deepgram_service.py`
+- [x] File transcription via DeepGram API
+- [x] Auto-transcribe after recording stops
+- [x] Display transcript in output panel
 
 ### Voice UI
-- [ ] Add transcript display area
-- [ ] Show recording indicator
-- [ ] Display interim + final results
-- [ ] Clear transcript on new recording
+- [x] Transcript displays in output panel
+- [x] Recording indicator in terminal
+- [x] Transcription status messages
 
-**Day 3 Deliverable**: Can speak and see real-time transcript.
+**Day 3 Deliverable**: ✅ Record audio → auto-transcribe → display in output panel.
 
 ---
 
 ## Day 4: Claude Integration
 
 ### Claude Service
-- [ ] Create `claude_service.py`
-- [ ] Define tool schemas (create_file, edit_file, navigate, delete_file)
-- [ ] Build prompt with context (repo, current file, transcript)
-- [ ] Parse tool call responses
+- [x] Create `claude_service.py`
+- [x] Define tool schemas (run_command, change_directory, run_multiple, clarify)
+- [x] Build prompt with context (working dir, recent commands)
+- [x] Parse tool call responses
 
 ### Context Building
-- [ ] Include current repo name
-- [ ] Include current file path + content
-- [ ] Include file tree structure (summary)
+- [x] Include recent command history
+- [x] Include OS/shell information in system prompt
+- [ ] Include current working directory (future enhancement)
 
-**Day 4 Deliverable**: Can send transcript to Claude and get tool call response.
+**Day 4 Deliverable**: ✅ Can send transcript to Claude and get shell command response.
 
 ---
 
-## Day 5: Action Execution
+## Day 5: Wire It Together
 
-### Action Executor
-- [ ] Create `action_executor.py`
-- [ ] Implement `create_file` → GitHub API
-- [ ] Implement `edit_file` → GitHub API
-- [ ] Implement `navigate` → update UI
-- [ ] Implement `delete_file` → confirm dialog → GitHub API
+### Command Execution Pipeline
+- [x] Voice recording → transcript → Claude → command → terminal
+- [x] Show command + explanation before execution (in terminal log)
+- [x] Add "PROCESS" button for manual AI trigger (user choice)
+- [ ] Handle confirmation for destructive commands (future)
 
-### Wire It Together
-- [ ] Voice recording → transcript → Claude → action → GitHub
-- [ ] Update file browser after changes
-- [ ] Show success/error feedback
+### Safety Features
+- [ ] Detect destructive commands (rm, del, format, etc.)
+- [ ] Show confirmation dialog with command preview
+- [ ] Allow user to edit command before running
 
-**Day 5 Deliverable**: Full voice → action pipeline working.
+**Day 5 Deliverable**: ✅ Full voice → command pipeline working (manual trigger via PROCESS button).
 
 ---
 
@@ -103,13 +100,13 @@
 
 ### UX Polish
 - [ ] Loading indicators during API calls
-- [ ] Confirm dialog for destructive actions
+- [ ] Command history navigation
 - [ ] Status bar showing current state
 
 ### Testing
-- [ ] Test create file flow
-- [ ] Test edit file flow
-- [ ] Test navigation
+- [ ] Test file operations (mkdir, touch, etc.)
+- [ ] Test git commands
+- [ ] Test directory navigation
 - [ ] Test error cases
 - [ ] Test with Shure MV7+ mic
 
@@ -123,12 +120,9 @@
 Day 1              Day 2              Day 3              Day 4              Day 5
 ─────              ─────              ─────              ─────              ─────
 
-GitHub Auth ──────▶ File Browser ─────────────────────────────────────────▶ Wire Up
-                         │                                                      │
-                         ▼                                                      │
-                   Editor Panel ──────────────────────────────────────────▶ Actions
+Cmd Executor ────▶ Terminal Panel ─────────────────────────────────▶ Wire Up
                                                                                │
-                                   Deepgram ──────▶ Claude ──────────────────▶─┘
+                                   Deepgram ──────▶ Claude ──────────────▶─┘
 ```
 
 ---
@@ -139,40 +133,39 @@ GitHub Auth ──────▶ File Browser ───────────
 |------|------------|
 | Deepgram Python SDK streaming complexity | Use websockets directly if needed |
 | Claude tool-use response parsing | Start with simple JSON, add structure |
-| GitHub rate limits | Cache file tree, minimize API calls |
+| Destructive command safety | Always require confirmation for rm/del/format |
 | Audio threading with PySide6 | Use QThread for async operations |
+| Long-running commands blocking UI | Run subprocess in separate thread |
 
 ---
 
 ## Definition of Done
 
-- [ ] Can authenticate with GitHub (PAT in settings)
-- [ ] Can select repo and browse file tree
-- [ ] Can view and edit files
-- [ ] Can save changes (commits to GitHub)
+- [ ] Can execute shell commands via voice
+- [ ] Commands run in selected working directory
 - [ ] Deepgram transcribes speech in real-time
-- [ ] Claude interprets transcript and returns tool calls
-- [ ] Tool calls execute GitHub actions
-- [ ] UI updates after actions complete
+- [ ] Claude interprets transcript and returns shell commands
+- [ ] Destructive commands require confirmation
+- [ ] Command output displays in terminal panel
+- [ ] UI updates after commands complete
 
 ---
 
 ## Out of Scope (Phase 2)
 
 - ❌ Mobile/web version
-- ❌ GitHub OAuth device flow
-- ❌ Multiple branches
-- ❌ PR/issue management
-- ❌ Syntax highlighting
-- ❌ Undo/redo
+- ❌ Direct API integrations (GitHub, etc.)
+- ❌ Multi-terminal sessions
+- ❌ Command history persistence
+- ❌ Custom command aliases
 - ❌ Offline mode
 
 ---
 
 ## Quick Wins (If Ahead of Schedule)
 
-- [ ] Markdown preview toggle
-- [ ] Recent repos list
 - [ ] Keyboard shortcut for voice (spacebar hold)
-- [ ] Copy file path button
+- [ ] Command history with up/down arrows
+- [ ] Copy last command output
+- [ ] Favorite/saved commands
 - [ ] Dark/light theme toggle (already have themes)

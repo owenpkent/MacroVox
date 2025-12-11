@@ -21,6 +21,7 @@ class OutputPanel(QFrame):
     """Output panel for displaying and editing transcribed text."""
     
     text_changed = Signal(str)  # Emits when text content changes
+    process_with_ai = Signal(str)  # Emits text to process with Claude
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -67,6 +68,13 @@ class OutputPanel(QFrame):
         button_layout.addWidget(clear_btn)
         
         button_layout.addStretch()
+        
+        # Process with AI button
+        self.ai_btn = QPushButton("🤖 PROCESS")
+        self.ai_btn.setObjectName("aiBtn")
+        self.ai_btn.setToolTip("Send to Claude for command interpretation")
+        self.ai_btn.clicked.connect(self._process_with_ai)
+        button_layout.addWidget(self.ai_btn)
         
         # Copy button (prominent)
         self.copy_btn = QPushButton("📋 COPY ALL")
@@ -132,3 +140,23 @@ class OutputPanel(QFrame):
         self.copy_btn.setProperty("copied", False)
         self.copy_btn.style().unpolish(self.copy_btn)
         self.copy_btn.style().polish(self.copy_btn)
+        
+    def _process_with_ai(self):
+        """Send current text to Claude for processing."""
+        text = self.text_edit.toPlainText().strip()
+        if text:
+            self.process_with_ai.emit(text)
+            
+            # Visual feedback
+            original_text = self.ai_btn.text()
+            self.ai_btn.setText("⏳ PROCESSING...")
+            self.ai_btn.setEnabled(False)
+            
+            # Reset after 2 seconds
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(2000, lambda: self._reset_ai_button(original_text))
+            
+    def _reset_ai_button(self, original_text: str):
+        """Reset AI button to original state."""
+        self.ai_btn.setText(original_text)
+        self.ai_btn.setEnabled(True)

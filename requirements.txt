@@ -2,3 +2,13 @@ PySide6>=6.6.0
 sounddevice>=0.4.6
 soundfile>=0.12.1
 numpy>=1.24.0
+pywinpty>=2.0.0
+
+# Voice transcription (pinned to v5.x for API stability)
+deepgram-sdk>=5.0.0,<6.0.0
+
+# LLM for command interpretation
+anthropic>=0.40.0
+
+# Secure API key storage
+keyring>=25.0.0

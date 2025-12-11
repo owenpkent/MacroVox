@@ -32,6 +32,11 @@ from PySide6.QtWidgets import (
 
 from .panels import FileBrowserPanel, OutputPanel, TerminalPanel
 from .recorder import VoiceRecorder
+from .services import (
+    set_api_key, has_api_key, DEEPGRAM_KEY, ANTHROPIC_KEY,
+    DeepgramService,
+    ClaudeService,
+)
 from .settings import Settings
 from .themes import DEFAULT_TAGS, get_theme
 
@@ -272,6 +277,30 @@ class SettingsDialog(QDialog):
         
         layout.addWidget(tags_group)
 
+        # API Keys (secure storage)
+        api_group = QGroupBox("API KEYS")
+        api_layout = QFormLayout(api_group)
+        
+        self.deepgram_input = QLineEdit()
+        self.deepgram_input.setEchoMode(QLineEdit.Password)
+        self.deepgram_input.setPlaceholderText("Enter DeepGram API key...")
+        if has_api_key(DEEPGRAM_KEY):
+            self.deepgram_input.setPlaceholderText("••••••••••••••••  (configured)")
+        api_layout.addRow("DEEPGRAM", self.deepgram_input)
+        
+        self.anthropic_input = QLineEdit()
+        self.anthropic_input.setEchoMode(QLineEdit.Password)
+        self.anthropic_input.setPlaceholderText("Enter Anthropic API key...")
+        if has_api_key(ANTHROPIC_KEY):
+            self.anthropic_input.setPlaceholderText("••••••••••••••••  (configured)")
+        api_layout.addRow("ANTHROPIC", self.anthropic_input)
+        
+        api_note = QLabel("Keys are stored securely in Windows Credential Manager")
+        api_note.setStyleSheet("color: #546e7a; font-size: 10px;")
+        api_layout.addRow("", api_note)
+        
+        layout.addWidget(api_group)
+
         # Appearance
         appearance_group = QGroupBox("APPEARANCE")
         appearance_layout = QFormLayout(appearance_group)
@@ -364,6 +393,16 @@ class SettingsDialog(QDialog):
 
     def _save_settings(self):
         """Save settings and close dialog."""
+        # Save API keys if provided (securely in Windows Credential Manager)
+        deepgram_key = self.deepgram_input.text().strip()
+        if deepgram_key:
+            set_api_key(DEEPGRAM_KEY, deepgram_key)
+            
+        anthropic_key = self.anthropic_input.text().strip()
+        if anthropic_key:
+            set_api_key(ANTHROPIC_KEY, anthropic_key)
+        
+        # Save other settings
         self.settings.update(
             output_folder=self.folder_input.text(),
             device=self.mic_combo.currentData(),
@@ -395,6 +434,25 @@ class VoiceMemoApp(QMainWindow):
         self.timer.timeout.connect(self._update_duration)
         self.selected_tags: list[str] = []
         self.tag_buttons: dict[str, TagButton] = {}
+        
+        # DeepGram transcription service
+        self.deepgram = DeepgramService(self)
+        self.deepgram.transcript_received.connect(self._on_transcript_received)
+        self.deepgram.transcription_started.connect(self._on_transcription_started)
+        self.deepgram.transcription_finished.connect(self._on_transcription_finished)
+        self.deepgram.error_occurred.connect(self._on_transcription_error)
+        
+        # Claude command interpretation service
+        self.claude = ClaudeService(self)
+        self.claude.command_ready.connect(self._on_command_ready)
+        self.claude.commands_ready.connect(self._on_commands_ready)
+        self.claude.clarification_needed.connect(self._on_clarification_needed)
+        self.claude.response_received.connect(self._on_claude_response)
+        self.claude.error_occurred.connect(self._on_claude_error)
+        
+        # Command history for context
+        self.command_history: list[str] = []
+        
         self._setup_ui()
         self._apply_theme()
         self._connect_panels()
@@ -518,19 +576,19 @@ class VoiceMemoApp(QMainWindow):
         button_layout.addWidget(self.record_btn, 2)
 
         # Open folder button
-        self.folder_btn = QPushButton("◫")
+        self.folder_btn = QPushButton("OPEN")
         self.folder_btn.setObjectName("folderBtn")
         self.folder_btn.setMinimumHeight(48)
-        self.folder_btn.setFixedWidth(48)
+        self.folder_btn.setFixedWidth(64)
         self.folder_btn.setToolTip("Open output folder")
         self.folder_btn.clicked.connect(self._open_output_folder)
         button_layout.addWidget(self.folder_btn)
 
         # Settings button
-        self.settings_btn = QPushButton("⚙")
+        self.settings_btn = QPushButton("SET")
         self.settings_btn.setObjectName("settingsBtn")
         self.settings_btn.setMinimumHeight(48)
-        self.settings_btn.setFixedWidth(48)
+        self.settings_btn.setFixedWidth(64)
         self.settings_btn.setToolTip("Settings")
         self.settings_btn.clicked.connect(self._open_settings)
         button_layout.addWidget(self.settings_btn)
@@ -549,6 +607,9 @@ class VoiceMemoApp(QMainWindow):
         
         # Terminal command handling
         self.terminal.command_entered.connect(self._handle_terminal_command)
+        
+        # Output panel AI processing
+        self.output_panel.process_with_ai.connect(self._process_text_with_ai)
         
     def _handle_terminal_command(self, command: str):
         """Handle commands from the terminal."""
@@ -671,6 +732,11 @@ class VoiceMemoApp(QMainWindow):
         self.terminal.log(f"Saved: {filename}", "success")
         self.terminal.set_status("READY", True)
         self.file_browser.refresh()
+        
+        # Auto-transcribe if DeepGram is configured
+        if filepath and self.deepgram.is_configured:
+            self.terminal.log("Transcribing audio...", "info")
+            self.deepgram.transcribe_file_async(filepath)
 
     def _update_duration(self):
         """Update the duration display."""
@@ -704,6 +770,70 @@ class VoiceMemoApp(QMainWindow):
             # Update file browser with new output folder
             self.file_browser.set_folder(self.recorder.get_output_folder())
             self.terminal.log("Settings updated", "info")
+
+    def _on_transcript_received(self, transcript: str):
+        """Handle transcription result from DeepGram."""
+        self.output_panel.set_text(transcript)
+        self.terminal.log("Transcription complete", "success")
+    
+    def _process_text_with_ai(self, text: str):
+        """Process text with Claude for command interpretation."""
+        if not self.claude.is_configured:
+            self.terminal.log("Anthropic API key not configured", "error")
+            return
+            
+        self.terminal.log("Interpreting command...", "info")
+        self.claude.interpret_command(
+            text,
+            working_dir=None,
+            recent_commands=self.command_history[-5:] if self.command_history else None
+        )
+        
+    def _on_transcription_started(self):
+        """Handle transcription start."""
+        self.output_panel.set_text("Transcribing...")
+        
+    def _on_transcription_finished(self):
+        """Handle transcription completion."""
+        pass  # Transcript already handled in _on_transcript_received
+        
+    def _on_transcription_error(self, error: str):
+        """Handle transcription error."""
+        self.terminal.log(f"Transcription error: {error}", "error")
+        self.output_panel.set_text(f"Error: {error}")
+    
+    def _on_command_ready(self, command: str, explanation: str):
+        """Handle single command from Claude."""
+        self.terminal.log(f"Command: {command}", "info")
+        self.terminal.log(f"  → {explanation}", "dim")
+        
+        # Execute the command
+        self.terminal.send_command(command)
+        self.command_history.append(command)
+        
+    def _on_commands_ready(self, commands: list):
+        """Handle multiple commands from Claude."""
+        self.terminal.log(f"Executing {len(commands)} commands...", "info")
+        
+        for command, explanation in commands:
+            self.terminal.log(f"Command: {command}", "info")
+            self.terminal.log(f"  → {explanation}", "dim")
+            self.terminal.send_command(command)
+            self.command_history.append(command)
+            
+    def _on_clarification_needed(self, question: str):
+        """Handle clarification request from Claude."""
+        self.terminal.log(f"Claude asks: {question}", "warning")
+        self.output_panel.set_text(f"Clarification needed:\n\n{question}")
+        
+    def _on_claude_response(self, response: str):
+        """Handle text response from Claude."""
+        self.terminal.log("Claude response received", "info")
+        self.output_panel.set_text(response)
+        
+    def _on_claude_error(self, error: str):
+        """Handle Claude API error."""
+        self.terminal.log(f"Claude error: {error}", "error")
 
     def closeEvent(self, event):
         """Handle window close - stop recording if active."""

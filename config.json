@@ -1,10 +1,10 @@
 {
-  "output_folder": "C:/Users/Owen/OneDrive - Rocky Mountain Inventions/Apps/ASR Cloud Uploads/asr voice/Threadmaster",
+  "output_folder": "C:/Users/Owen/OneDrive - Rocky Mountain Inventions/Apps/ASR Cloud Uploads/asr voice/Gmaster",
   "sample_rate": 44100,
   "channels": 1,
   "format": "wav",
   "device": 1,
-  "device_name": "Microphone (5- Shure MV7+)",
+  "device_name": "Microphone (6- Shure MV7)",
   "theme": "dark",
   "filename_template": "{timestamp}_{label}",
   "timestamp_format": "%Y%m%d_%H%M%S",
