@@ -2,7 +2,11 @@
 
 ## Overview
 
-MacroVox evolves from a simple voice memo recorder into a **full-featured voice-to-text workstation** with an IDE-inspired multi-panel interface. The application integrates speech recognition (DeepGram), AI processing capabilities, and a streamlined workflow for voice-driven productivity.
+MacroVox is the **best, fastest, most accurate voice-to-text workstation**. Built with an IDE-inspired multi-panel interface, it combines low-latency transcription (DeepGram), flexible output modes, and powerful file management for voice-driven productivity.
+
+**Core Value Proposition**: Turn speech into clean text fast, reliably, and export it where you need it.
+
+> **Decision**: On December 13, 2024, we chose to focus on being the best voice recorder/transcription tool rather than a voice-controlled IDE. See `designs/phase-1-prototype/decision-point-ide-vs-vtt.md` for rationale.
 
 ---
 
@@ -177,11 +181,21 @@ websockets>=12.0       # WebSocket support for streaming
 - [ ] Batch file transcription
 - [ ] Connection status indicator
 
-### Phase 5: Terminal / AI Console
-- [ ] Terminal-style output widget
-- [ ] Command input line
-- [ ] Claude Code integration (optional)
-- [ ] Command history
+### Phase 5: Output Mode Selection
+- [ ] Simple Transcription mode (current behavior)
+- [ ] Conversation Mode toggle (ChatGPT-like AI interaction)
+- [ ] Context window management for conversation history
+- [ ] LLM provider configuration (Claude/GPT)
+- [ ] Export conversation as markdown
+
+### Phase 6: MCP Client Integration & Content Creation
+- [ ] Integrate Python MCP client SDK
+- [ ] Connect to GitHub MCP server (repos, branches, commits)
+- [ ] Connect to Filesystem MCP server (file trees, read/write)
+- [ ] Project panel with file tree from connected servers
+- [ ] Editor panel for markdown with voice-driven insertions
+- [ ] Voice command router (AI interprets intent → MCP tool calls)
+- [ ] Primary use case: Voice-driven book writing with GitHub
 
 ---
 

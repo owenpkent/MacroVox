@@ -157,4 +157,20 @@ If both greenlight, choose based on:
 
 ## Status
 
-This document is ready to be used as the Phase 1 strategic decision point.
+**DECISION MADE: December 13, 2024**
+
+✅ **Option B Selected: Best Voice-to-Text App**
+
+MacroVox will focus on becoming the **best, fastest, most accurate voice-to-text workstation**. The IDE-like layout remains as a productivity feature, but the core value proposition is:
+
+> **Turn speech into clean text fast, reliably, and export it where you need it.**
+
+### Next Steps (Post-Decision)
+
+1. **File Browser Improvements** - Enhance navigation, filtering, and file management
+2. **Output Mode Selection** - Add toggle between:
+   - **Simple Transcription Mode**: Clean, edited text output (current behavior)
+   - **Conversation Mode**: ChatGPT-like AI context window for interactive refinement
+3. **MCP Server Integration** - Explore exposing MacroVox as an MCP server for AI assistants
+
+See `@designs/phase-1-prototype/voice-recorder-roadmap.md` for detailed feature planning.

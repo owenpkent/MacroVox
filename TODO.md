@@ -1,6 +1,11 @@
 # MacroVox To-Do List
 
-## 🚀 Current Sprint: IDE-Style Layout
+## 🎯 Direction: Best Voice-to-Text Workstation
+
+> Decision made Dec 13, 2024: Focus on being the best voice recorder/transcription tool.
+> See `designs/phase-1-prototype/voice-recorder-roadmap.md` for full feature planning.
+
+## 🚀 Current Sprint: File Browser & Output Modes
 
 ### Phase 1: Layout Foundation ✅ COMPLETE
 - [x] Create vision document
@@ -31,11 +36,22 @@
 - [ ] Connection status indicator in terminal
 - [ ] Model selection (nova-2, nova, base)
 
-### Phase 5: Terminal / AI Console
-- [ ] Terminal-style output widget
-- [ ] Command input with history
-- [ ] DeepGram status display
-- [ ] Claude Code integration (optional)
+### Phase 5: Output Mode Selection
+- [ ] Add mode toggle to output panel (Simple / Conversation)
+- [ ] Simple Transcription mode (current behavior)
+- [ ] Conversation Mode UI (ChatGPT-like chat interface)
+- [ ] Context window management for conversation history
+- [ ] LLM API integration (Claude/GPT) for conversation mode
+- [ ] Export conversation as markdown
+
+### Phase 6: MCP Client Integration & Content Creation
+- [ ] Integrate Python MCP client SDK
+- [ ] Server configuration UI (add/manage MCP server connections)
+- [ ] Connect to GitHub MCP server (repos, branches, commits)
+- [ ] Connect to Filesystem MCP server (file trees, read/write)
+- [ ] Project panel with file tree from connected servers
+- [ ] Editor panel for markdown with voice-driven insertions
+- [ ] Voice command router (AI interprets intent → MCP tool calls)
 
 ---
 
@@ -61,3 +77,5 @@
 - [ ] n8n/Zapier webhook on new recording
 - [ ] Direct upload to cloud storage APIs
 - [ ] Obsidian/Notion integration
+- [ ] MCP client connections (GitHub, Filesystem, Memory, Brave Search)
+- [ ] Optional: MCP server mode for external AI assistants
