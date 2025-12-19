@@ -95,13 +95,58 @@ Mobile coding sucks:
 
 ## Architecture
 
+### ADR-001: GitHub-Only Storage (No S3)
+
+**Decision**: Use GitHub API directly for file storage instead of S3 + containers.
+
+**Rationale**:
+- Simpler architecture (no sync logic, no S3 config)
+- GitHub is the source of truth anyway
+- Cheaper (no storage costs)
+- Built-in versioning, branching, history
+
+**Trade-offs**:
+- GitHub API rate limits (5000 req/hr authenticated)
+- Can't persist uncommitted changes across sessions
+- No "draft" mode without polluting git history
+
+**Future**: Add S3 layer only if we hit scale issues or need multi-user shared workspaces.
+
+---
+
+### ADR-002: Two Voice Modes
+
+**Decision**: Support both "Agent" and "Dictation" modes.
+
+| Mode | Behavior |
+|------|----------|
+| **Agent** | Voice → Claude → Generated code → Accept/Reject |
+| **Dictation** | Voice → Direct text insertion at cursor |
+
+**Rationale**: Different use cases need different behaviors. Dictation for comments/strings, Agent for code generation.
+
+---
+
+### ADR-003: BYOK (Bring Your Own Keys)
+
+**Decision**: Users provide their own API keys (stored in localStorage).
+
+**Keys required**:
+- GitHub Personal Access Token (repo scope)
+- Deepgram API key
+- Anthropic API key
+
+**Rationale**: Simplifies MVP, no backend auth needed, users control their own costs.
+
+---
+
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                         Frontend (Browser)                        │
+│                    Frontend (Browser Only)                        │
 ├──────────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐   │
-│  │   Monaco    │  │   Voice     │  │   File Explorer         │   │
-│  │   Editor    │  │   Input     │  │   + Terminal            │   │
+│  │   Monaco    │  │   Voice     │  │   File Browser          │   │
+│  │   Editor    │  │   Input     │  │   (GitHub API)          │   │
 │  └──────┬──────┘  └──────┬──────┘  └────────────┬────────────┘   │
 │         │                │                      │                 │
 │         └────────────────┼──────────────────────┘                 │
@@ -115,19 +160,12 @@ Mobile coding sucks:
             │              │              │
             ▼              ▼              ▼
      ┌───────────┐  ┌───────────┐  ┌───────────┐
-     │ Deepgram  │  │    LLM    │  │  Backend  │
-     │   API     │  │   (API)   │  │   API     │
-     └───────────┘  └───────────┘  └─────┬─────┘
-                                         │
-                                         ▼
-                                  ┌─────────────┐
-                                  │  Container  │
-                                  │  (per user) │
-                                  │  - Files    │
-                                  │  - Runtime  │
-                                  │  - Shell    │
-                                  └─────────────┘
+     │ Deepgram  │  │  Claude   │  │  GitHub   │
+     │ WebSocket │  │   API     │  │   API     │
+     └───────────┘  └───────────┘  └───────────┘
 ```
+
+**No backend required for MVP.** All API calls happen directly from browser.
 
 ---
 
@@ -140,8 +178,8 @@ Mobile coding sucks:
 | **Voice** | Deepgram Nova-2 (WebSocket) | Best streaming STT |
 | **LLM** | Claude API / OpenAI | Code generation |
 | **Backend** | Node.js + Hono | Lightweight, fast |
-| **Containers** | Docker + lightweight orchestration | Isolation, persistence |
-| **Storage** | S3-compatible (files) + Postgres (metadata) | Durable, scalable |
+| **Containers** | None (MVP) | Future: ephemeral for "Run" feature |
+| **Storage** | GitHub API (direct) | No backend needed, git is source of truth |
 | **Auth** | GitHub OAuth | Repo access, familiar |
 | **Hosting** | Fly.io or Railway | Simple, global edge |
 
@@ -256,57 +294,132 @@ LLM responds with:
 
 ## MVP Scope (Phase 1)
 
-### Included
+### Included (MVP - Implemented)
 - [x] Monaco editor in browser
-- [x] GitHub OAuth login
-- [x] Clone repo / create new workspace
-- [x] File tree (read/write)
-- [x] Deepgram voice input (streaming)
-- [x] LLM code generation (insert/replace)
-- [x] Diff preview before applying
-- [x] Basic terminal (run commands)
+- [x] GitHub PAT auth (BYOK)
+- [x] Browse repos / file tree via GitHub API
+- [x] Load/save files (commits directly to GitHub)
+- [x] Deepgram voice input (streaming WebSocket)
+- [x] LLM code generation (Claude API)
+- [x] Accept/Reject preview before applying
 - [x] Mobile-responsive layout
+- [x] **Two modes: Agent vs Dictation**
+- [x] Auto language detection from file extension
 
 ### Excluded (Later Phases)
+- [ ] GitHub OAuth (currently using PAT)
 - [ ] Multi-file context for LLM
-- [ ] Git operations (commit, push, PR)
+- [ ] Git operations UI (branch, PR)
+- [ ] Terminal / Run code (needs containers)
 - [ ] Collaborative editing
 - [ ] Custom voice commands
 - [ ] Offline support
-- [ ] VS Code extension sync
 
 ---
 
 ## Development Roadmap
 
-### Phase 1: Foundation (Weeks 1-3)
-- [ ] Project scaffold (React + Vite)
-- [ ] Monaco editor integration
-- [ ] GitHub OAuth flow
-- [ ] Basic file storage (S3)
-- [ ] Mobile-responsive layout
+### Phase 1: Foundation ✅ COMPLETE
+- [x] Project scaffold (React + Vite + Tailwind)
+- [x] Monaco editor integration (mobile-optimized)
+- [x] GitHub API integration (PAT auth, file browse/load/save)
+- [x] Mobile-responsive layout
 
-### Phase 2: Voice + AI (Weeks 4-6)
-- [ ] Deepgram WebSocket integration
-- [ ] Voice input UI (mic button, transcript)
-- [ ] LLM integration (Claude API)
-- [ ] Context builder (file + cursor)
-- [ ] Diff preview component
+### Phase 2: Voice + AI ✅ COMPLETE
+- [x] Deepgram WebSocket integration (streaming)
+- [x] Voice input UI (mic button, transcript area)
+- [x] Claude API integration (code generation)
+- [x] Context builder (file content + cursor position)
+- [x] Accept/Reject preview component
+- [x] **Agent vs Dictation mode toggle**
 
-### Phase 3: Runtime (Weeks 7-8)
-- [ ] Container orchestration (Docker)
+### Phase 3: Runtime (Future)
+- [ ] Container orchestration (Docker/Fly.io)
 - [ ] Terminal (xterm.js + WebSocket)
 - [ ] Run code button
-- [ ] Persistent workspaces
+- [ ] Ephemeral workspaces
 
-### Phase 4: Polish (Weeks 9-10)
-- [ ] Mobile gesture navigation
-- [ ] Keyboard shortcuts
-- [ ] Error handling + loading states
+### Phase 4: App Store Distribution (Future)
+- [ ] Add Capacitor to wrap React app in native shell
+- [ ] Configure Android build (Android Studio, signed AAB)
+- [ ] Configure iOS build (Xcode, provisioning profiles)
+- [ ] Google Play submission ($25 one-time)
+- [ ] iOS App Store submission ($99/year Apple Developer)
+
+### Phase 5: Production & Multi-User (Future)
+- [ ] Deploy to Netlify/Vercel (public URL)
+- [ ] Add GitHub OAuth (replace PAT prompt)
+- [ ] Add auth provider (Clerk or Supabase)
+- [ ] Encrypted API key storage per user
 - [ ] Landing page + docs
-- [ ] Beta launch
+- [ ] Optional: Managed keys + Stripe billing
 
-**Total: ~10 weeks to beta**
+**MVP Status: Functional prototype complete in `web/` folder**
+
+---
+
+## App Store Strategy
+
+### ADR-004: Capacitor for Native Distribution
+
+**Decision**: Use Capacitor to wrap existing React web app for app store distribution.
+
+**Rationale**:
+- Reuses 100% of existing React/TypeScript code
+- Minimal additional work (vs React Native rewrite)
+- Full access to native APIs (mic permissions, etc.)
+- Single codebase for web + Android + iOS
+
+**Alternative considered**: PWA-only (no app store presence, limited iOS support)
+
+---
+
+### ADR-005: Multi-User Auth Strategy
+
+**Decision**: Phased approach to user authentication.
+
+**Phase A (MVP)**: BYOK - Users provide their own API keys (localStorage)
+**Phase B**: GitHub OAuth for login, encrypted key storage
+**Phase C**: Optional managed keys with subscription billing
+
+**Recommended stack**:
+- **Auth**: Clerk or Supabase Auth (handles OAuth, user management)
+- **Key storage**: Supabase DB with row-level security, or Clerk metadata
+- **Billing**: Stripe (if monetizing)
+
+**Architecture**:
+```
+┌─────────────────────────────────────────────────┐
+│              Frontend (Netlify/Vercel)           │
+└─────────────────────┬───────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────┐
+│         Auth Provider (Clerk / Supabase)         │
+│         - User accounts                          │
+│         - Encrypted API key storage              │
+│         - Optional: Usage tracking               │
+└─────────────────────┬───────────────────────────┘
+                      │
+          ┌───────────┼───────────┐
+          ▼           ▼           ▼
+      Deepgram    Claude     GitHub API
+```
+
+### Distribution Timeline
+
+| Platform | Effort | Approval Time |
+|----------|--------|---------------|
+| **PWA** | Done | N/A (web) |
+| **Android (Play Store)** | 1 week | 1-3 days |
+| **iOS (App Store)** | 2 weeks | 1-2 weeks |
+
+### Requirements
+
+| Platform | Cost | Tools Needed |
+|----------|------|-------------|
+| Google Play | $25 one-time | Android Studio |
+| iOS App Store | $99/year | Mac + Xcode |
 
 ---
 
@@ -336,19 +449,19 @@ Later: hosted option where we manage keys for subscribers.
 
 ## Cost Estimates
 
-### Infrastructure (per user)
+### Infrastructure (MVP)
 | Resource | Cost |
 |----------|------|
-| Container runtime (idle) | ~$0.01/hr |
-| Container runtime (active) | ~$0.05/hr |
-| Storage (1GB) | ~$0.02/mo |
-| Bandwidth | ~$0.01/GB |
+| Static hosting (Netlify/Vercel) | Free tier |
+| No backend | $0 |
+| No storage | $0 (GitHub handles it) |
 
-### Per-Request Costs (pass-through BYOK)
+### Per-Request Costs (BYOK - user pays directly)
 | Service | Cost |
 |---------|------|
 | Deepgram | $0.0043/min |
 | Claude Sonnet | ~$0.01/request avg |
+| GitHub API | Free (5000 req/hr)
 
 ### Hosted Pricing (Future)
 | Tier | Price | Includes |
@@ -409,11 +522,14 @@ Later: hosted option where we manage keys for subscribers.
 
 ## Next Steps
 
-1. **Prototype**: Monaco + Deepgram in a single HTML page (1 day)
+1. ✅ **Prototype**: React + Monaco + Deepgram + Claude (COMPLETE)
 2. **Validate mobile audio**: Test mic access on iOS Safari, Android Chrome
-3. **Design mockups**: Figma mobile UI flows
-4. **Backend spike**: Container orchestration POC
-5. **Build MVP**: Execute Phase 1-2 roadmap
+3. **Deploy PWA**: Host on Netlify/Vercel for public URL
+4. **Add GitHub OAuth**: Replace PAT prompt with proper OAuth flow
+5. **Add user auth**: Clerk/Supabase for signups + key storage
+6. **Capacitor setup**: Wrap for app store distribution
+7. **Android release**: Google Play submission
+8. **iOS release**: App Store submission (requires Mac)
 
 ---
 
