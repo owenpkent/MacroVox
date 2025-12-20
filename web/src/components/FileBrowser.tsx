@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Folder, File, ChevronLeft, Loader2, Github } from 'lucide-react'
+import { Folder, File, ChevronLeft, Loader2, Github, LogIn } from 'lucide-react'
 
 interface RepoFile {
   name: string
@@ -12,6 +12,8 @@ interface FileBrowserProps {
   onClose: () => void
   currentRepo: { owner: string; repo: string } | null
   isLoading: boolean
+  isAuthenticated: boolean
+  onLogin: () => void
   onSelectRepo: (fullName: string) => void
   onSelectFile: (path: string) => void
   listRepos: () => Promise<Array<{ full_name: string; private: boolean }>>
@@ -23,6 +25,8 @@ export function FileBrowser({
   onClose,
   currentRepo,
   isLoading,
+  isAuthenticated,
+  onLogin,
   onSelectRepo,
   onSelectFile,
   listRepos,
@@ -34,10 +38,10 @@ export function FileBrowser({
   const [view, setView] = useState<'repos' | 'files'>('repos')
 
   useEffect(() => {
-    if (isOpen && view === 'repos' && repos.length === 0) {
+    if (isOpen && view === 'repos' && repos.length === 0 && isAuthenticated) {
       listRepos().then(setRepos)
     }
-  }, [isOpen, view, repos.length, listRepos])
+  }, [isOpen, view, repos.length, listRepos, isAuthenticated])
 
   useEffect(() => {
     if (currentRepo && view === 'files') {
@@ -106,26 +110,40 @@ export function FileBrowser({
               <Loader2 className="animate-spin text-slate-400" size={24} />
             </div>
           ) : view === 'repos' ? (
-            <div className="divide-y divide-slate-700">
-              {repos.map((repo) => (
+            !isAuthenticated ? (
+              <div className="px-4 py-12 text-center">
+                <Github size={48} className="mx-auto text-slate-500 mb-4" />
+                <p className="text-slate-400 mb-4">Sign in to access your GitHub repositories</p>
                 <button
-                  key={repo.full_name}
-                  onClick={() => handleSelectRepo(repo.full_name)}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-700 active:bg-slate-600 text-left"
+                  onClick={onLogin}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
                 >
-                  <Github size={18} className="text-slate-400 flex-shrink-0" />
-                  <span className="truncate">{repo.full_name}</span>
-                  {repo.private && (
-                    <span className="text-xs bg-slate-600 px-1.5 py-0.5 rounded">private</span>
-                  )}
+                  <LogIn size={18} />
+                  <span>Sign in with GitHub</span>
                 </button>
-              ))}
-              {repos.length === 0 && (
-                <div className="px-4 py-8 text-center text-slate-500">
-                  No repositories found
-                </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-700">
+                {repos.map((repo) => (
+                  <button
+                    key={repo.full_name}
+                    onClick={() => handleSelectRepo(repo.full_name)}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-700 active:bg-slate-600 text-left"
+                  >
+                    <Github size={18} className="text-slate-400 flex-shrink-0" />
+                    <span className="truncate">{repo.full_name}</span>
+                    {repo.private && (
+                      <span className="text-xs bg-slate-600 px-1.5 py-0.5 rounded">private</span>
+                    )}
+                  </button>
+                ))}
+                {repos.length === 0 && (
+                  <div className="px-4 py-8 text-center text-slate-500">
+                    No repositories found
+                  </div>
+                )}
+              </div>
+            )
           ) : (
             <div className="divide-y divide-slate-700">
               {files.map((file) => (

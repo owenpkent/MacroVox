@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 
 interface RepoFile {
   name: string
@@ -13,6 +13,12 @@ interface FileContent {
   path: string
 }
 
+interface GitHubUser {
+  login: string
+  avatar_url: string
+  name: string | null
+}
+
 interface UseGitHubOptions {
   onError: (error: string) => void
 }
@@ -20,16 +26,78 @@ interface UseGitHubOptions {
 export function useGitHub({ onError }: UseGitHubOptions) {
   const [isLoading, setIsLoading] = useState(false)
   const [currentRepo, setCurrentRepo] = useState<{ owner: string; repo: string } | null>(null)
+  const [user, setUser] = useState<GitHubUser | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+
+  // Check for token on mount (from URL or localStorage)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const tokenFromUrl = params.get('token')
+    const errorFromUrl = params.get('error')
+
+    if (errorFromUrl) {
+      onError(`GitHub login failed: ${errorFromUrl}`)
+      window.history.replaceState({}, '', '/')
+      return
+    }
+
+    if (tokenFromUrl) {
+      localStorage.setItem('github_token', tokenFromUrl)
+      window.history.replaceState({}, '', '/')
+    }
+
+    const token = localStorage.getItem('github_token')
+    if (token) {
+      fetchUser(token)
+    }
+  }, [])
+
+  const fetchUser = async (token: string) => {
+    try {
+      const response = await fetch('https://api.github.com/user', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      })
+      if (response.ok) {
+        const userData = await response.json()
+        setUser(userData)
+        setIsAuthenticated(true)
+      } else {
+        localStorage.removeItem('github_token')
+        setIsAuthenticated(false)
+      }
+    } catch {
+      localStorage.removeItem('github_token')
+      setIsAuthenticated(false)
+    }
+  }
+
+  const login = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/github-auth/login')
+      const data = await response.json()
+      if (data.url) {
+        window.location.href = data.url
+      }
+    } catch (error) {
+      onError('Failed to initiate GitHub login')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [onError])
+
+  const logout = useCallback(() => {
+    localStorage.removeItem('github_token')
+    setUser(null)
+    setIsAuthenticated(false)
+    setCurrentRepo(null)
+  }, [])
 
   const getToken = useCallback(() => {
-    const token = localStorage.getItem('github_token')
-    if (!token) {
-      const userToken = prompt('Enter your GitHub Personal Access Token (with repo scope):')
-      if (!userToken) return null
-      localStorage.setItem('github_token', userToken)
-      return userToken
-    }
-    return token
+    return localStorage.getItem('github_token')
   }, [])
 
   const fetchApi = useCallback(async (endpoint: string, options: RequestInit = {}) => {
@@ -141,7 +209,11 @@ export function useGitHub({ onError }: UseGitHubOptions) {
 
   return {
     isLoading,
+    isAuthenticated,
+    user,
     currentRepo,
+    login,
+    logout,
     listRepos,
     selectRepo,
     listFiles,

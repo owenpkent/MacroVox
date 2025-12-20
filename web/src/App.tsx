@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import Editor from '@monaco-editor/react'
-import { Mic, MicOff, Play, Save, Loader2, Check, X, Bot, Type } from 'lucide-react'
+import { Mic, MicOff, Play, Save, Loader2, Check, X, Bot, Type, LogIn, LogOut } from 'lucide-react'
 import { useDeepgram } from './hooks/useDeepgram'
 import { useClaude } from './hooks/useClaude'
 import { useGitHub } from './hooks/useGitHub'
@@ -30,8 +30,12 @@ app.listen(3000);
   const cursorLineRef = useRef(1)
 
   const { 
-    isLoading: isGitHubLoading, 
-    currentRepo, 
+    isLoading: isGitHubLoading,
+    isAuthenticated,
+    user,
+    currentRepo,
+    login,
+    logout,
     listRepos, 
     selectRepo, 
     listFiles, 
@@ -164,18 +168,42 @@ app.listen(3000);
             </span>
           )}
         </button>
-        <div className="flex items-center gap-1">
-          <button 
-            onClick={handleSave}
-            disabled={isSaving || isGitHubLoading}
-            className="p-2 rounded-lg hover:bg-slate-700 active:bg-slate-600 transition-colors disabled:opacity-50"
-          >
-            {isSaving ? (
-              <Loader2 size={20} className="text-slate-400 animate-spin" />
-            ) : (
-              <Save size={20} className="text-slate-400" />
-            )}
-          </button>
+        <div className="flex items-center gap-2">
+          {isAuthenticated && (
+            <button 
+              onClick={handleSave}
+              disabled={isSaving || isGitHubLoading || !currentRepo}
+              className="p-2 rounded-lg hover:bg-slate-700 active:bg-slate-600 transition-colors disabled:opacity-50"
+              title="Save to GitHub"
+            >
+              {isSaving ? (
+                <Loader2 size={20} className="text-slate-400 animate-spin" />
+              ) : (
+                <Save size={20} className="text-slate-400" />
+              )}
+            </button>
+          )}
+          {isAuthenticated ? (
+            <button
+              onClick={logout}
+              className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-700 transition-colors"
+              title="Sign out"
+            >
+              {user?.avatar_url && (
+                <img src={user.avatar_url} alt="" className="w-6 h-6 rounded-full" />
+              )}
+              <LogOut size={18} className="text-slate-400" />
+            </button>
+          ) : (
+            <button
+              onClick={login}
+              disabled={isGitHubLoading}
+              className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors text-sm text-white"
+            >
+              <LogIn size={16} />
+              <span>Sign in</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -316,6 +344,8 @@ app.listen(3000);
         onClose={() => setFileBrowserOpen(false)}
         currentRepo={currentRepo}
         isLoading={isGitHubLoading}
+        isAuthenticated={isAuthenticated}
+        onLogin={login}
         onSelectRepo={selectRepo}
         onSelectFile={handleSelectFile}
         listRepos={listRepos}
