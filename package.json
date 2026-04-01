@@ -1,42 +1,50 @@
 {
   "name": "macrovox",
-  "version": "0.1.0",
-  "description": "Voice-controlled macro engine for Windows using Deepgram and AutoHotkey",
-  "main": "src/index.js",
-  "type": "module",
-  "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
-    "test": "node --test src/**/*.test.js",
-    "test:mapper": "node test-mapper.js",
-    "test:audio": "node test-audio.js",
-    "test:deepgram": "node test-deepgram.js",
-    "test:ahk": "node test-ahk.js",
-    "test:all": "npm run test:mapper && npm run test:audio && npm run test:deepgram && npm run test:ahk",
-    "test:e2e": "node test-e2e.js",
-    "measure-latency": "node measure-latency.js",
-    "list-profiles": "node src/index.js --list-profiles",
-    "add-command": "node add-command.js"
-  },
-  "keywords": [
-    "voice",
-    "macro",
-    "deepgram",
-    "autohotkey",
-    "windows"
-  ],
-  "author": "",
+  "version": "1.0.6",
+  "description": "MacroVox — Voice Dictation for Windows",
+  "main": "dist/main/main.js",
+  "author": "OK Studio",
   "license": "MIT",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\"",
+    "dev:renderer": "vite",
+    "dev:main": "npx tsc -p tsconfig.main.json --watch",
+    "build": "npm run build:renderer && npm run build:main",
+    "build:renderer": "vite build",
+    "clean:main": "node -e \"const fs=require('fs');const p=require('path');try{fs.rmSync(p.join(__dirname,'dist','main'),{recursive:true,force:true});fs.rmSync(p.join(__dirname,'tsconfig.main.tsbuildinfo'),{force:true})}catch(e){}\"",
+    "build:main": "npm run clean:main && npx tsc -p tsconfig.main.json",
+    "start": "electron .",
+    "package": "npm run build && electron-builder",
+    "package:win": "npm run build && electron-builder --config build/electron-builder.json",
+    "package:dev": "npm run build && electron-builder --config build/electron-builder.dev.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
   "dependencies": {
-    "@deepgram/sdk": "^3.5.0",
-    "dotenv": "^16.3.1",
-    "fastest-levenshtein": "^1.0.16",
-    "yargs": "^17.7.2"
+    "@deepgram/sdk": "^3.9.0",
+    "@supabase/supabase-js": "^2.101.1",
+    "lucide-react": "^0.454.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2"
-  },
-  "engines": {
-    "node": ">=20.0.0"
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/jsdom": "^28.0.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
+    "electron": "^40.1.0",
+    "electron-builder": "^25.1.8",
+    "jsdom": "^28.1.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.9.3",
+    "vite": "^6.0.3",
+    "vitest": "^4.0.18"
   }
 }

@@ -1,0 +1,28 @@
+{
+  "appId": "com.okstudio.macrovox",
+  "productName": "MacroVox",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "resources/icons",
+      "to": "icons"
+    }
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "assets/icon.ico",
+    "signingHashAlgorithms": null,
+    "sign": null
+  }
+}

@@ -1,378 +1,237 @@
-# MacroVox
+# MacroVox — Standalone Voice Dictation for Desktop
 
-Voice-controlled macro executor for Windows. Speak commands, execute keystrokes via AutoHotkey.
+A standalone Electron desktop app for real-time voice dictation powered by [Deepgram](https://deepgram.com). Speak into your microphone, get text. Includes AI-powered transcript cleanup via Claude, system tray integration, global hotkeys, themed UI, and Supabase authentication (email, Google, Facebook) for Pro features.
 
-## Status: WORKING
+> **Backend**: Uses [Supabase](https://supabase.com) for auth + database and [Netlify](https://netlify.com) for serverless functions. See [STANDALONE.md](STANDALONE.md) for setup guide.
 
-**Tested and confirmed working:**
-- Speech recognition (Deepgram nova-2)
-- Command mapping (exact matching)
-- AutoHotkey execution (Ctrl+Z, Ctrl+V, Ctrl+C)
-- Notepad integration (paste, undo, copy)
-
-**Known Limitations:**
-- Latency: 2-3 seconds (Deepgram endpointing + processing)
-- False positives: Occasional misrecognition (e.g., "i'm gay" instead of silence)
-- Fuzzy matching needs tuning for better accuracy
+---
 
 ## Features
 
-- **Real-time speech recognition** via Deepgram (nova-2 model)
-- **Fuzzy command matching** (exact, substring, Levenshtein distance)
-- **AutoHotkey v2.0 integration** (ControlSend for non-focus-stealing)
-- **Multiple profiles** (Premiere, Resolve, Gaming)
-- **Voice-triggered profile switching**
-- **Easy command expansion** via CLI or JSON config
+- **Voice-to-text dictation** — Deepgram nova-2 with batch or streaming modes
+- **Global hotkey** — `Ctrl+Space` to toggle recording from any app
+- **AI post-processing** — Claude cleans up transcripts automatically (optional)
+- **Auto-copy & auto-paste** — transcript goes straight to your clipboard and active app
+- **Keyword boosting** — improve recognition of custom terms (e.g. "MacroVox", "OAuth")
+- **Themed UI** — 6 built-in themes (MCRN, Mars, Belter, Earth, Protomolecule, Laconia)
+- **System tray** — runs in background, toggles with tray icon
+- **Email, Google, Facebook login** — Supabase Auth with multiple sign-in options
+- **Pro managed keys** — subscribers get Deepgram + Claude API keys managed for them
+- **Settings panel** — separate window for all configuration
+- **Always-on-top** — dictation window stays above other apps
+- **Cross-platform audio** — ffmpeg-based capture (Windows primary, macOS/Linux supported)
 
-## Architecture
-
-```
-Microphone → ffmpeg → Deepgram → CommandMapper → AutoHotkey → Target App
-```
-
-- **Audio**: ffmpeg + DirectShow (Windows, Shure MV7+ tested)
-- **Speech-to-Text**: Deepgram nova-2 (real-time streaming, 300ms endpointing)
-- **Mapping**: Exact, fuzzy (Levenshtein), substring matching
-- **Execution**: AutoHotkey v2.0 (ControlSend)
-
-- **AutoHotkey Executor** (`ahk/MacroVox.ahk`)
-  - Receives command keyword and profile name
-  - Looks up keystrokes from `config/profiles.json`
-  - Uses `ControlSend` to send keys without stealing focus
-
-- **Configuration** (`config/`)
-  - `profiles.json`: Per-profile command definitions and target windows
-  - `app.json`: Audio, Deepgram, mapping, and AHK settings
+---
 
 ## Prerequisites
 
-- **Node.js** 20+ (LTS recommended)
-- **AutoHotkey v2.0** (download from [autohotkey.com](https://www.autohotkey.com))
-- **ffmpeg** (for Windows audio capture; see [Installation](#installation))
-- **Deepgram API key** (free tier available at [console.deepgram.com](https://console.deepgram.com))
+| Requirement | Version | Notes |
+|---|---|---|
+| **Node.js** | 20+ LTS | [nodejs.org](https://nodejs.org) |
+| **npm** | 10+ | Comes with Node.js |
+| **ffmpeg** | Any recent | Required for microphone capture |
+| **Git** | Any | For cloning |
 
-## Installation
+### ffmpeg Installation (Windows)
 
-### 1. Clone and Install Dependencies
+1. Download from [ffmpeg.org](https://ffmpeg.org/download.html) or install via `winget install ffmpeg`
+2. Ensure `ffmpeg` is on your `PATH`
+3. Verify: `ffmpeg -version`
 
-```bash
-cd c:\Users\Owen\dev\MacroVox
+---
+
+## Quick Start
+
+### 1. Clone the repo
+
+```powershell
+git clone https://github.com/owenpkent/MacroVox.git
+cd MacroVox
+```
+
+### 2. Install the standalone package
+
+The standalone configuration lives in `package.standalone.json`. Copy it over the old `package.json`:
+
+```powershell
+Copy-Item package.standalone.json package.json -Force
+```
+
+### 3. Install dependencies
+
+```powershell
 npm install
 ```
 
-### 2. Install ffmpeg (Windows)
+### 4. Run in development mode
 
-ffmpeg is required for microphone capture via DirectShow:
-
-1. Download from [ffmpeg.org](https://ffmpeg.org/download.html)
-2. Extract to a folder (e.g., `C:\ffmpeg`)
-3. Add `C:\ffmpeg\bin` to your system PATH:
-   - Right-click **This PC** → **Properties** → **Advanced system settings** → **Environment Variables**
-   - Edit `PATH` and add `C:\ffmpeg\bin`
-   - Restart your terminal
-
-Verify installation:
-```bash
-ffmpeg -version
-```
-
-### 3. Install AutoHotkey v2.0
-
-1. Download from [autohotkey.com](https://www.autohotkey.com)
-2. Run the installer and select **AutoHotkey v2.0**
-3. Verify installation:
-   ```bash
-   AutoHotkey.exe --version
-   ```
-
-### 4. Set Up Environment
-
-Copy `.env.example` to `.env` and add your Deepgram API key:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env`:
-```
-DEEPGRAM_API_KEY=your_api_key_here
-DEFAULT_PROFILE=premiere
-LOG_LEVEL=info
-```
-
-## Configuration
-
-### Profiles (`config/profiles.json`)
-
-Define voice commands and target windows per profile:
-
-```json
-{
-  "profiles": {
-    "premiere": {
-      "name": "Adobe Premiere Pro",
-      "target": {
-        "ahk_exe": "Adobe Premiere Pro.exe"
-      },
-      "commands": {
-        "undo": {
-          "keys": "^z",
-          "description": "Undo last action"
-        },
-        "cut": {
-          "keys": "^k",
-          "description": "Cut/split clip at playhead"
-        }
-      }
-    }
-  }
-}
-```
-
-**Key syntax** (AutoHotkey v2):
-- `^` = Ctrl
-- `+` = Shift
-- `!` = Alt
-- `#` = Win
-- `Space`, `Left`, `Right`, `Up`, `Down` = Arrow keys
-- `r`, `v`, `c` = Regular keys
-
-### Adding New Commands
-
-Use the `add-command` utility to easily add commands to profiles:
-
-```bash
-# Add a new command to premiere profile
-npm run add-command -- --profile=premiere --keyword=split --keys="^k" --description="Split clip at playhead"
-
-# Add to gaming profile
-npm run add-command -- --profile=gaming --keyword=melee --keys="v" --description="Melee attack"
-
-# List all commands in a profile
-npm run add-command -- --profile=premiere --list
-```
-
-Or edit `config/profiles.json` directly and add a new command object:
-
-```json
-"your-command": {
-  "keys": "^k",
-  "description": "Your command description"
-}
-```
-
-### App Settings (`config/app.json`)
-
-Tune audio capture, Deepgram, and command mapping:
-
-```json
-{
-  "audio": {
-    "sampleRate": 16000,
-    "channels": 1,
-    "bitDepth": 16
-  },
-  "deepgram": {
-    "model": "nova-2",
-    "interimResults": true,
-    "endpointing": 300
-  },
-  "mapping": {
-    "dedupeWindow": 500,
-    "fuzzyThreshold": 0.8,
-    "minConfidence": 0.5
-  }
-}
-```
-
-## Usage
-
-### Start Listening
-
-```bash
-npm start
-```
-
-You should see:
-```
-[INFO] MacroVox starting...
-[INFO] Starting audio capture from default microphone...
-[INFO] Connecting to Deepgram live transcription...
-[INFO] Deepgram connection opened
-[INFO] MacroVox is listening... (press Ctrl+C to stop)
-[INFO] Say a profile name (e.g., "premiere", "gaming") to switch profiles
-```
-
-### Start with a Specific Profile
-
-```bash
-npm start -- --profile=gaming
-# or
-npm start -- -p resolve
-```
-
-### List Available Profiles
-
-```bash
-npm run list-profiles
-```
-
-Output:
-```
-Available profiles:
-  premiere: Adobe Premiere Pro (12 commands)
-  resolve: DaVinci Resolve (7 commands)
-  gaming: Gaming Mode (5 commands)
-```
-
-### Speak a Command
-
-Say a command (e.g., "undo", "cut", "render"). MacroVox will:
-1. Recognize the phrase
-2. Map it to a keyword
-3. Execute the corresponding keystroke in the target app
-
-### Switch Profiles by Voice
-
-While listening, simply say a profile name:
-- Say **"premiere"** or **"premiere mode"** → switches to Premiere profile
-- Say **"gaming"** → switches to Gaming profile
-- Say **"resolve"** → switches to Resolve profile
-
-The current profile is saved and will be restored on next startup.
-
-### Stop Listening
-
-Press `Ctrl+C` to gracefully shut down.
-
-## Troubleshooting
-
-### "DEEPGRAM_API_KEY is not set"
-- Ensure `.env` exists and contains your API key
-- Restart the application
-
-### "Audio capture error" or "Failed to start audio capture"
-- Verify ffmpeg is installed: `ffmpeg -version`
-- Check microphone is connected and enabled in Windows Sound settings
-- Verify microphone name matches in `src/audio.js` (currently looks for "Microphone")
-- Check Windows audio permissions
-
-### "Target window not found"
-- Ensure the target app (e.g., Premiere) is open
-- Verify the `ahk_exe` in `config/profiles.json` matches the process name
-
-### Commands not executing
-- Enable verbose logging: `LOG_LEVEL=debug npm start`
-- Verify command keys are correct in `config/profiles.json`
-
-### High latency or missed commands
-- Increase `endpointing` in `config/app.json` (e.g., 500 ms)
-- Lower `fuzzyThreshold` to catch more variations
-- Ensure microphone is close and ambient noise is low
-
-### False positives (hearing things that weren't said)
-- This is a known limitation of Deepgram's VAD (voice activity detection)
-- Reduce `endpointing` to detect silence faster (currently 300ms)
-- Increase `minConfidence` threshold in `config/app.json` (currently 0.5)
-- Use exact matching only by setting `fuzzyThreshold` to 0 (disables fuzzy matching)
-
-### Latency is too high (2-3 seconds)
-- The 300ms endpointing delay is intentional to avoid cutting off words
-- Reduce to 100-200ms for faster response (may cause false cuts)
-- Deepgram processing adds ~500-800ms
-- AutoHotkey execution adds ~100-200ms
-- Total: ~1-2 seconds minimum with current settings
-
-## Development
-
-### Run in Dev Mode (with auto-reload)
-
-```bash
+```powershell
 npm run dev
 ```
 
-### Verbose Logging
+This will:
+1. Compile the main process TypeScript (`src/main/`) → `dist/main/`
+2. Start the Vite dev server for the renderer (`src/renderer/`)
+3. Launch Electron pointing at the Vite dev server
 
-```bash
-LOG_LEVEL=debug npm start
-# or
-npm start -- --verbose
+### 5. Use the app
+
+- The **dictation window** opens on launch
+- Press `Ctrl+Space` from any app to toggle recording
+- Open **Settings** (gear icon) to configure your Deepgram API key, theme, dictation options, etc.
+
+---
+
+## API Keys
+
+MacroVox needs a **Deepgram API key** for speech-to-text. You have two options:
+
+### Option A: Bring Your Own Key (free tier)
+
+1. Sign up at [console.deepgram.com](https://console.deepgram.com)
+2. Create an API key
+3. Paste it into the Settings panel under "Voice Recognition"
+
+### Option B: Pro Subscription (managed keys)
+
+1. Sign up or log in with email, Google, or Facebook
+2. Subscribe to Pro from the Settings panel
+3. Deepgram + Claude keys are automatically provisioned — no setup needed
+
+---
+
+## Project Structure
+
+```
+MacroVox/
+├── build/                    # Electron Builder configs
+│   ├── electron-builder.json # Production build config
+│   ├── electron-builder.dev.json
+│   ├── installer.nsh         # NSIS installer script
+│   └── sign.js               # Code signing helper
+├── src/
+│   ├── main/                 # Electron main process
+│   │   ├── main.ts           # App lifecycle, windows, IPC, tray
+│   │   ├── preload.ts        # Context bridge (renderer ↔ main)
+│   │   ├── audio.ts          # ffmpeg audio capture + device mgmt
+│   │   ├── deepgram.ts       # Deepgram SDK (streaming + batch)
+│   │   └── auth/             # Authentication module
+│   │       ├── index.ts      # Re-exports
+│   │       ├── types.ts      # Provider-agnostic auth interfaces
+│   │       ├── auth-manager.ts  # Session lifecycle + encrypted storage
+│   │       ├── supabase-client.ts  # Supabase client singleton
+│   │       └── subscription.ts     # Pro subscription + managed keys
+│   └── renderer/             # React UI (Vite + Tailwind)
+│       ├── dictation.html    # Dictation window entry
+│       ├── dictation.tsx     # Dictation React mount
+│       ├── settings.html     # Settings window entry
+│       ├── settings.tsx      # Settings React mount
+│       ├── index.css         # Tailwind + CSS variables
+│       ├── config.ts         # API endpoints
+│       ├── themes.ts         # Theme definitions (6 themes)
+│       ├── ThemeContext.tsx   # React theme provider
+│       ├── components/
+│       │   ├── DictationMode.tsx   # Main dictation UI
+│       │   └── SettingsPanel.tsx   # Settings UI
+│       ├── hooks/
+│       │   ├── useDeepgram.ts      # Deepgram recording hook
+│       │   └── usePostProcessing.ts # Claude AI cleanup hook
+│       └── types/
+│           └── electron.d.ts       # window.electronAPI types
+├── package.standalone.json   # Standalone package.json
+├── tsconfig.json             # Renderer TypeScript config
+├── tsconfig.main.json        # Main process TypeScript config
+├── vite.config.ts            # Vite build config
+├── tailwind.config.js        # Tailwind CSS config
+├── postcss.config.js         # PostCSS config
+├── vitest.config.ts          # Test config
+└── STANDALONE.md             # Migration notes from GitConnect
 ```
 
-### Test Command Mapping
+---
 
-```bash
-npm run test:mapper
+## Development
+
+### Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Start in development mode (Vite + Electron) |
+| `npm run build` | Build renderer (Vite) + compile main (tsc) |
+| `npm run build:main` | Compile main process only |
+| `npm run build:renderer` | Build renderer only |
+| `npm run start:electron` | Launch Electron (after build) |
+| `npm run pack` | Package with electron-builder (no installer) |
+| `npm run dist` | Build + create installer |
+| `npm run dist:dev` | Build portable dev version (unsigned) |
+| `npm test` | Run tests (vitest) |
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│                  Electron Main                   │
+│  main.ts → manages windows, tray, IPC handlers  │
+│  audio.ts → ffmpeg subprocess for mic capture    │
+│  deepgram.ts → SDK streaming + batch transcribe  │
+│  auth/ → Supabase Auth + encrypted session store │
+└───────────────┬─────────────────┬───────────────┘
+                │ IPC (preload)   │
+┌───────────────▼─────────────────▼───────────────┐
+│              Electron Renderer                   │
+│  DictationMode.tsx — recording UI + transcript   │
+│  SettingsPanel.tsx — all user preferences        │
+│  ThemeContext.tsx  — 6 themed color schemes       │
+│  useDeepgram.ts   — recording state machine      │
+│  usePostProcessing.ts — Claude AI cleanup        │
+└─────────────────────────────────────────────────┘
 ```
 
-### Test Individual Components
+---
 
-```bash
-npm run test:mapper     # Test command mapping
-npm run test:audio      # Test microphone capture
-npm run test:deepgram   # Test Deepgram streaming
-npm run test:ahk        # Test AutoHotkey execution
-npm run test:all        # Run all component tests
+## Building for Distribution
+
+### Portable (unsigned, for testing)
+
+```powershell
+npm run dist:dev
 ```
 
-### End-to-End Testing
+Output: `release/MacroVox-<version>-portable.exe`
 
-```bash
-# Full pipeline test (audio → Deepgram → mapper → AHK)
-npm run test:e2e
+### Production Installer (signed)
 
-# E2E test with specific profile
-npm run test:e2e -- --profile=gaming
-
-# E2E test with longer listening
-npm run test:e2e -- --duration=30
+```powershell
+npm run dist
 ```
 
-### Measure Latency
+Output: `release/MacroVox-Setup-<version>.exe` (NSIS installer)
 
-```bash
-# Measure end-to-end latency (5 iterations)
-npm run measure-latency
+Requires:
+- Code signing certificate (SHA1 in `build/electron-builder.json`)
+- `CSC_LINK` / `CSC_KEY_PASSWORD` env vars for signing
 
-# Measure with more iterations
-npm run measure-latency -- --iterations=10
+---
 
-# Measure with specific profile
-npm run measure-latency -- --profile=gaming
-```
+## Configuration Reference
 
-See [TEST-ORCHESTRATION.md](TEST-ORCHESTRATION.md) for comprehensive testing strategy.
+All settings are stored in `localStorage` and synced across windows via IPC.
 
-### CLI Options
+| Setting | Key | Default | Description |
+|---|---|---|---|
+| Auto-copy on stop | `dictation_auto_copy` | `false` | Copy transcript to clipboard when recording stops |
+| Clear on new recording | `dictation_clear_on_new` | `false` | Delete previous transcript on new recording |
+| Auto-paste | `dictation_auto_paste` | `false` | Paste into previously focused app after copy |
+| Auto-cutoff | `dictation_auto_cutoff` | `30` | Stop recording after N seconds |
+| Transcription mode | `transcription_mode` | `batch` | `batch` or `streaming` |
+| Dictation commands | `deepgram_dictation` | `true` | Voice punctuation ("period", "comma") |
+| Post-processing | `post_processing_enabled` | `false` | Clean up transcripts with Claude |
+| Accessibility context | `post_processing_context` | `""` | Speech pattern hints for Claude |
+| Keyword boosting | `deepgram_keywords` | `""` | Newline-separated terms to boost |
+| Always on top | `dictation_always_on_top` | `true` | Keep dictation window above others |
+| Theme | `app_theme` | `mcrn` | UI theme ID |
 
-```bash
-# Start with a specific profile
-npm start -- --profile=gaming
-
-# List all profiles
-npm start -- --list-profiles
-
-# Enable verbose logging
-npm start -- --verbose
-
-# Combine options
-npm start -- -p resolve -v
-```
-
-## Performance
-
-- **Latency**: ~300–500 ms (Deepgram endpointing + keystroke dispatch)
-- **CPU**: <5% idle, <15% during active listening
-- **Memory**: ~80–120 MB
-
-## Roadmap
-
-- [ ] Push-to-listen hotkey (e.g., hold a key to activate)
-- [ ] Visual feedback (tray icon, LED indicator)
-- [ ] Contextual vocabularies per app
-- [ ] Macro recording UI
-- [ ] Multi-language support
-- [ ] Custom fuzzy matching and synonyms
+---
 
 ## License
 
@@ -381,7 +240,3 @@ MIT
 ## Contributing
 
 Contributions welcome! Please open an issue or PR.
-
-## Support
-
-For issues or questions, open a GitHub issue or check the [Deepgram docs](https://developers.deepgram.com).
