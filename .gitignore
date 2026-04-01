@@ -16,3 +16,9 @@ sox-*/
 *.p12
 *.pfx
 *.cert
+
+# Old PyInstaller artifacts (from MacroVox v0.1)
+build/MacroVox/
+*.pyc
+__pycache__/
+*.spec
