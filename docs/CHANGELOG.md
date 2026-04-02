@@ -1,0 +1,76 @@
+# MacroVox Changelog
+
+## v1.0.6 (2026-03-17) — Transcript Disappears After Second Recording Fix
+
+### Bug Fixes
+- **Fixed transcript not appearing on subsequent recordings** — `handleStopRecording` and `handleStopAndCopy` closed over a stale `transcript` state variable. When AI post-processing (Claude) resolved after a second recording had already updated the transcript, the `.then()` callback overwrote the current transcript with a value computed from the stale closure. The second recording's text was silently replaced.
+- **Fix**: All `setTranscript` calls in async callbacks now use React functional updaters (`prev => ...`) so they always operate on the latest state. The `postProcess().then()` callback uses `prev.replace(rawSegment, cleaned)` to surgically swap only the raw segment with the cleaned version, regardless of what other recordings have appended in the meantime.
+
+---
+
+## v1.0.5 (2026-03-17) — Program Files Install + Upgrade Reliability
+
+### Changes
+- **MacroVox now installs to `C:\Program Files\MacroVox`** — switched from per-user (`AppData\Local\Programs`) to per-machine install. Registers in HKLM. Requires admin elevation (UAC prompt shown once during install).
+- **Desktop shortcut now appears on all user desktops** — `C:\Users\Public\Desktop`, matching Windows conventions for machine-wide installs.
+- **Start Menu shortcut in `C:\ProgramData\Microsoft\Windows\Start Menu\Programs\MacroVox`** — visible to all users on the machine.
+
+### Bug Fixes
+- **Fixed "Failed to uninstall old application files" error during upgrades** — `taskkill` ran but only waited 1.5 s before the upgrade uninstaller fired. If Electron hadn't released all file handles yet, the uninstaller exited with code 2. Fix: poll for process exit in a loop (up to 8 s) before handing control back to the installer.
+- **Migration from v1.0.4 and earlier** — old per-user installs (`AppData\Local\Programs\macrovox`) are detected during `customInstall` and the user is offered a silent uninstall before the new Program Files install proceeds.
+
+---
+
+## v1.0.4 (2026-03-17) — Desktop Shortcut Fix
+
+### Bug Fixes
+- **Fixed Desktop shortcut not created during install** — The NSIS `$DESKTOP` variable resolves to the All Users desktop (`C:\Users\Public\Desktop`) when the installer runs elevated via UAC, even for per-user installs. The shortcut was created in the wrong location and never appeared on the user's Desktop.
+- **Fix**: `customInstall` and `customUnInstall` now read the correct desktop path directly from `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders\Desktop`, with `$PROFILE\Desktop` as fallback. Start Menu shortcut was unaffected.
+
+---
+
+## v1.0.3 (2026-03-17) — Transcription Works More Than Once Fix
+
+### Bug Fixes
+- **Fixed transcription only working once per launch (batch mode)** — `DictationMode.tsx` called `setIsProcessing(false)` *inside* the `if (result.transcript)` branch. When Deepgram returned an empty transcript (e.g. silence or very short audio), `isProcessing` was never cleared, permanently disabling the record button for the rest of the session.
+- **Fix**: Moved `setIsProcessing(false)` to execute unconditionally immediately after `stopRecording()` returns, in both `handleStopRecording` and `handleStopAndCopy`.
+- **Fixed dead-process recovery in batch recording** — If the pre-warmed ffmpeg process had exited (e.g. device error, system sleep), `recording:start` would call `startBuffering()` on the dead `AudioCapture` instance and silently capture nothing. No audio would be buffered and every subsequent recording would return an empty transcript.
+- **Fix**: `recording:start` now checks `isRunning()` and, if false, explicitly stops and replaces the stale `AudioCapture` instance before starting a fresh ffmpeg process.
+
+---
+
+## v1.0.2 (2026-03-09) — Auth Token Path Fix
+
+### Bug Fixes
+- **Fixed "No API key" shown after v1.0.1's IPC bridge fix** — `main-dictation.ts` was reading token files from `app.getPath('userData')` which resolves to `%APPDATA%\macrovox` (MacroVox's own userData directory). GitConnect Pro writes its tokens to `%APPDATA%\gitconnect-desktop`. These are separate directories so MacroVox found no token files and returned `{ success: false }` on every `auth:getToken` call.
+- **Fix**: Now uses Supabase Auth with its own session storage — no longer depends on any external app's credential store.
+
+---
+
+## v1.0.1 (2026-03-09) — Auth IPC Bridge Fix
+
+### Bug Fixes
+- **Fixed "No API key" warning on first launch when already logged in** — `preload.ts` was missing `getToken`, `fetchGitHubUser`, `getManagedKeys`, and `onTokenReady`. The IPC bridge was incomplete, so `DictationMode` could never read the stored token or fetch managed API keys.
+- **Fix**: Added the missing IPC methods to `preload.ts` with corresponding handlers in `main.ts`.
+
+---
+
+## v1.0.0 (2026-03-09) — Initial Release
+
+### New Features
+- Standalone MacroVox dictation app
+- NSIS installer + portable executable, both code-signed with EV certificate
+- **Batch mode**: Record audio, then transcribe all at once (higher accuracy)
+- **Streaming mode**: Real-time word-by-word transcription via WebSocket
+- **Smart Clipboard**: Auto-copy on stop, optional auto-paste into previous app
+- **AI Post-Processing**: Optional Claude-powered cleanup of speech-to-text errors
+- **6 themes**: MCRN, Mars, Belter, Earth, Protomolecule, Laconia
+- **System tray**: Minimize to tray, context menu, `Ctrl+Space` global shortcut
+- **Single-instance lock**: Prevents duplicate processes
+
+### Architecture
+- `main.ts` — Standalone main process
+- `preload.ts` — Restricted IPC surface (audio, clipboard, settings, auth)
+- Shared renderer: `DictationMode.tsx`, `SettingsPanel.tsx`, themes
+- Separate build config: `build/electron-builder.json`
+- NSIS installer: `build/installer.nsh` with previous-version detection

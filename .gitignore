@@ -2,6 +2,10 @@ node_modules/
 .env
 .env.local
 *.log
+tsconfig.main.tsbuildinfo
+.venv/
+pyrightconfig.json
+resources/
 .DS_Store
 dist/
 out/

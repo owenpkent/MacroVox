@@ -74,7 +74,7 @@ function createDictationWindow(autoStartRecording = false, hidden = false) {
   })
 
   if (isDev) {
-    dictationWindow.loadURL('http://localhost:5173/dictation/index.html')
+    dictationWindow.loadURL('http://localhost:5173/dictation.html')
   } else {
     const dictationPath = path.join(__dirname, '../renderer/dictation/index.html')
     dictationWindow.loadFile(dictationPath)
@@ -143,7 +143,7 @@ function createSettingsWindow() {
   })
 
   if (isDev) {
-    settingsWindow.loadURL('http://localhost:5173/settings/index.html')
+    settingsWindow.loadURL('http://localhost:5173/settings.html')
   } else {
     const settingsPath = path.join(__dirname, '../renderer/settings/index.html')
     settingsWindow.loadFile(settingsPath)
@@ -155,11 +155,15 @@ function createSettingsWindow() {
 }
 
 function createTray() {
-  const iconPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'icons', 'tray-icon.png')
-    : path.join(__dirname, '../../resources/icons/tray-icon.png')
-  const icon = nativeImage.createFromPath(iconPath)
-  tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon)
+  let icon = nativeImage.createEmpty()
+  try {
+    const iconPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'icons', 'tray-icon.png')
+      : path.join(__dirname, '../../resources/icons/tray-icon.png')
+    const loaded = nativeImage.createFromPath(iconPath)
+    if (!loaded.isEmpty()) icon = loaded
+  } catch { /* no icon in dev — use empty */ }
+  tray = new Tray(icon)
   
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Show Dictation', click: () => { createDictationWindow(); dictationWindow?.show() } },

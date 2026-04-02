@@ -119,13 +119,8 @@ export function DictationMode() {
       }
     } catch {}
 
-    // Fall back to stored key
-    const storedKey = localStorage.getItem('deepgram_api_key')
-    if (storedKey) {
-      setApiKey(storedKey)
-    } else {
-      setApiKey(null)
-    }
+    // No BYOK — managed keys only. User must subscribe.
+    setApiKey(null)
     setIsLoadingKey(false)
   }, [])
 
@@ -556,7 +551,7 @@ export function DictationMode() {
         {/* Status */}
         <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
           {!apiKey 
-            ? 'No API key — configure in Settings' 
+            ? 'Sign in & subscribe to start' 
             : isPostProcessing
               ? '◎ AI cleanup...'
               : isProcessing 

@@ -10,5 +10,4 @@ export const API = {
   deepgramProxy:    `${SITE_URL}/.netlify/functions/deepgram-proxy`,
 } as const
 
-export const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
 export const ANTHROPIC_MODEL   = 'claude-sonnet-4-20250514'

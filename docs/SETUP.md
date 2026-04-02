@@ -1,8 +1,8 @@
-# MacroVox Backend Setup Guide (Supabase + Netlify)
+# MacroVox Backend Setup Guide (Supabase + Netlify + Stripe)
 
-Step-by-step instructions for setting up MacroVox's backend infrastructure from scratch. MacroVox uses **Supabase** for authentication and database, and **Netlify** for hosting serverless functions.
+Step-by-step instructions for setting up MacroVox's backend infrastructure from scratch. MacroVox uses **Supabase** for authentication and database, **Netlify** for hosting serverless functions, and **Stripe** for subscription billing.
 
-> **No backend?** MacroVox works without any backend at all — users just enter their own Deepgram API key in Settings. The backend is only needed for Pro subscriptions with managed API keys and auth.
+> **MacroVox is a managed service** — Deepgram (speech-to-text) and Claude (AI post-processing) are both required and provisioned server-side for Pro subscribers. Users never configure API keys.
 
 ---
 
@@ -97,11 +97,19 @@ CREATE POLICY "Users read own keys" ON managed_api_keys
 
 ---
 
-## Step 4: Deploy Netlify Functions (optional)
+## Step 4: Create Stripe Products
 
-Only needed if you want Pro subscription features (Stripe checkout, API key proxy).
+1. Go to [Stripe Dashboard](https://dashboard.stripe.com) → **Products**
+2. Click **+ Add product**
+3. Create **MacroVox Pro** — `$9.99/month` recurring
+4. Save the **Price ID** (starts with `price_`)
+5. Optionally create **MacroVox Team** tier
 
-### 4a. Create a Netlify site
+---
+
+## Step 5: Deploy Netlify Functions
+
+### 5a. Create a Netlify site
 
 1. Go to [netlify.com](https://netlify.com), sign in
 2. Click **Add new site > Import an existing project**
@@ -111,7 +119,7 @@ Only needed if you want Pro subscription features (Stripe checkout, API key prox
    - **Publish directory**: `public` (or create an empty folder)
 5. Deploy
 
-### 4b. Add environment variables
+### 5b. Add environment variables
 
 In Netlify dashboard: **Site settings > Environment variables**:
 
@@ -120,11 +128,12 @@ SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=eyJ...  (from Supabase Settings > API > service_role)
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
-DEEPGRAM_MANAGED_KEY=...          (shared key for Pro users)
-ANTHROPIC_MANAGED_KEY=...         (shared key for Pro users)
+STRIPE_PRICE_ID=price_...
+DEEPGRAM_MANAGED_KEY=...          (required — Deepgram key for all Pro users)
+ANTHROPIC_MANAGED_KEY=...         (required — Claude key for all Pro users)
 ```
 
-### 4c. Create Netlify Functions
+### 5c. Create Netlify Functions
 
 Create `netlify/functions/create-checkout.ts`:
 
@@ -139,7 +148,7 @@ export default async (req: Request) => {
   
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
-    line_items: [{ price: plan === 'team' ? 'price_TEAM_ID' : 'price_PRO_ID', quantity: 1 }],
+    line_items: [{ price: process.env.STRIPE_PRICE_ID!, quantity: 1 }],
     success_url: 'https://macrovox.netlify.app/success',
     cancel_url: 'https://macrovox.netlify.app/cancel',
     metadata: { userId },
@@ -168,7 +177,15 @@ export default async (req: Request) => {
 }
 ```
 
-### 4d. Update config.ts
+### 5d. Create Stripe Webhook
+
+1. Go to Stripe Dashboard → Developers → Webhooks
+2. Click **+ Add endpoint**
+3. **Endpoint URL**: `https://YOUR-SITE.netlify.app/.netlify/functions/stripe-webhook`
+4. **Events**: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
+5. Copy the **Signing secret** → add as `STRIPE_WEBHOOK_SECRET` in Netlify
+
+### 5e. Update config.ts
 
 After deploying, update `src/renderer/config.ts` with your Netlify URL:
 
@@ -178,7 +195,7 @@ export const SITE_URL = 'https://YOUR-SITE.netlify.app'
 
 ---
 
-## Step 5: Verify Everything Works
+## Step 6: Verify Everything Works
 
 ```powershell
 npm run dev
@@ -186,8 +203,9 @@ npm run dev
 
 1. **Settings > Sign Up** — create account with email or Google/Facebook
 2. **Settings > Subscription** — should show "Free Plan"
-3. **Dictation** — enter your own Deepgram key and test recording
-4. **Ctrl+Space** — global hotkey should toggle recording
+3. **Upgrade to Pro** — completes Stripe checkout, keys are provisioned
+4. **Dictation** — recording should work with managed Deepgram key
+5. **Ctrl+Space** — global hotkey should toggle recording
 
 ---
 
@@ -211,17 +229,9 @@ npm run dev
          ┌──────────────▼──────────────┐
          │    Netlify Functions          │
          │  create-checkout (Stripe)    │
+         │  stripe-webhook              │
          │  billing-portal (Stripe)     │
-         │  claude-proxy (optional)     │
+         │  claude-proxy                │
+         │  deepgram-proxy              │
          └─────────────────────────────┘
 ```
-
-## Without a Backend (BYOK mode)
-
-MacroVox works completely standalone without Supabase or Netlify:
-
-1. Skip all backend setup
-2. Leave the default placeholder values in `supabase-client.ts`
-3. Users enter their own Deepgram API key in Settings
-4. Auth and subscription features will silently fail — dictation works fine
-5. AI post-processing requires user's own Anthropic API key

@@ -38,9 +38,6 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
   const [transcriptionMode, setTranscriptionMode] = useState(() => 
     localStorage.getItem('transcription_mode') || 'batch'
   )
-  const [postProcessingEnabled, setPostProcessingEnabled] = useState(() => 
-    localStorage.getItem('post_processing_enabled') === 'true'
-  )
   const [postProcessingContext, setPostProcessingContext] = useState(() => 
     localStorage.getItem('post_processing_context') || ''
   )
@@ -107,7 +104,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
         const keys = [
           'dictation_auto_copy', 'dictation_clear_on_new', 'dictation_auto_cutoff',
           'dictation_always_on_top', 'deepgram_dictation', 'transcription_mode',
-          'post_processing_enabled', 'post_processing_context', 'dictation_auto_paste',
+          'post_processing_context', 'dictation_auto_paste',
           'deepgram_keywords', 'minimize_to_tray',
         ]
         keys.forEach(k => {
@@ -371,11 +368,11 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm text-slate-200">Keyword boosting</span>
                 </div>
-                <p className="text-xs text-slate-500 mb-2">Words or phrases to boost recognition accuracy — one per line (e.g. GitConnect, OAuth, refactor)</p>
+                <p className="text-xs text-slate-500 mb-2">Words or phrases to boost recognition accuracy — one per line (e.g. MacroVox, OAuth, refactor)</p>
                 <textarea
                   value={keywordBoosts}
                   onChange={(e) => handleKeywordBoostsChange(e.target.value)}
-                  placeholder={'GitConnect\nOAuth\nrefactor\nyour-custom-term'}
+                  placeholder={'MacroVox\nOAuth\nrefactor\nyour-custom-term'}
                   rows={3}
                   className="w-full px-3 py-2 rounded text-sm focus:outline-none resize-none font-mono"
                   style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
@@ -393,44 +390,25 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
             </h3>
 
             <div className="space-y-3">
-              <label className="flex items-center justify-between cursor-pointer">
-                <div>
-                  <span className="text-sm text-slate-200">Clean up transcripts with AI</span>
-                  <p className="text-xs text-slate-500">Uses Claude to fix speech-to-text errors after transcription</p>
+              <p className="text-xs text-slate-500">Claude cleans up transcripts automatically after every recording.</p>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm text-slate-200">Accessibility context</span>
                 </div>
-                <div 
-                  onClick={() => {
-                    const next = !postProcessingEnabled
-                    setPostProcessingEnabled(next)
-                    saveSetting('post_processing_enabled', String(next))
+                <p className="text-xs text-slate-500 mb-2">Describe your speech patterns so Claude can better correct errors</p>
+                <textarea
+                  value={postProcessingContext}
+                  onChange={(e) => {
+                    setPostProcessingContext(e.target.value)
+                    saveSetting('post_processing_context', e.target.value)
                   }}
-                  className="w-10 h-5 rounded-full transition-colors cursor-pointer"
-                  style={{ backgroundColor: postProcessingEnabled ? 'var(--accent-primary)' : 'var(--bg-tertiary)' }}
-                >
-                  <div className={`w-4 h-4 rounded-full bg-white mt-0.5 transition-transform ${postProcessingEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </div>
-              </label>
-
-              {postProcessingEnabled && (
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm text-slate-200">Accessibility context</span>
-                  </div>
-                  <p className="text-xs text-slate-500 mb-2">Describe your speech patterns so the AI can better correct errors (optional)</p>
-                  <textarea
-                    value={postProcessingContext}
-                    onChange={(e) => {
-                      setPostProcessingContext(e.target.value)
-                      saveSetting('post_processing_context', e.target.value)
-                    }}
-                    placeholder={'e.g. I have a speech impediment that affects \'r\' and \'l\' sounds. Common words I use: GitConnect, OAuth, refactor.'}
-                    rows={3}
-                    className="w-full px-3 py-2 rounded text-sm focus:outline-none resize-none"
-                    style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
-                  />
-                  <p className="text-xs text-slate-600 mt-1">This context is sent with each transcript to help the AI understand your speech patterns</p>
-                </div>
-              )}
+                  placeholder={'e.g. I have a speech impediment that affects \'r\' and \'l\' sounds. Common words I use: MacroVox, OAuth, refactor.'}
+                  rows={3}
+                  className="w-full px-3 py-2 rounded text-sm focus:outline-none resize-none"
+                  style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
+                />
+                <p className="text-xs text-slate-600 mt-1">Sent with each transcript to help Claude understand your speech patterns</p>
+              </div>
             </div>
           </section>
 
@@ -508,7 +486,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
                 <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)' }}>
                   <p className="text-sm mb-2" style={{ color: 'var(--text-primary)' }}>Free Plan</p>
                   <p className="text-xs text-slate-400 mb-3">
-                    Upgrade to Pro for managed API keys — no need to bring your own.
+                    Subscribe to Pro to unlock voice dictation and AI post-processing.
                   </p>
                   <button
                     onClick={handleUpgrade}

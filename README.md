@@ -1,8 +1,8 @@
-# MacroVox — Standalone Voice Dictation for Desktop
+# MacroVox — Voice Dictation for Windows
 
-A standalone Electron desktop app for real-time voice dictation powered by [Deepgram](https://deepgram.com). Speak into your microphone, get text. Includes AI-powered transcript cleanup via Claude, system tray integration, global hotkeys, themed UI, and Supabase authentication (email, Google, Facebook) for Pro features.
+A managed Electron desktop app for voice dictation powered by [Deepgram](https://deepgram.com) and [Claude](https://anthropic.com). Speak into your microphone, get text. Sign in, subscribe, and start dictating — all API keys are managed server-side.
 
-> **Backend**: Uses [Supabase](https://supabase.com) for auth + database and [Netlify](https://netlify.com) for serverless functions. See [STANDALONE.md](STANDALONE.md) for setup guide.
+> **Managed service** — MacroVox handles all API keys (Deepgram, Claude) for Pro subscribers. No setup friction. See [docs/SETUP.md](docs/SETUP.md) for backend infrastructure guide.
 
 ---
 
@@ -10,16 +10,15 @@ A standalone Electron desktop app for real-time voice dictation powered by [Deep
 
 - **Voice-to-text dictation** — Deepgram nova-2 with batch or streaming modes
 - **Global hotkey** — `Ctrl+Space` to toggle recording from any app
-- **AI post-processing** — Claude cleans up transcripts automatically (optional)
+- **AI post-processing** — Claude cleans up every transcript automatically (required for Pro)
 - **Auto-copy & auto-paste** — transcript goes straight to your clipboard and active app
 - **Keyword boosting** — improve recognition of custom terms (e.g. "MacroVox", "OAuth")
 - **Themed UI** — 6 built-in themes (MCRN, Mars, Belter, Earth, Protomolecule, Laconia)
 - **System tray** — runs in background, toggles with tray icon
 - **Email, Google, Facebook login** — Supabase Auth with multiple sign-in options
-- **Pro managed keys** — subscribers get Deepgram + Claude API keys managed for them
+- **Stripe billing** — subscribe to Pro for managed Deepgram + Claude access
 - **Settings panel** — separate window for all configuration
 - **Always-on-top** — dictation window stays above other apps
-- **Cross-platform audio** — ffmpeg-based capture (Windows primary, macOS/Linux supported)
 
 ---
 
@@ -42,61 +41,42 @@ A standalone Electron desktop app for real-time voice dictation powered by [Deep
 
 ## Quick Start
 
-### 1. Clone the repo
+### 1. Clone and install
 
 ```powershell
 git clone https://github.com/owenpkent/MacroVox.git
 cd MacroVox
-```
-
-### 2. Install the standalone package
-
-The standalone configuration lives in `package.standalone.json`. Copy it over the old `package.json`:
-
-```powershell
-Copy-Item package.standalone.json package.json -Force
-```
-
-### 3. Install dependencies
-
-```powershell
 npm install
 ```
 
-### 4. Run in development mode
+### 2. Run in development mode
+
+```powershell
+python run.py
+```
+
+Or directly with npm:
 
 ```powershell
 npm run dev
 ```
 
-This will:
-1. Compile the main process TypeScript (`src/main/`) → `dist/main/`
-2. Start the Vite dev server for the renderer (`src/renderer/`)
-3. Launch Electron pointing at the Vite dev server
+`run.py` checks prerequisites (Node 20+, ffmpeg) before launching. It compiles the main process TypeScript and starts Vite + Electron.
 
-### 5. Use the app
+### 3. Use the app
 
 - The **dictation window** opens on launch
 - Press `Ctrl+Space` from any app to toggle recording
-- Open **Settings** (gear icon) to configure your Deepgram API key, theme, dictation options, etc.
+- Open **Settings** (gear icon) to sign in and manage your subscription
+- **Pro subscribers** get automatic API key provisioning — no configuration needed
 
 ---
 
-## API Keys
+## Documentation
 
-MacroVox needs a **Deepgram API key** for speech-to-text. You have two options:
-
-### Option A: Bring Your Own Key (free tier)
-
-1. Sign up at [console.deepgram.com](https://console.deepgram.com)
-2. Create an API key
-3. Paste it into the Settings panel under "Voice Recognition"
-
-### Option B: Pro Subscription (managed keys)
-
-1. Sign up or log in with email, Google, or Facebook
-2. Subscribe to Pro from the Settings panel
-3. Deepgram + Claude keys are automatically provisioned — no setup needed
+- **[Status & Roadmap](docs/STATUS_AND_ROADMAP.md)** — Current status and future plans
+- **[Setup Guide](docs/SETUP.md)** — Backend infrastructure setup (Supabase + Netlify + Stripe)
+- **[Changelog](docs/CHANGELOG.md)** — Detailed release history
 
 ---
 
@@ -104,6 +84,11 @@ MacroVox needs a **Deepgram API key** for speech-to-text. You have two options:
 
 ```
 MacroVox/
+├── run.py                    # Dev runner script (prerequisites check + npm run dev)
+├── docs/                     # Documentation
+│   ├── STATUS_AND_ROADMAP.md # Status & roadmap
+│   ├── SETUP.md              # Backend setup guide
+│   └── CHANGELOG.md          # Release history
 ├── build/                    # Electron Builder configs
 │   ├── electron-builder.json # Production build config
 │   ├── electron-builder.dev.json
@@ -138,14 +123,12 @@ MacroVox/
 │       │   └── usePostProcessing.ts # Claude AI cleanup hook
 │       └── types/
 │           └── electron.d.ts       # window.electronAPI types
-├── package.standalone.json   # Standalone package.json
+├── package.json
 ├── tsconfig.json             # Renderer TypeScript config
 ├── tsconfig.main.json        # Main process TypeScript config
-├── vite.config.ts            # Vite build config
+├── vite.config.ts            # Vite + Vitest config (merged)
 ├── tailwind.config.js        # Tailwind CSS config
-├── postcss.config.js         # PostCSS config
-├── vitest.config.ts          # Test config
-└── STANDALONE.md             # Migration notes from GitConnect
+└── postcss.config.js         # PostCSS config
 ```
 
 ---
@@ -160,11 +143,10 @@ MacroVox/
 | `npm run build` | Build renderer (Vite) + compile main (tsc) |
 | `npm run build:main` | Compile main process only |
 | `npm run build:renderer` | Build renderer only |
-| `npm run start:electron` | Launch Electron (after build) |
-| `npm run pack` | Package with electron-builder (no installer) |
-| `npm run dist` | Build + create installer |
-| `npm run dist:dev` | Build portable dev version (unsigned) |
-| `npm test` | Run tests (vitest) |
+| `npm run start` | Launch Electron (after build) |
+| `npm run package:win` | Build + create signed installer |
+| `npm run package:dev` | Build portable dev version (unsigned) |
+| `npm test` | Run tests (vitest — config in vite.config.ts) |
 
 ### Architecture
 
@@ -194,7 +176,7 @@ MacroVox/
 ### Portable (unsigned, for testing)
 
 ```powershell
-npm run dist:dev
+npm run package:dev
 ```
 
 Output: `release/MacroVox-<version>-portable.exe`
@@ -202,7 +184,7 @@ Output: `release/MacroVox-<version>-portable.exe`
 ### Production Installer (signed)
 
 ```powershell
-npm run dist
+npm run package:win
 ```
 
 Output: `release/MacroVox-Setup-<version>.exe` (NSIS installer)
@@ -225,7 +207,7 @@ All settings are stored in `localStorage` and synced across windows via IPC.
 | Auto-cutoff | `dictation_auto_cutoff` | `30` | Stop recording after N seconds |
 | Transcription mode | `transcription_mode` | `batch` | `batch` or `streaming` |
 | Dictation commands | `deepgram_dictation` | `true` | Voice punctuation ("period", "comma") |
-| Post-processing | `post_processing_enabled` | `false` | Clean up transcripts with Claude |
+| Post-processing | *(always on)* | — | Claude cleans every transcript for Pro subscribers |
 | Accessibility context | `post_processing_context` | `""` | Speech pattern hints for Claude |
 | Keyword boosting | `deepgram_keywords` | `""` | Newline-separated terms to boost |
 | Always on top | `dictation_always_on_top` | `true` | Keep dictation window above others |
@@ -235,8 +217,4 @@ All settings are stored in `localStorage` and synced across windows via IPC.
 
 ## License
 
-MIT
-
-## Contributing
-
-Contributions welcome! Please open an issue or PR.
+MIT — © 2026 OK Studio
