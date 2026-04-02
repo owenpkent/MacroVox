@@ -577,27 +577,27 @@ export function DictationMode() {
         
         {/* Actions */}
         <div className="flex justify-between items-center">
-          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          <button
+            onClick={handleClear}
+            disabled={!transcript}
+            className="p-2 rounded-lg transition-colors hover:bg-red-900/40 disabled:cursor-not-allowed"
+            style={{ color: transcript ? '#f87171' : 'var(--text-secondary)', opacity: transcript ? 1 : 0.4 }}
+            title="Clear transcript"
+          >
+            <Trash2 size={20} strokeWidth={2} />
+          </button>
+          <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
             {transcript ? `${transcript.split(/\s+/).filter(Boolean).length} words` : ''}
           </span>
-          <div className="flex gap-1">
-            <button
-              onClick={handleClear}
-              disabled={!transcript}
-              className="p-1.5 rounded disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: 'var(--text-muted)' }}
-              title="Clear"
-            >
-              <Trash2 size={14} />
-            </button>
-            <button
-              onClick={handleCopy}
-              disabled={!transcript}
-              className="p-1.5 rounded disabled:opacity-30 disabled:cursor-not-allowed" style={{ color: 'var(--text-muted)' }}
-              title="Copy"
-            >
-              {copied ? <Check size={14} style={{ color: 'var(--accent-primary)' }} /> : <Copy size={14} />}
-            </button>
-          </div>
+          <button
+            onClick={handleCopy}
+            disabled={!transcript}
+            className="p-2 rounded-lg transition-colors hover:bg-cyan-900/40 disabled:cursor-not-allowed"
+            style={{ color: transcript ? (copied ? '#34d399' : '#67e8f9') : 'var(--text-secondary)', opacity: transcript ? 1 : 0.4 }}
+            title="Copy to clipboard"
+          >
+            {copied ? <Check size={20} strokeWidth={2} /> : <Copy size={20} strokeWidth={2} />}
+          </button>
         </div>
       </div>
 

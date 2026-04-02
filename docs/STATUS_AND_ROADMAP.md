@@ -20,7 +20,7 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 - Auto-copy, auto-paste, keyword boosting
 - 6 themed UI skins (Expanse-inspired)
 - System tray integration
-- Supabase auth (email, Google, Facebook)
+- Supabase auth (email/password)
 - Stripe subscription billing
 
 ---
@@ -30,7 +30,7 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 | Category | Status |
 |----------|--------|
 | **Windows App** | ✅ Released — v1.0.6 (EV code signed) |
-| **Auth (Supabase)** | ✅ Complete — email, Google, Facebook |
+| **Auth (Supabase)** | ✅ Complete — email/password |
 | **Stripe Billing** | 🔧 In Progress — checkout + webhook integration |
 | **Managed API Keys** | ✅ Complete — Deepgram + Claude both required, provisioned for Pro users |
 | **Netlify Functions** | 🔧 In Progress — proxy functions for managed keys |
@@ -43,9 +43,8 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 ### Infrastructure
 - [x] Electron app with React/Vite/Tailwind renderer
 - [x] Supabase project for auth + database
-- [x] Supabase Auth (email/password, Google OAuth, Facebook OAuth)
+- [x] Supabase Auth (email/password)
 - [x] Encrypted session persistence via Electron safeStorage
-- [x] OAuth redirect via `macrovox://` custom protocol
 - [x] Subscription + managed_api_keys tables in Supabase (with RLS)
 - [x] EV code-signed NSIS installer + portable executable
 
@@ -68,7 +67,7 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 - [x] Single-instance lock
 
 ### Auth & Billing
-- [x] Supabase Auth integration (email, Google, Facebook)
+- [x] Supabase Auth integration (email/password)
 - [x] Subscription status check from Supabase
 - [x] Managed API key retrieval for Pro users
 - [x] Stripe checkout session creation (via Netlify function)
@@ -131,6 +130,8 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 
 ### Near-term
 - [ ] **Complete Stripe integration** — end-to-end checkout + webhook + billing portal
+- [ ] **Google OAuth** — sign in with Google via Supabase Auth
+- [ ] **Facebook OAuth** — sign in with Facebook via Supabase Auth
 - [ ] **Onboarding flow** — guided first-run experience after sign-up
 - [ ] **Usage tracking** — voice minutes + AI requests per billing period
 - [ ] **Usage limits** — enforce Pro tier quotas
@@ -229,7 +230,7 @@ MacroVox/
 | **App** | Electron 40, React 18, Vite 6, Tailwind 3 |
 | **Speech-to-Text** | Deepgram nova-2 (batch + streaming) |
 | **AI Post-Processing** | Claude (Anthropic) via proxy |
-| **Auth** | Supabase Auth (email, Google, Facebook) |
+| **Auth** | Supabase Auth (email/password; OAuth planned) |
 | **Database** | Supabase (PostgreSQL) |
 | **Billing** | Stripe (subscriptions) |
 | **Functions** | Netlify Functions (serverless) |

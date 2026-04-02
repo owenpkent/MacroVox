@@ -163,10 +163,6 @@ def main():
 
     print("\nStep 3: Launching Electron...")
     ensure_tray_icon()
-    # Kill any lingering Electron from a previous dev session (single-instance lock)
-    subprocess.run("taskkill /F /IM electron.exe /T", shell=True,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    time.sleep(0.5)
     electron_proc = npm_bg("run start", env={"ELECTRON_DEV": "true"})
 
     print("\n  MacroVox is running. Press Ctrl+C to stop.\n")
@@ -177,7 +173,10 @@ def main():
         print("\nShutting down...")
         for p in procs:
             try:
-                p.terminate()
+                subprocess.run(
+                    f"taskkill /F /PID {p.pid} /T",
+                    shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
             except Exception:
                 pass
         sys.exit(0)

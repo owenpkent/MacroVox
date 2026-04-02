@@ -14,12 +14,14 @@ import { getSubscription, getManagedApiKeys, createCheckoutSession, createBillin
 // Supabase auth manager (handles email, Google, Facebook login)
 const authManager = new AuthManager()
 
+const isDev = process.env.ELECTRON_DEV === 'true'
+
 // Disable GPU cache to prevent "Unable to move cache" errors on Windows
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
 app.commandLine.appendSwitch('disable-gpu-program-cache')
 
-// Prevent multiple instances
-const gotTheLock = app.requestSingleInstanceLock()
+// Prevent multiple instances (skip in dev — other Electron apps may hold the lock)
+const gotTheLock = isDev || app.requestSingleInstanceLock()
 if (!gotTheLock) {
   app.quit()
 }
@@ -36,8 +38,6 @@ let minimizeToTray = false
 let audioPreWarmed = false
 let deepgramKeywords: string[] = []
 let selectedMicDevice: string | null = null
-
-const isDev = process.env.ELECTRON_DEV === 'true'
 
 // ============================================================================
 // Window creation
@@ -60,6 +60,7 @@ function createDictationWindow(autoStartRecording = false, hidden = false) {
     height: 500,
     minWidth: 380,
     minHeight: 360,
+    icon: getAppIcon(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -70,7 +71,11 @@ function createDictationWindow(autoStartRecording = false, hidden = false) {
     backgroundColor: '#0f172a',
     title: 'MacroVox',
     alwaysOnTop: dictationAlwaysOnTop,
-    show: !hidden,
+    show: false,
+  })
+
+  dictationWindow.once('ready-to-show', () => {
+    if (!hidden) dictationWindow?.show()
   })
 
   if (isDev) {
@@ -131,6 +136,7 @@ function createSettingsWindow() {
     height: 700,
     minWidth: 400,
     minHeight: 500,
+    icon: getAppIcon(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -154,16 +160,20 @@ function createSettingsWindow() {
   })
 }
 
-function createTray() {
-  let icon = nativeImage.createEmpty()
+function getAppIcon(): Electron.NativeImage {
   try {
     const iconPath = app.isPackaged
-      ? path.join(process.resourcesPath, 'icons', 'tray-icon.png')
-      : path.join(__dirname, '../../resources/icons/tray-icon.png')
+      ? path.join(process.resourcesPath, 'icons', 'icon.png')
+      : path.join(__dirname, '../../resources/icons/icon.png')
     const loaded = nativeImage.createFromPath(iconPath)
-    if (!loaded.isEmpty()) icon = loaded
-  } catch { /* no icon in dev — use empty */ }
-  tray = new Tray(icon)
+    if (!loaded.isEmpty()) return loaded.resize({ width: 256, height: 256 })
+  } catch { /* fall through */ }
+  return nativeImage.createEmpty()
+}
+
+function createTray() {
+  const icon = getAppIcon().resize({ width: 32, height: 32 })
+  tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon)
   
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Show Dictation', click: () => { createDictationWindow(); dictationWindow?.show() } },

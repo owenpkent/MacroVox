@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings, Mic, X, RefreshCw, Sparkles, Loader2, CreditCard, MessageSquare, Pin, Palette } from 'lucide-react'
+import { Settings, Mic, X, RefreshCw, Sparkles, Loader2, CreditCard, MessageSquare, Pin, Palette, LogIn, User } from 'lucide-react'
 import { THEMES, getStoredTheme, setStoredTheme } from '../themes'
 
 interface SettingsPanelProps {
@@ -12,6 +12,12 @@ interface SettingsPanelProps {
 type SubscriptionStatus = 'free' | 'pro' | 'team' | 'loading'
 
 export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
+  const [authTab, setAuthTab] = useState<'signin' | 'signup'>('signin')
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authLoading, setAuthLoading] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [authSuccess, setAuthSuccess] = useState<string | null>(null)
   const [devices, setDevices] = useState<string[]>([])
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -53,6 +59,44 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
   
   // Theme
   const [selectedTheme, setSelectedTheme] = useState(() => getStoredTheme())
+
+  const handleEmailAuth = async () => {
+    if (!window.electronAPI || !authEmail || !authPassword) return
+    setAuthLoading(true)
+    setAuthError(null)
+    setAuthSuccess(null)
+    try {
+      const result = authTab === 'signin'
+        ? await window.electronAPI.signInEmail(authEmail, authPassword)
+        : await window.electronAPI.signUpEmail(authEmail, authPassword)
+      if (result.success) {
+        if (authTab === 'signup') {
+          setAuthSuccess('Check your email to confirm your account.')
+        } else {
+          onClose()
+        }
+      } else {
+        setAuthError(result.error || 'Authentication failed')
+      }
+    } catch (err) {
+      setAuthError('Something went wrong')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleOAuth = async (provider: 'google' | 'facebook') => {
+    if (!window.electronAPI) return
+    setAuthLoading(true)
+    setAuthError(null)
+    try {
+      await window.electronAPI.signInOAuth(provider)
+    } catch {
+      setAuthError('OAuth sign-in failed')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
 
   // Check subscription status on mount
   useEffect(() => {
@@ -214,7 +258,97 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
 
         {/* Content - Scrollable */}
         <div className="p-4 space-y-6 overflow-y-auto flex-1">
-          
+
+          {/* Sign-In Section — shown only when not signed in */}
+          {!user && (
+            <section>
+              <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
+                <User size={16} style={{ color: 'var(--accent-secondary)' }} />
+                Account
+              </h3>
+              <div className="rounded-lg p-4" style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)' }}>
+                {/* Tab switcher */}
+                <div className="flex rounded overflow-hidden mb-4" style={{ border: '1px solid var(--border-primary)' }}>
+                  {(['signin', 'signup'] as const).map(tab => (
+                    <button
+                      key={tab}
+                      onClick={() => { setAuthTab(tab); setAuthError(null); setAuthSuccess(null) }}
+                      className="flex-1 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors"
+                      style={{
+                        backgroundColor: authTab === tab ? 'var(--accent-primary)' : 'transparent',
+                        color: authTab === tab ? '#fff' : 'var(--text-muted)',
+                      }}
+                    >
+                      {tab === 'signin' ? 'Sign In' : 'Sign Up'}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="space-y-2">
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    value={authEmail}
+                    onChange={e => setAuthEmail(e.target.value)}
+                    className="w-full px-3 py-2 rounded text-sm focus:outline-none"
+                    style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
+                  />
+                  <input
+                    type="password"
+                    placeholder="Password"
+                    value={authPassword}
+                    onChange={e => setAuthPassword(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleEmailAuth()}
+                    className="w-full px-3 py-2 rounded text-sm focus:outline-none"
+                    style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
+                  />
+                </div>
+
+                {authError && (
+                  <p className="text-xs mt-2" style={{ color: 'var(--danger)' }}>{authError}</p>
+                )}
+                {authSuccess && (
+                  <p className="text-xs mt-2" style={{ color: 'var(--accent-primary)' }}>{authSuccess}</p>
+                )}
+
+                <button
+                  onClick={handleEmailAuth}
+                  disabled={authLoading || !authEmail || !authPassword}
+                  className="w-full mt-3 py-2 rounded text-white text-sm font-semibold tracking-wide flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  style={{ backgroundColor: 'var(--accent-primary)' }}
+                >
+                  {authLoading ? <Loader2 size={14} className="animate-spin" /> : <LogIn size={14} />}
+                  {authTab === 'signin' ? 'Sign In' : 'Create Account'}
+                </button>
+
+              </div>
+            </section>
+          )}
+
+          {/* Signed-in account pill — shown when logged in */}
+          {user && (
+            <section>
+              <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
+                <User size={16} style={{ color: 'var(--accent-secondary)' }} />
+                Account
+              </h3>
+              <div className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)' }}>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ backgroundColor: 'var(--accent-primary)', color: '#fff' }}>
+                    {(user.displayName || user.email || '?')[0].toUpperCase()}
+                  </div>
+                  <span className="text-xs text-slate-300 truncate max-w-[180px]">{user.displayName || user.email}</span>
+                </div>
+                <button
+                  onClick={async () => { await window.electronAPI?.signOut(); onClose() }}
+                  className="text-xs hover:underline" style={{ color: 'var(--text-muted)' }}
+                >
+                  Sign out
+                </button>
+              </div>
+            </section>
+          )}
+
           {/* Theme Selector */}
           <section>
             <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>

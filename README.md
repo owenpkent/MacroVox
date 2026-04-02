@@ -15,7 +15,7 @@ A managed Electron desktop app for voice dictation powered by [Deepgram](https:/
 - **Keyword boosting** — improve recognition of custom terms (e.g. "MacroVox", "OAuth")
 - **Themed UI** — 6 built-in themes (MCRN, Mars, Belter, Earth, Protomolecule, Laconia)
 - **System tray** — runs in background, toggles with tray icon
-- **Email, Google, Facebook login** — Supabase Auth with multiple sign-in options
+- **Email/password login** — Supabase Auth (Google & Facebook OAuth coming soon)
 - **Stripe billing** — subscribe to Pro for managed Deepgram + Claude access
 - **Settings panel** — separate window for all configuration
 - **Always-on-top** — dictation window stays above other apps
@@ -67,7 +67,7 @@ npm run dev
 
 - The **dictation window** opens on launch
 - Press `Ctrl+Space` from any app to toggle recording
-- Open **Settings** (gear icon) to sign in and manage your subscription
+- Open **Settings** (gear icon) to sign in with email/password and manage your subscription
 - **Pro subscribers** get automatic API key provisioning — no configuration needed
 
 ---
@@ -123,12 +123,13 @@ MacroVox/
 │       │   └── usePostProcessing.ts # Claude AI cleanup hook
 │       └── types/
 │           └── electron.d.ts       # window.electronAPI types
+├── config/                   # Tooling configuration
+│   └── tsconfig.main.json    # Main process TypeScript config
 ├── package.json
-├── tsconfig.json             # Renderer TypeScript config
-├── tsconfig.main.json        # Main process TypeScript config
-├── vite.config.ts            # Vite + Vitest config (merged)
+├── tsconfig.json             # Renderer TypeScript config (references config/tsconfig.main.json)
 ├── tailwind.config.js        # Tailwind CSS config
-└── postcss.config.js         # PostCSS config
+├── postcss.config.js         # PostCSS config
+└── vite.config.ts            # Vite + Vitest config (merged)
 ```
 
 ---
