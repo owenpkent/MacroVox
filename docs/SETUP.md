@@ -10,22 +10,46 @@ Step-by-step instructions for setting up MacroVox's backend infrastructure from 
 
 1. Go to [supabase.com](https://supabase.com) and create an account
 2. Click **New Project**, choose a name and region
-3. Save your **Project URL** and **anon public key** from `Settings > API`
+3. In **Settings > API**, enable **Data API** (recommended for supabase-js) and **Enable automatic RLS** (security by default)
+4. Save your **Project URL** and **anon public key** from `Settings > API`
 
 ### Configure environment variables
 
-Set these in your shell or `.env` file (never commit `.env`):
-
 ```
 SUPABASE_URL=https://YOUR_PROJECT_ID.supabase.co
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 Update them in `src/main/auth/supabase-client.ts`:
 
 ```typescript
+/**
+ * Supabase client singleton for the main process.
+ *
+ * Uses SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY from environment variables.
+ * These are PUBLIC keys — safe to ship in the client binary.
+ */
+
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
+
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://YOUR_PROJECT.supabase.co'
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'YOUR_ANON_KEY'
+const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || 'YOUR_PUBLISHABLE_KEY'
+
+let _client: SupabaseClient | null = null
+
+export function getSupabaseClient(): SupabaseClient {
+  if (!_client) {
+    _client = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: false,   // we handle persistence ourselves via safeStorage
+        detectSessionInUrl: false,
+      },
+    })
+    console.log('[Supabase] Client initialized:', SUPABASE_URL)
+  }
+  return _client
+}
 ```
 
 ---
@@ -85,6 +109,7 @@ CREATE TABLE managed_api_keys (
 );
 
 -- Row Level Security (RLS) — users can only read their own data
+-- Note: Automatic RLS should be enabled in Settings > API for future tables
 ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE managed_api_keys ENABLE ROW LEVEL SECURITY;
 
