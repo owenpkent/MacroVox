@@ -26,3 +26,11 @@ build/MacroVox/
 *.pyc
 __pycache__/
 *.spec
+
+# Rust / Tauri build artifacts
+src-tauri/target/
+*.pdb
+
+# Tauri bundler outputs
+src-tauri/gen/
+WixTools/

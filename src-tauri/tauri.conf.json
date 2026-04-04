@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MacroVox",
+  "version": "1.0.6",
+  "identifier": "com.okstudio.macrovox",
+  "build": {
+    "beforeDevCommand": "npm run dev:renderer",
+    "devUrl": "http://localhost:5173/dictation.html",
+    "beforeBuildCommand": "npm run build:renderer",
+    "frontendDist": "../dist/renderer/dictation"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "MacroVox",
+        "width": 420,
+        "height": 500,
+        "minWidth": 380,
+        "minHeight": 360,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "backgroundColor": "#0f172a",
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "resources": []
+  }
+}
