@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings, Mic, X, RefreshCw, Sparkles, Loader2, CreditCard, MessageSquare, Pin, Palette, LogIn, User } from 'lucide-react'
+import { Settings, Mic, X, RefreshCw, Sparkles, Loader2, CreditCard, MessageSquare, Pin, Palette, LogIn, User, PenLine } from 'lucide-react'
 import { THEMES, getStoredTheme, setStoredTheme } from '../themes'
 
 interface SettingsPanelProps {
@@ -55,6 +55,9 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
   )
   const [keywordBoosts, setKeywordBoosts] = useState(() =>
     localStorage.getItem('deepgram_keywords') || ''
+  )
+  const [writingStyleProfile, setWritingStyleProfile] = useState(() =>
+    localStorage.getItem('writing_style_profile') || ''
   )
   
   // Theme
@@ -542,6 +545,38 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
                   style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
                 />
                 <p className="text-xs text-slate-600 mt-1">Sent with each transcript to help Claude understand your speech patterns</p>
+              </div>
+            </div>
+          </section>
+
+          {/* Agentic Writing Section */}
+          <section>
+            <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
+              <PenLine size={16} style={{ color: 'var(--accent-secondary)' }} />
+              Agentic Writing
+            </h3>
+
+            <div className="space-y-3">
+              <p className="text-xs text-slate-500">
+                In the Write tab, speak a request and Claude generates the full content — emails, messages, book chapters, docs, anything. No type selection needed.
+              </p>
+              <div>
+                <span className="text-sm text-slate-200">Writing style profile</span>
+                <p className="text-xs text-slate-500 mb-2">
+                  Describe your voice, tone, and preferences so Claude writes in your style. Paste writing samples or just describe how you like to sound.
+                </p>
+                <textarea
+                  value={writingStyleProfile}
+                  onChange={(e) => {
+                    setWritingStyleProfile(e.target.value)
+                    saveSetting('writing_style_profile', e.target.value)
+                  }}
+                  placeholder={'e.g. I write casually but precisely. Short sentences. No filler words. Sign emails with just my first name. I work in software, so technical terms are fine.'}
+                  rows={4}
+                  className="w-full px-3 py-2 rounded text-sm focus:outline-none resize-none"
+                  style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
+                />
+                <p className="text-xs text-slate-600 mt-1">Sent with every Write request as a style guide for Claude</p>
               </div>
             </div>
           </section>

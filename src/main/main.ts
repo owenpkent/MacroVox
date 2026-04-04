@@ -208,19 +208,18 @@ if (process.defaultApp) {
   app.setAsDefaultProtocolClient('macrovox')
 }
 
-app.whenReady().then(async () => {
-  // Restore Supabase session from encrypted storage
-  const user = await authManager.restoreSession()
-  if (user) {
-    console.log(`[MacroVox] Session restored for ${user.email}`)
-  }
-
+app.whenReady().then(() => {
+  // Show the window immediately — don't block on session restore.
+  // Auth state is picked up by the renderer's existing polling once ready.
   createDictationWindow(false, false)
   createTray()
   registerGlobalShortcuts()
-
-  // No application menu — dictation app is minimal
   Menu.setApplicationMenu(null)
+
+  // Restore Supabase session in the background (makes a network round-trip).
+  authManager.restoreSession().then(user => {
+    if (user) console.log(`[MacroVox] Session restored for ${user.email}`)
+  }).catch(() => {})
 })
 
 app.on('window-all-closed', () => {

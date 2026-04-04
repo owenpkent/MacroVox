@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Mic, MicOff, Copy, Check, Trash2, Loader2, Settings } from 'lucide-react'
 import { usePostProcessing } from '../hooks/usePostProcessing'
+import { AgentiveWriting } from './AgentiveWriting'
 
 interface DictationUser {
   id: string
@@ -10,7 +11,10 @@ interface DictationUser {
   authMethod: string
 }
 
+type Tab = 'dictate' | 'write'
+
 export function DictationMode() {
+  const [activeTab, setActiveTab] = useState<Tab>('dictate')
   const [isRecording, setIsRecording] = useState(false)
   const [isPreparing, setIsPreparing] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -429,7 +433,29 @@ export function DictationMode() {
         </button>
       </div>
 
+      {/* Tab bar */}
+      <div className="flex gap-3 mb-1 border-b" style={{ borderColor: 'var(--border-primary)' }}>
+        {(['dictate', 'write'] as Tab[]).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className="pb-1 text-[10px] uppercase tracking-widest transition-colors"
+            style={{
+              color:        activeTab === tab ? 'var(--accent-primary)' : 'var(--text-muted)',
+              borderBottom: activeTab === tab ? '1px solid var(--accent-primary)' : '1px solid transparent',
+              marginBottom: '-1px',
+            }}
+          >
+            {tab === 'dictate' ? 'Dictate' : 'Write'}
+          </button>
+        ))}
+      </div>
+
+      {/* Write tab */}
+      {activeTab === 'write' && <AgentiveWriting user={user} apiKey={apiKey} />}
+
       {/* Main content */}
+      {activeTab === 'dictate' && <>
       <div className="shrink-0 flex flex-col items-center justify-center gap-4">
         {/* Error */}
         {error && (
@@ -600,6 +626,7 @@ export function DictationMode() {
           </button>
         </div>
       </div>
+      </>}
 
     </div>
   )

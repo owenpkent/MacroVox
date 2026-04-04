@@ -9,8 +9,10 @@ A managed Electron desktop app for voice dictation powered by [Deepgram](https:/
 ## Features
 
 - **Voice-to-text dictation** — Deepgram nova-2 with batch or streaming modes
+- **Agentic writing** — speak a request ("write an email to Mike rescheduling Thursday") and Claude produces the finished content; works for any format (email, message, doc, book chapter, etc.)
+- **Writing style profile** — describe your voice and preferences once; every generated piece matches your style
 - **Global hotkey** — `Ctrl+Space` to toggle recording from any app
-- **AI post-processing** — Claude cleans up every transcript automatically (required for Pro)
+- **AI post-processing** — Claude cleans up every transcript automatically (Pro)
 - **Auto-copy & auto-paste** — transcript goes straight to your clipboard and active app
 - **Keyword boosting** — improve recognition of custom terms (e.g. "MacroVox", "OAuth")
 - **Themed UI** — 6 built-in themes (MCRN, Mars, Belter, Earth, Protomolecule, Laconia)
@@ -116,11 +118,13 @@ MacroVox/
 │       ├── themes.ts         # Theme definitions (6 themes)
 │       ├── ThemeContext.tsx   # React theme provider
 │       ├── components/
-│       │   ├── DictationMode.tsx   # Main dictation UI
+│       │   ├── DictationMode.tsx   # Main dictation UI (hosts Dictate/Write tabs)
+│       │   ├── AgentiveWriting.tsx # Write tab — speak a request, Claude writes it
 │       │   └── SettingsPanel.tsx   # Settings UI
 │       ├── hooks/
-│       │   ├── useDeepgram.ts      # Deepgram recording hook
-│       │   └── usePostProcessing.ts # Claude AI cleanup hook
+│       │   ├── useDeepgram.ts         # Deepgram recording hook
+│       │   ├── usePostProcessing.ts   # Claude AI transcript cleanup hook
+│       │   └── useAgentiveWriting.ts  # Claude AI writing generation hook
 │       └── types/
 │           └── electron.d.ts       # window.electronAPI types
 ├── config/                   # Tooling configuration
@@ -162,11 +166,13 @@ MacroVox/
                 │ IPC (preload)   │
 ┌───────────────▼─────────────────▼───────────────┐
 │              Electron Renderer                   │
-│  DictationMode.tsx — recording UI + transcript   │
-│  SettingsPanel.tsx — all user preferences        │
-│  ThemeContext.tsx  — 6 themed color schemes       │
-│  useDeepgram.ts   — recording state machine      │
-│  usePostProcessing.ts — Claude AI cleanup        │
+│  DictationMode.tsx    — recording UI + Dictate/Write tab host  │
+│  AgentiveWriting.tsx  — speak a request → Claude writes it     │
+│  SettingsPanel.tsx    — all user preferences                   │
+│  ThemeContext.tsx     — 6 themed color schemes                 │
+│  useDeepgram.ts       — recording state machine                │
+│  usePostProcessing.ts — Claude transcript cleanup              │
+│  useAgentiveWriting.ts — Claude writing generation             │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -211,6 +217,7 @@ All settings are stored in `localStorage` and synced across windows via IPC.
 | Post-processing | *(always on)* | — | Claude cleans every transcript for Pro subscribers |
 | Accessibility context | `post_processing_context` | `""` | Speech pattern hints for Claude |
 | Keyword boosting | `deepgram_keywords` | `""` | Newline-separated terms to boost |
+| Writing style profile | `writing_style_profile` | `""` | Voice/tone description sent with every Write request |
 | Always on top | `dictation_always_on_top` | `true` | Keep dictation window above others |
 | Theme | `app_theme` | `mcrn` | UI theme ID |
 
