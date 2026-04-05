@@ -38,3 +38,7 @@ WixTools/
 # Claude Code worktree artifacts
 .claude/worktrees/
 .clone/
+.claude/settings.local.json
+
+# Crash dumps
+*.stackdump
