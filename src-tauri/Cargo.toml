@@ -40,7 +40,7 @@ tokio = { version = "1", features = ["sync", "macros", "rt"] }
 whisper-rs = { version = "0.10", optional = true }
 
 # Phase 5: replace PowerShell SendKeys paste (~700ms) with native input
-# enigo = "0.2"
+enigo = "0.2"
 
 [features]
 default = []
