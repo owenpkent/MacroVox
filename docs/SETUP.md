@@ -20,37 +20,18 @@ SUPABASE_URL=https://YOUR_PROJECT_ID.supabase.co
 SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
-Update them in `src/main/auth/supabase-client.ts`:
+Create a `.env` file in the project root with Vite-prefixed variables (required for the renderer):
 
-```typescript
-/**
- * Supabase client singleton for the main process.
- *
- * Uses SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY from environment variables.
- * These are PUBLIC keys — safe to ship in the client binary.
- */
-
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
-
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://YOUR_PROJECT.supabase.co'
-const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || 'YOUR_PUBLISHABLE_KEY'
-
-let _client: SupabaseClient | null = null
-
-export function getSupabaseClient(): SupabaseClient {
-  if (!_client) {
-    _client = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: false,   // we handle persistence ourselves via safeStorage
-        detectSessionInUrl: false,
-      },
-    })
-    console.log('[Supabase] Client initialized:', SUPABASE_URL)
-  }
-  return _client
-}
 ```
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
+
+# Vite-exposed vars for the renderer (must be prefixed VITE_)
+VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+VITE_SUPABASE_KEY=YOUR_PUBLISHABLE_KEY
+```
+
+The Supabase client is initialized in `src/renderer/lib/supabase.ts` using `import.meta.env.VITE_SUPABASE_URL` and `VITE_SUPABASE_KEY`. Session tokens are persisted in `localStorage` by the Supabase JS SDK automatically.
 
 ---
 
@@ -78,7 +59,7 @@ In the Supabase dashboard, go to **Authentication > Providers**:
 
 ### Register custom protocol
 
-For OAuth to work in the Electron app, the redirect must use the `macrovox://` custom protocol. This is already configured in `main.ts` — the OAuth flow opens a BrowserWindow, catches the redirect, and extracts tokens.
+For OAuth to work in the Tauri app, the redirect must use the `macrovox://` custom protocol. OAuth currently opens the provider URL in the system browser via `@tauri-apps/plugin-shell`. Deep-link support (`macrovox://auth/callback`) for returning the session is planned for a future phase. Email auth is fully functional.
 
 ---
 
@@ -223,7 +204,7 @@ export const SITE_URL = 'https://YOUR-SITE.netlify.app'
 ## Step 6: Verify Everything Works
 
 ```powershell
-npm run dev
+python run.py
 ```
 
 1. **Settings > Sign Up** — create account with email or Google/Facebook
@@ -238,11 +219,11 @@ npm run dev
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│                   MacroVox Electron                   │
+│                    MacroVox (Tauri 2)                  │
 │                                                       │
-│  auth-manager.ts ←→ Supabase Auth (email/Google/FB)  │
-│  subscription.ts ←→ Supabase DB (subscriptions)      │
-│  Session stored locally with Electron safeStorage     │
+│  Rust backend: audio capture, clipboard, paste, IPC  │
+│  React renderer: Supabase Auth JS SDK (email/OAuth)  │
+│  Session stored in localStorage (Supabase JS SDK)    │
 └───────────────────────┬──────────────────────────────┘
                         │
          ┌──────────────▼──────────────┐

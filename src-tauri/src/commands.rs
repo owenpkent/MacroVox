@@ -12,7 +12,7 @@
 ///   ✅ Phase 6 — auth stubs removed; Supabase JS SDK used from renderer
 use std::collections::HashMap;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager, State, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 use crate::state::AppState;
@@ -485,32 +485,13 @@ pub fn dictation_set_always_on_top(
 
 #[tauri::command]
 pub fn settings_open_window(app: AppHandle) -> OkResponse {
-    if let Some(win) = app.get_webview_window("settings") {
-        let _ = win.show();
-        let _ = win.set_focus();
-        return OkResponse::ok();
-    }
-
-    // Dev: load from Vite dev server; production: load from bundled dist.
-    let url = if cfg!(dev) {
-        tauri::WebviewUrl::External(
-            "http://localhost:5173/settings.html"
-                .parse()
-                .expect("invalid settings dev URL"),
-        )
-    } else {
-        tauri::WebviewUrl::App("settings.html".into())
-    };
-
-    match WebviewWindowBuilder::new(&app, "settings", url)
-        .title("Settings")
-        .inner_size(480.0, 700.0)
-        .min_inner_size(400.0, 500.0)
-        .always_on_top(true)
-        .build()
-    {
-        Ok(_) => OkResponse::ok(),
-        Err(e) => OkResponse::err(e.to_string()),
+    match app.get_webview_window("settings") {
+        Some(win) => {
+            let _ = win.show();
+            let _ = win.set_focus();
+            OkResponse::ok()
+        }
+        None => OkResponse::err("settings window not found".to_string()),
     }
 }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Mic, MicOff, Copy, Check, Trash2, Loader2, Settings } from 'lucide-react'
+import { Mic, MicOff, Copy, Check, Trash2, Loader2, Settings, Minus, X } from 'lucide-react'
 import { usePostProcessing } from '../hooks/usePostProcessing'
 import { AgentiveWriting } from './AgentiveWriting'
 import * as ipc from '../lib/tauri-ipc'
@@ -328,17 +328,41 @@ export function DictationMode() {
 
   return (
     <div className="h-screen w-screen flex flex-col p-4 select-none font-mono" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
-      {/* Drag area for window with settings button */}
-      <div className="h-6 -mx-4 -mt-4 mb-2 flex items-center justify-between px-2" data-tauri-drag-region>
-        <span className="text-[10px] uppercase tracking-widest ml-2" style={{ color: 'var(--accent-secondary)' }}>MacroVox</span>
-        <button
-          onClick={() => ipc.openSettingsWindow()}
-          className="p-1 rounded"
-          style={{ color: 'var(--text-muted)' }}
-          title="Settings"
-        >
-          <Settings size={14} />
-        </button>
+      {/* Titlebar: drag region covers the full bar, buttons sit outside it */}
+      <div className="h-8 -mx-4 -mt-4 mb-2 flex items-center justify-between">
+        <span className="text-[10px] uppercase tracking-widest ml-4 flex-1" style={{ color: 'var(--accent-secondary)' }} data-tauri-drag-region />
+        <div className="flex items-center gap-1 pr-1">
+          <button
+            onClick={() => ipc.openSettingsWindow()}
+            className="p-1 rounded hover:bg-white/10"
+            style={{ color: 'var(--text-muted)' }}
+            title="Settings"
+          >
+            <Settings size={14} />
+          </button>
+          <button
+            onClick={async () => {
+              const { getCurrentWindow } = await import('@tauri-apps/api/window')
+              getCurrentWindow().minimize()
+            }}
+            className="p-1 rounded hover:bg-white/10"
+            style={{ color: 'var(--text-muted)' }}
+            title="Minimize"
+          >
+            <Minus size={14} />
+          </button>
+          <button
+            onClick={async () => {
+              const { getCurrentWindow } = await import('@tauri-apps/api/window')
+              getCurrentWindow().close()
+            }}
+            className="p-1 rounded hover:bg-red-500/20"
+            style={{ color: 'var(--text-muted)' }}
+            title="Close"
+          >
+            <X size={14} />
+          </button>
+        </div>
       </div>
 
       {/* Tab bar */}

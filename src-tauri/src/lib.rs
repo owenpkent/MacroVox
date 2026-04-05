@@ -50,6 +50,9 @@ pub fn run() {
             let main_window = app
                 .get_webview_window("main")
                 .expect("main window not found");
+            let _ = main_window.show();
+            let _ = main_window.set_focus();
+
             let app_handle = app.handle().clone();
             main_window.on_window_event(move |event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {

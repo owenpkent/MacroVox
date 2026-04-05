@@ -1,6 +1,6 @@
 # MacroVox — Status & Roadmap
 
-**Last Updated**: April 1, 2026  
+**Last Updated**: April 5, 2026  
 **Repository**: https://github.com/owenpkent/MacroVox
 
 ---
@@ -41,10 +41,11 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 ## ✅ What's Done
 
 ### Infrastructure
-- [x] Electron app with React/Vite/Tailwind renderer
+- [x] Tauri 2 app with React/Vite/Tailwind renderer + Rust backend
+- [x] Migrated from Electron to Tauri (cpal WASAPI audio, enigo paste, Deepgram WebSocket)
 - [x] Supabase project for auth + database
-- [x] Supabase Auth (email/password)
-- [x] Encrypted session persistence via Electron safeStorage
+- [x] Supabase Auth (email/password) — JS SDK in renderer (replaced Electron main-process client)
+- [x] Session persistence via Supabase JS SDK localStorage (replaced Electron safeStorage)
 - [x] Subscription + managed_api_keys tables in Supabase (with RLS)
 - [x] EV code-signed NSIS installer + portable executable
 
@@ -94,6 +95,8 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 
 | Issue | Status |
 |-------|--------|
+| Settings window shows black screen | ✅ Fixed — declared in tauri.conf.json; `WebviewUrl::App` for programmatic windows never uses devUrl |
+| Minimize / close buttons unresponsive | ✅ Fixed — `data-tauri-drag-region` swallows clicks; buttons moved outside drag region + `core:window:allow-minimize/close` added to capabilities |
 | Transcript disappears after second recording | ✅ Fixed in v1.0.6 — React functional updaters |
 | Install to wrong directory (AppData vs Program Files) | ✅ Fixed in v1.0.5 — per-machine HKLM install |
 | Desktop shortcut not created | ✅ Fixed in v1.0.4 — reads correct path from registry |
@@ -202,23 +205,30 @@ MacroVox/
 │   ├── SETUP.md             # Backend setup guide
 │   ├── STATUS_AND_ROADMAP.md # Status & roadmap
 │   └── CHANGELOG.md         # Release history
-├── build/                   # Electron Builder configs
+├── src-tauri/               # Tauri 2 Rust backend
+│   ├── src/
+│   │   ├── lib.rs           # App setup, global shortcut, window events
+│   │   ├── commands.rs      # IPC commands (audio, recording, clipboard, paste)
+│   │   ├── audio.rs         # cpal WASAPI native audio capture
+│   │   ├── deepgram_ws.rs   # Deepgram WebSocket streaming
+│   │   └── state.rs         # Shared app state (Mutex-wrapped)
+│   ├── capabilities/        # Tauri 2 permission capabilities
+│   ├── Cargo.toml
+│   └── tauri.conf.json      # Tauri config (windows, build, plugins)
 ├── src/
-│   ├── main/                # Electron main process
-│   │   ├── main.ts          # App lifecycle, windows, IPC, tray
-│   │   ├── preload.ts       # Context bridge (renderer ↔ main)
-│   │   ├── audio.ts         # ffmpeg audio capture + device mgmt
-│   │   ├── deepgram.ts      # Deepgram SDK (streaming + batch)
-│   │   └── auth/            # Supabase auth + subscription
 │   └── renderer/            # React UI (Vite + Tailwind)
-│       ├── components/      # DictationMode, SettingsPanel
-│       ├── hooks/           # useDeepgram, usePostProcessing
+│       ├── components/      # DictationMode, SettingsPanel, AgentiveWriting
+│       ├── hooks/           # usePostProcessing
+│       ├── lib/             # tauri-ipc, auth (Supabase JS), supabase client
 │       ├── themes.ts        # 6 themed color schemes
-│       └── config.ts        # API endpoints
+│       ├── ThemeContext.tsx  # Theme provider + CSS variable injection
+│       ├── dictation.html   # Dictation window entry point
+│       ├── dictation.tsx    # Dictation window React root
+│       ├── settings.html    # Settings window entry point
+│       └── settings.tsx     # Settings window React root
 ├── package.json
-├── tsconfig.json
-├── vite.config.ts
-└── README.md
+├── vite.config.ts           # Vite config (multi-page: dictation + settings)
+└── run.py                   # Dev launcher (python run.py)
 ```
 
 ---
@@ -227,16 +237,18 @@ MacroVox/
 
 | Layer | Technology |
 |-------|-----------|
-| **App** | Electron 40, React 18, Vite 6, Tailwind 3 |
-| **Speech-to-Text** | Deepgram nova-2 (batch + streaming) |
+| **App** | Tauri 2, React 18, Vite 6, Tailwind 3 |
+| **Backend** | Rust (cpal WASAPI audio, enigo paste, reqwest HTTP) |
+| **Speech-to-Text** | Deepgram nova-2 (batch + WebSocket streaming) |
 | **AI Post-Processing** | Claude (Anthropic) via proxy |
-| **Auth** | Supabase Auth (email/password; OAuth planned) |
+| **Auth** | Supabase Auth JS SDK (email/password; OAuth planned) |
 | **Database** | Supabase (PostgreSQL) |
 | **Billing** | Stripe (subscriptions) |
 | **Functions** | Netlify Functions (serverless) |
-| **Audio** | ffmpeg (DirectShow on Windows) |
+| **Audio** | cpal (WASAPI native capture on Windows) |
+| **Local STT** | whisper-rs (optional, `--features local-stt`) |
 | **Signing** | Sectigo EV code signing certificate |
-| **Installer** | NSIS via electron-builder |
+| **Installer** | Tauri bundler (NSIS) |
 
 ---
 

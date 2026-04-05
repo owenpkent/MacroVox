@@ -8,6 +8,7 @@ export default defineConfig({
   plugins: [react()],
   root: 'src/renderer',
   base: './',
+  envDir: resolve(__dirname),
   css: {
     postcss: {
       plugins: [

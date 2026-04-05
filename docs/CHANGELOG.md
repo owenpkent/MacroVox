@@ -1,5 +1,14 @@
 # MacroVox Changelog
 
+## Unreleased — Settings Window Fix + Titlebar Controls
+
+### Bug Fixes
+- **Fixed settings window showing black screen** — Root cause was two-fold: (1) `devUrl` in `tauri.conf.json` pointed to the full `dictation.html` URL instead of the Vite root, so `WebviewUrl::App("settings.html")` resolved to an invalid path. (2) `WebviewUrl::App` for programmatically-created windows always uses the `tauri://localhost` custom protocol (serving from `frontendDist`), never the dev server — even in dev mode. Fix: declare the settings window in `tauri.conf.json` like the main window (hidden at startup); `settings_open_window` now just calls `show()` + `set_focus()` instead of constructing the window at runtime. Tauri handles URL resolution correctly for config-declared windows in both dev and production.
+- **Fixed minimize and close buttons unresponsive** — The entire titlebar `div` had `data-tauri-drag-region`, which sets `-webkit-app-region: drag` on the element and swallows click events from all children. Fix: only the `MacroVox` label span carries the drag attribute; the buttons sit in a sibling flex container outside the drag region.
+- **Added React error boundary to settings window** — If the settings panel fails to render, an error message is shown instead of a blank page.
+
+---
+
 ## v1.0.6 (2026-03-17) — Transcript Disappears After Second Recording Fix
 
 ### Bug Fixes

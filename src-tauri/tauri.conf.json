@@ -5,14 +5,15 @@
   "identifier": "com.okstudio.macrovox",
   "build": {
     "beforeDevCommand": "npm run dev:renderer",
-    "devUrl": "http://localhost:5173/dictation.html",
+    "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "npm run build:renderer",
-    "frontendDist": "../dist/renderer/dictation"
+    "frontendDist": "../dist/renderer"
   },
   "app": {
     "windows": [
       {
         "label": "main",
+        "url": "dictation.html",
         "title": "MacroVox",
         "width": 420,
         "height": 500,
@@ -21,6 +22,18 @@
         "decorations": false,
         "alwaysOnTop": true,
         "backgroundColor": "#0f172a",
+        "visible": false
+      },
+      {
+        "label": "settings",
+        "url": "settings.html",
+        "title": "Settings — MacroVox",
+        "width": 480,
+        "height": 700,
+        "minWidth": 400,
+        "minHeight": 500,
+        "alwaysOnTop": true,
+        "backgroundColor": "#0a0f14",
         "visible": false
       }
     ],
