@@ -42,3 +42,6 @@ WixTools/
 
 # Crash dumps
 *.stackdump
+
+# LLM onboarding template (repo-specific file is LLM_ONBOARDING.md)
+LLM_ONBOARDING_TEMPLATE.md
