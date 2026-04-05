@@ -1,5 +1,27 @@
 use std::sync::{Arc, Mutex};
 
+use crate::deepgram_ws::DgSender;
+
+// ── cpal::Stream Send/Sync wrapper ────────────────────────────────────────────
+
+/// Wraps `cpal::Stream` to implement `Send + Sync`.
+///
+/// `cpal::Stream` is `!Send` on WASAPI due to a `PhantomData<*mut ()>` marker
+/// added as a portability guard for macOS (CoreAudio requires thread affinity).
+/// On Windows/WASAPI the stream is reference-counted and safe to move between
+/// threads; the `Mutex<Option<AudioStream>>` further ensures no simultaneous
+/// access from multiple threads.
+///
+/// This wrapper is **only** used to satisfy `Tauri::State<AppState>` which
+/// requires `AppState: Send + Sync`.  The stream is never accessed from more
+/// than one thread at a time.
+#[allow(dead_code)] // field held only for its Drop; never read back out
+pub(crate) struct AudioStream(pub cpal::Stream);
+
+// SAFETY: See doc comment above.
+unsafe impl Send for AudioStream {}
+unsafe impl Sync for AudioStream {}
+
 /// Shared mutable state for the MacroVox Tauri backend.
 ///
 /// Wrapped in `Mutex` so Tauri command handlers (which run on the async executor)
@@ -23,7 +45,8 @@ pub struct AppState {
 
     /// Live cpal capture stream. Dropping it stops audio capture.
     /// `None` when the stream is stopped.
-    pub audio_stream: Mutex<Option<cpal::Stream>>,
+    /// Wrapped in `AudioStream` to satisfy `Send + Sync` bounds (see above).
+    pub audio_stream: Mutex<Option<AudioStream>>,
 
     /// Current RMS level of the capture stream (range 0.0–1.0).
     /// Updated by the cpal callback on every audio frame.
@@ -49,6 +72,16 @@ pub struct AppState {
     /// Keywords forwarded to Deepgram for boosted recognition.
     /// Parsed from the `deepgram_keywords` settings key (newline-separated).
     pub deepgram_keywords: Mutex<Vec<String>>,
+
+    // ── Phase 4: Deepgram WebSocket streaming ─────────────────────────────────
+
+    /// Sender half of the channel used to push PCM bytes (and control messages)
+    /// to the background Deepgram WebSocket task. `None` when no session is
+    /// active. Set by `deepgram_start`, cleared by `deepgram_stop`.
+    ///
+    /// `Arc` so the cpal capture callback can hold a clone without borrowing
+    /// `AppState` (which is not available in the callback closure).
+    pub dg_sender: Arc<Mutex<Option<DgSender>>>,
 }
 
 impl Default for AppState {
@@ -64,6 +97,7 @@ impl Default for AppState {
             audio_sample_rate: Mutex::new(16_000),
             audio_channels: Mutex::new(1),
             deepgram_keywords: Mutex::new(Vec::new()),
+            dg_sender: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -85,6 +119,7 @@ mod tests {
         assert_eq!(*state.audio_sample_rate.lock().unwrap(), 16_000);
         assert_eq!(*state.audio_channels.lock().unwrap(), 1);
         assert!(state.deepgram_keywords.lock().unwrap().is_empty());
+        assert!(state.dg_sender.lock().unwrap().is_none());
     }
 
     #[test]
@@ -110,6 +145,12 @@ mod tests {
         let state = AppState::default();
         state.recording_buffer.lock().unwrap().extend([0.1f32, 0.2, 0.3]);
         assert_eq!(state.recording_buffer.lock().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn state_dg_sender_is_none_by_default() {
+        let state = AppState::default();
+        assert!(state.dg_sender.lock().unwrap().is_none());
     }
 
     #[test]

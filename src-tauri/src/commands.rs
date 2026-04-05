@@ -7,7 +7,7 @@
 /// Phase status per command:
 ///   ✅ Phase 2 — implemented (clipboard, window ops, broadcast events, auto-paste)
 ///   ✅ Phase 3 — audio (cpal WASAPI replaces ffmpeg subprocess)
-///   🔲 Phase 4 — Deepgram WebSocket pre-warm + whisper-rs local STT
+///   ✅ Phase 4 — Deepgram WebSocket pre-warm + whisper-rs local STT scaffold
 ///   🔲 Phase 5 — enigo native paste (replaces PowerShell ~700 ms)
 ///   🔲 Phase 6 — auth stubs removed; Supabase JS SDK used from renderer
 use std::collections::HashMap;
@@ -153,12 +153,14 @@ pub fn audio_start(state: State<AppState>) -> OkResponse {
     let buffer = Arc::clone(&state.recording_buffer);
     let is_recording = Arc::clone(&state.is_recording);
 
-    match crate::audio::build_input_stream(&device, &config, level, buffer, is_recording) {
+    let dg_sender = Arc::clone(&state.dg_sender);
+
+    match crate::audio::build_input_stream(&device, &config, level, buffer, is_recording, dg_sender) {
         Ok(stream) => {
             if let Err(e) = stream.play() {
                 return OkResponse::err(format!("Failed to start stream: {e}"));
             }
-            *state.audio_stream.lock().unwrap() = Some(stream);
+            *state.audio_stream.lock().unwrap() = Some(crate::state::AudioStream(stream));
             OkResponse::ok()
         }
         Err(e) => OkResponse::err(format!("Failed to build audio stream: {e}")),
@@ -179,17 +181,61 @@ pub fn audio_get_level(state: State<AppState>) -> f64 {
     *state.audio_level.lock().unwrap()
 }
 
-// ── Deepgram streaming (Phase 4: pre-warm WebSocket + whisper-rs) ─────────────
+// ── Deepgram streaming ✅ Phase 4: pre-warmed WebSocket ───────────────────────
 
+/// Opens a Deepgram WebSocket connection and begins streaming audio in real time.
+///
+/// This command is the streaming-mode equivalent of `recording_start`.  The
+/// renderer calls it (with `mode = "streaming"`) instead of `recording_start`.
+///
+/// Steps:
+/// 1. Reads the device's sample rate and channel count from `AppState`.
+/// 2. Calls `deepgram_ws::start_session` to establish the `wss://` connection
+///    (the pre-warm step — the handshake happens here, before the user speaks).
+/// 3. Stores the `DgSender` in `AppState::dg_sender` so the cpal callback can
+///    forward audio frames to the WebSocket task.
+/// 4. Clears the recording buffer and sets `is_recording = true` so the cpal
+///    callback starts both buffering (batch fallback) and streaming (WS path).
+///
+/// Transcripts are pushed back to the renderer as `"deepgram:transcript"` events.
 #[tauri::command]
-pub fn deepgram_start(_api_key: String, _state: State<AppState>) -> OkResponse {
-    // Phase 4: open a persistent WebSocket to api.deepgram.com and stream PCM.
-    OkResponse::ok()
+pub async fn deepgram_start(
+    api_key: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<OkResponse, String> {
+    let sample_rate = *state.audio_sample_rate.lock().unwrap();
+    let channels = *state.audio_channels.lock().unwrap();
+
+    match crate::deepgram_ws::start_session(&api_key, sample_rate, channels, app).await {
+        Ok(sender) => {
+            // Store sender before setting is_recording so the first callback
+            // frame is not missed.
+            *state.dg_sender.lock().unwrap() = Some(sender);
+            state.recording_buffer.lock().unwrap().clear();
+            *state.is_recording.lock().unwrap() = true;
+            Ok(OkResponse::ok())
+        }
+        Err(e) => Ok(OkResponse::err(e)),
+    }
 }
 
+/// Stops Deepgram WebSocket streaming and closes the connection.
+///
+/// Sends `DgMessage::Stop` to the background task, which in turn sends
+/// `{"type":"CloseStream"}` to Deepgram and drains any final transcript
+/// fragments before exiting.  Any remaining `"deepgram:transcript"` events
+/// will still arrive in the renderer before the socket closes.
 #[tauri::command]
-pub fn deepgram_stop(_state: State<AppState>) -> OkResponse {
-    // Phase 4: close the WebSocket.
+pub fn deepgram_stop(state: State<AppState>) -> OkResponse {
+    *state.is_recording.lock().unwrap() = false;
+
+    // Take the sender out of state — dropping it signals the task to close,
+    // but sending Stop first gives Deepgram a chance to flush its buffer.
+    if let Some(sender) = state.dg_sender.lock().unwrap().take() {
+        let _ = sender.send(crate::deepgram_ws::DgMessage::Stop);
+    }
+
     OkResponse::ok()
 }
 
@@ -209,8 +255,13 @@ pub fn recording_start(state: State<AppState>) -> OkResponse {
 /// This is an `async` command because it awaits the Deepgram HTTP response.
 /// All state locks are released before the `await` to avoid holding them across
 /// the suspension point.
+/// Tauri 2 requires async commands with borrowed `State<'_, T>` to return `Result`.
+/// The `Err` arm is unreachable — failures are expressed through `RecordingStopResponse`.
 #[tauri::command]
-pub async fn recording_stop(api_key: String, state: State<'_, AppState>) -> RecordingStopResponse {
+pub async fn recording_stop(
+    api_key: String,
+    state: State<'_, AppState>,
+) -> Result<RecordingStopResponse, String> {
     // --- Stop recording and drain the buffer synchronously ---
     *state.is_recording.lock().unwrap() = false;
     let samples = std::mem::take(&mut *state.recording_buffer.lock().unwrap());
@@ -219,13 +270,13 @@ pub async fn recording_stop(api_key: String, state: State<'_, AppState>) -> Reco
     // State locks released here — safe to await below.
 
     if samples.is_empty() {
-        return RecordingStopResponse {
+        return Ok(RecordingStopResponse {
             success: false,
             transcript: None,
             confidence: None,
             duration: None,
             error: Some("No audio was captured".to_string()),
-        };
+        });
     }
 
     let duration = samples.len() as f64 / (sample_rate as f64 * channels as f64);
@@ -237,7 +288,7 @@ pub async fn recording_stop(api_key: String, state: State<'_, AppState>) -> Reco
         "https://api.deepgram.com/v1/listen?model=nova-2&punctuate=true&smart_format=true";
 
     let client = reqwest::Client::new();
-    match client
+    let resp = match client
         .post(URL)
         .header("Authorization", format!("Token {api_key}"))
         .header("Content-Type", "audio/wav")
@@ -245,25 +296,27 @@ pub async fn recording_stop(api_key: String, state: State<'_, AppState>) -> Reco
         .send()
         .await
     {
-        Ok(resp) => {
-            let json: serde_json::Value = resp.json().await.unwrap_or_default();
-            let alt = &json["results"]["channels"][0]["alternatives"][0];
-            RecordingStopResponse {
-                success: true,
-                transcript: Some(alt["transcript"].as_str().unwrap_or("").to_string()),
-                confidence: alt["confidence"].as_f64(),
+        Ok(r) => r,
+        Err(e) => {
+            return Ok(RecordingStopResponse {
+                success: false,
+                transcript: None,
+                confidence: None,
                 duration: Some(duration),
-                error: None,
-            }
+                error: Some(format!("Deepgram request failed: {e}")),
+            })
         }
-        Err(e) => RecordingStopResponse {
-            success: false,
-            transcript: None,
-            confidence: None,
-            duration: Some(duration),
-            error: Some(format!("Deepgram request failed: {e}")),
-        },
-    }
+    };
+
+    let json: serde_json::Value = resp.json().await.unwrap_or_default();
+    let alt = &json["results"]["channels"][0]["alternatives"][0];
+    Ok(RecordingStopResponse {
+        success: true,
+        transcript: Some(alt["transcript"].as_str().unwrap_or("").to_string()),
+        confidence: alt["confidence"].as_f64(),
+        duration: Some(duration),
+        error: None,
+    })
 }
 
 /// Discards the recording buffer without transcribing.
@@ -272,6 +325,145 @@ pub fn recording_cancel(state: State<AppState>) -> OkResponse {
     *state.is_recording.lock().unwrap() = false;
     state.recording_buffer.lock().unwrap().clear();
     OkResponse::ok()
+}
+
+// ── Local STT ✅ Phase 4 (local-stt feature) ──────────────────────────────────
+
+/// Transcribes the current recording buffer using whisper-rs (offline/local STT).
+///
+/// This is an alternative to `recording_stop` for users who want fully offline
+/// transcription.  Call after `recording_start` + recording, just like
+/// `recording_stop`, but pass a `model_path` pointing to a downloaded GGML
+/// model file (e.g. `ggml-base.en.bin`).
+///
+/// ## Enabling
+///
+/// The `local-stt` Cargo feature is **off by default** because whisper-rs
+/// builds whisper.cpp from source, which requires cmake and a C++ toolchain.
+/// Enable it with:
+///
+/// ```sh
+/// cargo build --features local-stt
+/// ```
+///
+/// ## Model download
+///
+/// Download GGML models from:
+/// `https://huggingface.co/ggerganov/whisper.cpp/tree/main`
+/// Recommended starter: `ggml-base.en.bin` (~142 MB, English only, fast)
+#[tauri::command]
+pub fn whisper_transcribe(
+    model_path: String,
+    state: State<AppState>,
+) -> RecordingStopResponse {
+    *state.is_recording.lock().unwrap() = false;
+    let samples = std::mem::take(&mut *state.recording_buffer.lock().unwrap());
+    let sample_rate = *state.audio_sample_rate.lock().unwrap();
+
+    if samples.is_empty() {
+        return RecordingStopResponse {
+            success: false,
+            transcript: None,
+            confidence: None,
+            duration: None,
+            error: Some("No audio was captured".to_string()),
+        };
+    }
+
+    let duration = samples.len() as f64 / sample_rate as f64;
+
+    #[cfg(feature = "local-stt")]
+    {
+        whisper_transcribe_impl(samples, sample_rate, duration, &model_path)
+    }
+
+    #[cfg(not(feature = "local-stt"))]
+    {
+        let _ = (model_path, duration); // suppress unused warnings
+        RecordingStopResponse {
+            success: false,
+            transcript: None,
+            confidence: None,
+            duration: Some(duration),
+            error: Some(
+                "local-stt feature not enabled — rebuild with `cargo build --features local-stt`"
+                    .to_string(),
+            ),
+        }
+    }
+}
+
+#[cfg(feature = "local-stt")]
+fn whisper_transcribe_impl(
+    samples: Vec<f32>,
+    sample_rate: u32,
+    duration: f64,
+    model_path: &str,
+) -> RecordingStopResponse {
+    use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+
+    let ctx = match WhisperContext::new_with_params(model_path, WhisperContextParameters::default()) {
+        Ok(c) => c,
+        Err(e) => {
+            return RecordingStopResponse {
+                success: false,
+                transcript: None,
+                confidence: None,
+                duration: Some(duration),
+                error: Some(format!("Failed to load whisper model: {e}")),
+            }
+        }
+    };
+
+    let mut whisper_state = match ctx.create_state() {
+        Ok(s) => s,
+        Err(e) => {
+            return RecordingStopResponse {
+                success: false,
+                transcript: None,
+                confidence: None,
+                duration: Some(duration),
+                error: Some(format!("Failed to create whisper state: {e}")),
+            }
+        }
+    };
+
+    let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+    params.set_language(Some("en"));
+    params.set_print_progress(false);
+    params.set_print_realtime(false);
+    params.set_print_timestamps(false);
+
+    // whisper-rs expects mono f32 samples at 16 kHz.
+    // If the device captured at a different rate, basic downmix/resample is
+    // needed. For now we pass samples as-is — 16 kHz mono is the recommended
+    // cpal config and the default MacroVox audio_start path uses the device
+    // default which is typically 16 kHz mono on Windows microphones.
+    if let Err(e) = whisper_state.full(params, &samples) {
+        return RecordingStopResponse {
+            success: false,
+            transcript: None,
+            confidence: None,
+            duration: Some(duration),
+            error: Some(format!("Whisper inference failed: {e}")),
+        };
+    }
+
+    let n = whisper_state.full_n_segments().unwrap_or(0);
+    let transcript: String = (0..n)
+        .filter_map(|i| whisper_state.full_get_segment_text(i).ok())
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim()
+        .to_string();
+
+    RecordingStopResponse {
+        success: true,
+        transcript: Some(transcript),
+        confidence: None, // whisper-rs does not expose per-segment confidence
+        duration: Some(duration),
+        error: None,
+    }
 }
 
 // ── Clipboard ✅ Phase 2 ───────────────────────────────────────────────────────

@@ -24,7 +24,7 @@ The React/TypeScript renderer is kept intact across both builds. Only the IPC la
 
 ```
 src-tauri/
-├── Cargo.toml          # Rust crate manifest + future crate stubs (commented)
+├── Cargo.toml          # Rust crate manifest; local-stt feature gates whisper-rs
 ├── build.rs            # tauri-build codegen (required)
 ├── tauri.conf.json     # Window dimensions, bundle config, dev URL
 ├── capabilities/
@@ -36,7 +36,8 @@ src-tauri/
     ├── main.rs         # Entry point — calls lib::run()
     ├── lib.rs          # Builder: register plugins, state, command handlers
     ├── state.rs        # AppState (Mutex-wrapped fields shared across commands)
-    ├── audio.rs        # Phase 3: cpal stream builder, WAV encoder, frame callback
+    ├── audio.rs        # Phase 3/4: cpal stream, WAV encoder, PCM→WS streaming
+    ├── deepgram_ws.rs  # Phase 4: Deepgram WebSocket session + event emitter
     └── commands.rs     # IPC command implementations + unit tests
 ```
 
@@ -66,6 +67,15 @@ Tauri converts snake_case command names to camelCase automatically.
 | `deepgram_stop` | `stopDeepgram()` | `OkResponse` |
 
 Push event emitted by backend → renderer: `"deepgram:transcript"` `{ transcript: string, isFinal: boolean }`
+
+### Local STT (whisper-rs)
+
+| Command | JS equivalent | Returns |
+|---|---|---|
+| `whisper_transcribe(model_path)` | `whisperTranscribe(path)` | `RecordingStopResponse` |
+
+Requires `--features local-stt` build flag and a downloaded GGML model file.
+Returns `{ success: false, error: "local-stt feature not enabled" }` in default builds.
 
 ### Buffered recording
 
@@ -124,27 +134,32 @@ once the renderer talks to Supabase directly.
 | `audio_stream` | `Mutex<Option<cpal::Stream>>` | `None` | Live capture stream; dropping stops it |
 | `audio_level` | `Arc<Mutex<f64>>` | `0.0` | RMS level updated by cpal callback |
 | `recording_buffer` | `Arc<Mutex<Vec<f32>>>` | `[]` | PCM samples accumulated during recording |
-| `is_recording` | `Arc<Mutex<bool>>` | `false` | Toggle between `recording_start`/`stop` |
+| `is_recording` | `Arc<Mutex<bool>>` | `false` | Toggle between `recording_start`/`stop` or `deepgram_start`/`stop` |
 | `audio_sample_rate` | `Mutex<u32>` | `16000` | Updated by `audio_start` from device config |
 | `audio_channels` | `Mutex<u16>` | `1` | Updated by `audio_start` from device config |
 | `deepgram_keywords` | `Mutex<Vec<String>>` | `[]` | Parsed by `settings_broadcast` |
+| `dg_sender` | `Arc<Mutex<Option<DgSender>>>` | `None` | WebSocket PCM channel; set by `deepgram_start`, cleared by `deepgram_stop` |
 
 ---
 
-## Audio subsystem (Phase 3)
+## Audio subsystem (Phase 3 / 4)
+
+### Batch path (Phase 3 — pre-recorded REST API)
 
 ```
 audio_start  →  cpal::default_host()
              →  find device by name (or system default)
              →  device.default_input_config()
-             →  audio::build_input_stream(device, config, level, buffer, is_recording)
+             →  audio::build_input_stream(device, config, level, buffer, is_recording, dg_sender)
              →  stream.play()
              →  state.audio_stream = Some(stream)
 
 cpal callback (per ~10 ms frame):
-    audio::process_audio_frame(data, level, buffer, is_recording)
+    audio::process_audio_frame(data, level, buffer, is_recording, dg_sender)
     ├── compute RMS → state.audio_level
-    └── if is_recording → append to state.recording_buffer
+    ├── if is_recording → append to state.recording_buffer   (batch path)
+    └── if is_recording && dg_sender.is_some()
+            → f32_to_i16_bytes(frame) → dg_sender.send(Pcm(bytes))  (streaming path)
 
 recording_start  →  clear buffer, set is_recording = true
 recording_stop   →  set is_recording = false
@@ -158,6 +173,29 @@ audio_stop   →  state.audio_stream = None  (drops stream → stops WASAPI)
              →  state.audio_level = 0.0
 ```
 
+### Streaming path (Phase 4 — pre-warmed WebSocket)
+
+```
+deepgram_start(api_key)
+    ├── read sample_rate, channels from AppState
+    ├── deepgram_ws::start_session(api_key, sample_rate, channels, app)
+    │     ├── connect_async(wss://api.deepgram.com/v1/listen?...)  ← pre-warm
+    │     └── spawn background task:
+    │           ├── DgMessage::Pcm(bytes) → WebSocket binary frame
+    │           ├── DgMessage::Stop       → {"type":"CloseStream"} → exit
+    │           └── WebSocket text frame  → emit "deepgram:transcript" event
+    ├── state.dg_sender = Some(sender)
+    ├── clear recording_buffer
+    └── is_recording = true
+
+cpal callback (as above — sends PCM bytes via dg_sender when is_recording)
+
+deepgram_stop()
+    ├── is_recording = false
+    └── dg_sender.take() → sender.send(DgMessage::Stop)
+          → task sends CloseStream, drains final results, exits
+```
+
 `audio::build_input_stream` dispatches on `cpal::SampleFormat` and converts
 I16, I32, U16 frames to f32 before calling `process_audio_frame`. Unsupported
 formats return `BuildStreamError::StreamTypeNotSupported`.
@@ -165,6 +203,26 @@ formats return `BuildStreamError::StreamTypeNotSupported`.
 `audio::pcm_to_wav` writes a minimal 44-byte RIFF/WAV header followed by 16-bit
 signed PCM. This format is accepted directly by Deepgram's pre-recorded API
 (`Content-Type: audio/wav`).
+
+`audio::f32_to_i16_bytes` converts f32 samples to interleaved i16 LE bytes.
+This is the `encoding=linear16` format Deepgram's streaming API expects.
+
+### Local STT path (Phase 4 — whisper-rs, `local-stt` feature)
+
+```
+recording_start  →  (same as batch path — buffers raw f32 samples)
+
+whisper_transcribe(model_path)
+    ├── is_recording = false
+    ├── drain recording_buffer
+    ├── WhisperContext::new_with_params(model_path)
+    ├── whisper_state.full(params, &samples)
+    └── collect segment text → return transcript
+```
+
+Build with `cargo build --features local-stt`.  Requires cmake + MSVC.
+Model files: download `ggml-*.bin` from
+`https://huggingface.co/ggerganov/whisper.cpp/tree/main`.
 
 ---
 
@@ -175,7 +233,7 @@ signed PCM. This format is accepted directly by Deepgram's pre-recorded API
 | **1** | **Complete** | Scaffold `src-tauri/`, stub all commands, 17 unit tests |
 | **2** | **Complete** | Port renderer IPC — `window.electronAPI.*` → `invoke()` |
 | **3** | **Complete** | `cpal` WASAPI native audio + Deepgram pre-recorded API |
-| **4** | Not started | Deepgram WebSocket pre-warm + `whisper-rs` local STT |
+| **4** | **Complete** | Deepgram WebSocket pre-warm + `whisper-rs` local STT (`local-stt` feature) |
 | **5** | Not started | `enigo` native paste (replace PowerShell ~700 ms) |
 | **6** | Not started | Supabase JS SDK from renderer; remove auth IPC stubs |
 | **7** | Not started | Tauri bundler, code signing, remove electron-builder |
@@ -188,6 +246,6 @@ signed PCM. This format is accepted directly by Deepgram's pre-recorded API
   before shipping to regenerate all required icon sizes.
 - `icons/tray-icon.png` is not RGBA — must be converted before wiring up the system tray in Phase 7.
 - Auth commands return `{ success: false }` — Supabase JS SDK moves to renderer in Phase 6.
-- `deepgram_start` / `deepgram_stop` are stubs — streaming WebSocket wired up in Phase 4.
-- `recording_stop` uses Deepgram's pre-recorded REST API (one round-trip per recording).
-  Phase 4 replaces this with a pre-warmed WebSocket for lower latency.
+- `whisper_transcribe` requires the `local-stt` Cargo feature and a downloaded GGML model.
+  Without the feature it returns a clear error; the build always succeeds.
+- `auto_paste` still uses PowerShell (~700 ms delay) — replaced by `enigo` in Phase 5.

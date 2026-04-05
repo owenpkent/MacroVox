@@ -1,12 +1,14 @@
-/// MacroVox audio utilities — Phase 3: cpal WASAPI native capture.
+/// MacroVox audio utilities — Phase 3/4: cpal WASAPI native capture.
 ///
 /// This module provides:
 /// - `pcm_to_wav`          — encode f32 PCM samples as RIFF/WAV bytes (for Deepgram upload)
-/// - `process_audio_frame` — cpal callback body; updates level meter and recording buffer
+/// - `f32_to_i16_bytes`    — convert f32 samples to interleaved i16 LE bytes (for WS streaming)
+/// - `process_audio_frame` — cpal callback body; updates level, buffer, and streams PCM
 /// - `build_input_stream`  — open a cpal capture stream, dispatching on sample format
 
 use std::sync::{Arc, Mutex};
 use cpal::traits::DeviceTrait;
+use crate::deepgram_ws::{DgMessage, DgSender};
 
 // ── WAV encoding ─────────────────────────────────────────────────────────────
 
@@ -50,17 +52,37 @@ pub fn pcm_to_wav(samples: &[f32], sample_rate: u32, channels: u16) -> Vec<u8> {
     buf
 }
 
+// ── PCM conversion ────────────────────────────────────────────────────────────
+
+/// Converts interleaved f32 PCM samples to 16-bit signed little-endian bytes.
+///
+/// This is the encoding Deepgram's streaming API expects (`encoding=linear16`).
+/// Samples outside `[-1.0, 1.0]` are clamped before conversion.
+pub fn f32_to_i16_bytes(samples: &[f32]) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(samples.len() * 2);
+    for &s in samples {
+        let val = (s.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
+        bytes.extend_from_slice(&val.to_le_bytes());
+    }
+    bytes
+}
+
 // ── Capture callback ──────────────────────────────────────────────────────────
 
 /// Called from the cpal input-stream callback with a slice of f32 samples.
 ///
-/// Updates `level` with the RMS value of the frame and, when `is_recording` is
-/// true, appends the samples to `buffer`.
+/// - Updates `level` with the RMS value of the frame (always).
+/// - When `is_recording` is true:
+///   - Appends samples to `buffer` (for batch/pre-recorded API path).
+///   - If a Deepgram WebSocket session is active (`dg_sender` is `Some`),
+///     converts the frame to i16 LE bytes and sends it over the channel for
+///     real-time streaming.
 pub fn process_audio_frame(
     data: &[f32],
     level: &Arc<Mutex<f64>>,
     buffer: &Arc<Mutex<Vec<f32>>>,
     is_recording: &Arc<Mutex<bool>>,
+    dg_sender: &Arc<Mutex<Option<DgSender>>>,
 ) {
     if data.is_empty() {
         return;
@@ -72,7 +94,15 @@ pub fn process_audio_frame(
     *level.lock().unwrap() = rms as f64;
 
     if *is_recording.lock().unwrap() {
+        // Batch path: always buffer raw f32 samples for WAV upload fallback.
         buffer.lock().unwrap().extend_from_slice(data);
+
+        // Streaming path: if a WebSocket session is active, also send i16 bytes.
+        if let Some(sender) = dg_sender.lock().unwrap().as_ref() {
+            let bytes = f32_to_i16_bytes(data);
+            // Non-blocking send — drop the frame silently if the channel is closed.
+            let _ = sender.send(DgMessage::Pcm(bytes));
+        }
     }
 }
 
@@ -84,6 +114,10 @@ pub fn process_audio_frame(
 /// before passing to `process_audio_frame`. Returns `StreamTypeNotSupported`
 /// for other formats.
 ///
+/// `dg_sender` is an `Arc`-wrapped optional channel used to stream PCM bytes
+/// to the Deepgram WebSocket task (Phase 4). Pass the same `Arc` that is stored
+/// in `AppState::dg_sender` so the callback reflects live session changes.
+///
 /// The returned `cpal::Stream` is paused; call `.play()` to start capture.
 pub fn build_input_stream(
     device: &cpal::Device,
@@ -91,13 +125,16 @@ pub fn build_input_stream(
     level: Arc<Mutex<f64>>,
     buffer: Arc<Mutex<Vec<f32>>>,
     is_recording: Arc<Mutex<bool>>,
+    dg_sender: Arc<Mutex<Option<DgSender>>>,
 ) -> Result<cpal::Stream, cpal::BuildStreamError> {
     let err_fn = |e| eprintln!("[MacroVox audio] stream error: {e}");
 
     match config.sample_format() {
         cpal::SampleFormat::F32 => device.build_input_stream(
             &config.config(),
-            move |data: &[f32], _| process_audio_frame(data, &level, &buffer, &is_recording),
+            move |data: &[f32], _| {
+                process_audio_frame(data, &level, &buffer, &is_recording, &dg_sender)
+            },
             err_fn,
             None,
         ),
@@ -107,7 +144,7 @@ pub fn build_input_stream(
                 move |data: &[i16], _| {
                     let floats: Vec<f32> =
                         data.iter().map(|&s| s as f32 / i16::MAX as f32).collect();
-                    process_audio_frame(&floats, &level, &buffer, &is_recording);
+                    process_audio_frame(&floats, &level, &buffer, &is_recording, &dg_sender);
                 },
                 err_fn,
                 None,
@@ -119,7 +156,7 @@ pub fn build_input_stream(
                 move |data: &[i32], _| {
                     let floats: Vec<f32> =
                         data.iter().map(|&s| s as f32 / i32::MAX as f32).collect();
-                    process_audio_frame(&floats, &level, &buffer, &is_recording);
+                    process_audio_frame(&floats, &level, &buffer, &is_recording, &dg_sender);
                 },
                 err_fn,
                 None,
@@ -133,13 +170,13 @@ pub fn build_input_stream(
                         .iter()
                         .map(|&s| (s as f32 / u16::MAX as f32) * 2.0 - 1.0)
                         .collect();
-                    process_audio_frame(&floats, &level, &buffer, &is_recording);
+                    process_audio_frame(&floats, &level, &buffer, &is_recording, &dg_sender);
                 },
                 err_fn,
                 None,
             )
         }
-        _ => Err(cpal::BuildStreamError::StreamTypeNotSupported),
+        _ => Err(cpal::BuildStreamError::StreamConfigNotSupported),
     }
 }
 
@@ -197,14 +234,18 @@ mod tests {
         assert_eq!(block_align, 4); // 2 channels * 2 bytes
     }
 
+    fn no_sender() -> Arc<Mutex<Option<crate::deepgram_ws::DgSender>>> {
+        Arc::new(Mutex::new(None))
+    }
+
     #[test]
     fn process_audio_frame_updates_level() {
         let level = Arc::new(Mutex::new(0.0f64));
         let buffer = Arc::new(Mutex::new(Vec::new()));
         let is_recording = Arc::new(Mutex::new(false));
 
-        // RMS of [1.0, -1.0] = 1.0 / sqrt(1) ... actually sqrt((1+1)/2) = 1.0
-        process_audio_frame(&[1.0, -1.0], &level, &buffer, &is_recording);
+        // RMS of [1.0, -1.0] = sqrt((1+1)/2) = 1.0
+        process_audio_frame(&[1.0, -1.0], &level, &buffer, &is_recording, &no_sender());
         let lvl = *level.lock().unwrap();
         assert!((lvl - 1.0).abs() < 1e-6, "level = {lvl}");
         assert!(buffer.lock().unwrap().is_empty(), "no buffering when not recording");
@@ -216,7 +257,7 @@ mod tests {
         let buffer = Arc::new(Mutex::new(Vec::new()));
         let is_recording = Arc::new(Mutex::new(true));
 
-        process_audio_frame(&[0.1, 0.2, 0.3], &level, &buffer, &is_recording);
+        process_audio_frame(&[0.1, 0.2, 0.3], &level, &buffer, &is_recording, &no_sender());
         let buf = buffer.lock().unwrap().clone();
         assert_eq!(buf, vec![0.1, 0.2, 0.3]);
     }
@@ -226,8 +267,85 @@ mod tests {
         let level = Arc::new(Mutex::new(0.5f64));
         let buffer = Arc::new(Mutex::new(Vec::new()));
         let is_recording = Arc::new(Mutex::new(false));
-        process_audio_frame(&[], &level, &buffer, &is_recording);
+        process_audio_frame(&[], &level, &buffer, &is_recording, &no_sender());
         // level unchanged
         assert!((0.5 - *level.lock().unwrap()).abs() < 1e-9);
+    }
+
+    #[test]
+    fn process_audio_frame_sends_pcm_when_streaming() {
+        use crate::deepgram_ws::DgMessage;
+        use tokio::sync::mpsc;
+
+        let level = Arc::new(Mutex::new(0.0f64));
+        let buffer = Arc::new(Mutex::new(Vec::new()));
+        let is_recording = Arc::new(Mutex::new(true));
+
+        let (tx, mut rx) = mpsc::unbounded_channel::<DgMessage>();
+        let dg_sender = Arc::new(Mutex::new(Some(tx)));
+
+        process_audio_frame(&[0.5, -0.5], &level, &buffer, &is_recording, &dg_sender);
+
+        // Should have received one Pcm message.
+        let msg = rx.blocking_recv().expect("expected Pcm message");
+        if let DgMessage::Pcm(bytes) = msg {
+            // 2 f32 samples → 4 bytes (2 × i16)
+            assert_eq!(bytes.len(), 4);
+            // 0.5 → i16::MAX/2 ≈ 16383; verify it's non-zero
+            let val = i16::from_le_bytes([bytes[0], bytes[1]]);
+            assert!(val > 0, "0.5 should map to positive i16");
+        } else {
+            panic!("expected DgMessage::Pcm");
+        }
+    }
+
+    #[test]
+    fn process_audio_frame_no_send_when_not_recording() {
+        use crate::deepgram_ws::DgMessage;
+        use tokio::sync::mpsc;
+
+        let level = Arc::new(Mutex::new(0.0f64));
+        let buffer = Arc::new(Mutex::new(Vec::new()));
+        let is_recording = Arc::new(Mutex::new(false)); // not recording
+
+        let (tx, mut rx) = mpsc::unbounded_channel::<DgMessage>();
+        let dg_sender = Arc::new(Mutex::new(Some(tx)));
+
+        process_audio_frame(&[0.5], &level, &buffer, &is_recording, &dg_sender);
+
+        // Nothing should have been sent.
+        assert!(rx.try_recv().is_err());
+    }
+
+    // ── f32_to_i16_bytes ──────────────────────────────────────────────────────
+
+    #[test]
+    fn f32_to_i16_bytes_length() {
+        let bytes = f32_to_i16_bytes(&[0.0, 0.5, -0.5, 1.0]);
+        assert_eq!(bytes.len(), 8); // 4 samples × 2 bytes
+    }
+
+    #[test]
+    fn f32_to_i16_bytes_zero_maps_to_zero() {
+        let bytes = f32_to_i16_bytes(&[0.0]);
+        let val = i16::from_le_bytes([bytes[0], bytes[1]]);
+        assert_eq!(val, 0);
+    }
+
+    #[test]
+    fn f32_to_i16_bytes_clamps_overflow() {
+        let bytes = f32_to_i16_bytes(&[2.0, -2.0]);
+        let hi = i16::from_le_bytes([bytes[0], bytes[1]]);
+        let lo = i16::from_le_bytes([bytes[2], bytes[3]]);
+        assert_eq!(hi, i16::MAX);
+        assert_eq!(lo, -i16::MAX);
+    }
+
+    #[test]
+    fn f32_to_i16_bytes_positive_half() {
+        let bytes = f32_to_i16_bytes(&[0.5]);
+        let val = i16::from_le_bytes([bytes[0], bytes[1]]);
+        // 0.5 × 32767 = 16383 (truncated)
+        assert_eq!(val, 16383);
     }
 }
