@@ -4,6 +4,7 @@ import { usePostProcessing } from '../hooks/usePostProcessing'
 import { AgentiveWriting } from './AgentiveWriting'
 import * as ipc from '../lib/tauri-ipc'
 import type { AppUser } from '../lib/tauri-ipc'
+import * as auth from '../lib/auth'
 
 type Tab = 'dictate' | 'write'
 
@@ -85,11 +86,11 @@ export function DictationMode() {
 
   const loadApiKey = useCallback(async () => {
     try {
-      const userResult = await ipc.getUser()
+      const userResult = await auth.getUser()
       if (userResult.success && userResult.user) {
         setUser(userResult.user)
         try {
-          const keysResult = await ipc.getManagedKeys()
+          const keysResult = await auth.getManagedKeys()
           if (keysResult.success && keysResult.deepgramKey) {
             console.log('[Dictation] Got managed API key')
             setApiKey(keysResult.deepgramKey)

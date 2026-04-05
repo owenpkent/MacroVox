@@ -8,14 +8,12 @@
 ///   ✅ Phase 2 — implemented (clipboard, window ops, broadcast events, auto-paste)
 ///   ✅ Phase 3 — audio (cpal WASAPI replaces ffmpeg subprocess)
 ///   ✅ Phase 4 — Deepgram WebSocket pre-warm + whisper-rs local STT scaffold
-///   🔲 Phase 5 — enigo native paste (replaces PowerShell ~700 ms)
-///   🔲 Phase 6 — auth stubs removed; Supabase JS SDK used from renderer
+///   ✅ Phase 5 — enigo native paste (replaces PowerShell ~700 ms)
+///   ✅ Phase 6 — auth stubs removed; Supabase JS SDK used from renderer
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindowBuilder};
 use tauri_plugin_clipboard_manager::ClipboardExt;
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
 
 use crate::state::AppState;
 
@@ -55,40 +53,6 @@ pub struct RecordingStopResponse {
     pub confidence: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
-pub struct AppUser {
-    pub id: String,
-    pub email: Option<String>,
-    #[serde(rename = "displayName")]
-    pub display_name: Option<String>,
-    #[serde(rename = "avatarUrl")]
-    pub avatar_url: Option<String>,
-    #[serde(rename = "authMethod")]
-    pub auth_method: String,
-}
-
-#[derive(serde::Serialize, Debug)]
-pub struct GetUserResponse {
-    pub success: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub user: Option<AppUser>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-#[derive(serde::Serialize, Debug)]
-pub struct ManagedKeysResponse {
-    pub success: bool,
-    #[serde(rename = "deepgramKey", skip_serializing_if = "Option::is_none")]
-    pub deepgram_key: Option<String>,
-    #[serde(rename = "anthropicKey", skip_serializing_if = "Option::is_none")]
-    pub anthropic_key: Option<String>,
-    #[serde(rename = "hasManagedKeys")]
-    pub has_managed_keys: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -476,30 +440,29 @@ pub fn clipboard_write(app: AppHandle, text: String) -> OkResponse {
         .unwrap_or_else(|e| OkResponse::err(e.to_string()))
 }
 
-// ── Auto-paste ✅ Phase 2 (Phase 5: replace PowerShell with enigo) ─────────────
+// ── Auto-paste ✅ Phase 5: enigo native Ctrl+V (replaces PowerShell ~700 ms) ──
 
+/// Hides the dictation window and sends Ctrl+V to the previously focused app.
+///
+/// Uses `enigo` for native `SendInput` key injection — no subprocess, no JIT
+/// assembly load.  A 50 ms delay gives the OS time to re-focus the target window
+/// after we hide ours; that is all the latency budget this path needs.
 #[tauri::command]
 pub fn dictation_auto_paste(app: AppHandle) -> OkResponse {
+    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.hide();
     }
 
-    // Spawn on a background thread so the 180 ms sleep doesn't block the executor.
-    // Phase 5: replace this whole block with `enigo::Key::Control + enigo::Key::V`.
+    // Background thread: wait for focus to shift, then inject Ctrl+V.
     std::thread::spawn(|| {
-        std::thread::sleep(std::time::Duration::from_millis(180));
-        let mut cmd = std::process::Command::new("powershell");
-        cmd.args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "Add-Type -AssemblyName System.Windows.Forms; \
-             [System.Windows.Forms.SendKeys]::SendWait(\"^v\")",
-        ]);
-        // Suppress the console window on Windows
-        #[cfg(target_os = "windows")]
-        cmd.creation_flags(0x08000000);
-        let _ = cmd.spawn();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        if let Ok(mut enigo) = Enigo::new(&Settings::default()) {
+            let _ = enigo.key(Key::Control, Direction::Press);
+            let _ = enigo.key(Key::Unicode('v'), Direction::Click);
+            let _ = enigo.key(Key::Control, Direction::Release);
+        }
     });
 
     OkResponse::ok()
@@ -590,64 +553,6 @@ pub fn settings_broadcast(
         .unwrap_or_else(|e| OkResponse::err(e.to_string()))
 }
 
-// ── Auth stubs (Phase 6: remove IPC layer; renderer calls Supabase directly) ──
-
-#[tauri::command]
-pub fn auth_get_user() -> GetUserResponse {
-    GetUserResponse { success: false, user: None, error: None }
-}
-
-#[tauri::command]
-pub fn auth_sign_up_email(_email: String, _password: String) -> OkResponse {
-    OkResponse::err("Not implemented — auth handled in renderer (Phase 6)")
-}
-
-#[tauri::command]
-pub fn auth_sign_in_email(_email: String, _password: String) -> OkResponse {
-    OkResponse::err("Not implemented — auth handled in renderer (Phase 6)")
-}
-
-#[tauri::command]
-pub fn auth_sign_in_oauth(_provider: String) -> OkResponse {
-    OkResponse::err("Not implemented — auth handled in renderer (Phase 6)")
-}
-
-#[tauri::command]
-pub fn auth_sign_out() -> OkResponse {
-    OkResponse::ok()
-}
-
-#[tauri::command]
-pub fn auth_reset_password(_email: String) -> OkResponse {
-    OkResponse::err("Not implemented — auth handled in renderer (Phase 6)")
-}
-
-#[tauri::command]
-pub fn auth_get_subscription() -> OkResponse {
-    OkResponse::err("Not implemented — auth handled in renderer (Phase 6)")
-}
-
-#[tauri::command]
-pub fn auth_get_managed_keys() -> ManagedKeysResponse {
-    ManagedKeysResponse {
-        success: false,
-        deepgram_key: None,
-        anthropic_key: None,
-        has_managed_keys: false,
-        error: Some("Not implemented — auth handled in renderer (Phase 6)".to_string()),
-    }
-}
-
-#[tauri::command]
-pub fn auth_checkout(_plan: String) -> OkResponse {
-    OkResponse::err("Not implemented — auth handled in renderer (Phase 6)")
-}
-
-#[tauri::command]
-pub fn auth_billing_portal() -> OkResponse {
-    OkResponse::err("Not implemented — auth handled in renderer (Phase 6)")
-}
-
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -722,43 +627,6 @@ mod tests {
         assert!(json.contains("\"transcript\":\"hello world\""), "{json}");
         assert!(json.contains("\"confidence\":0.99"), "{json}");
         assert!(json.contains("\"duration\":3.2"), "{json}");
-    }
-
-    #[test]
-    fn app_user_camel_case_fields() {
-        let u = AppUser {
-            id: "u1".to_string(),
-            email: Some("a@b.com".to_string()),
-            display_name: Some("Alice".to_string()),
-            avatar_url: Some("https://example.com/a.png".to_string()),
-            auth_method: "email".to_string(),
-        };
-        let json = serde_json::to_string(&u).unwrap();
-        assert!(json.contains("\"displayName\":\"Alice\""), "{json}");
-        assert!(json.contains("\"avatarUrl\":\"https://example.com/a.png\""), "{json}");
-        assert!(json.contains("\"authMethod\":\"email\""), "{json}");
-    }
-
-    #[test]
-    fn get_user_response_no_user() {
-        let r = GetUserResponse { success: false, user: None, error: None };
-        let json = serde_json::to_string(&r).unwrap();
-        assert!(!json.contains("\"user\""), "{json}");
-    }
-
-    #[test]
-    fn managed_keys_response_field_names() {
-        let r = ManagedKeysResponse {
-            success: true,
-            deepgram_key: Some("dg-key".to_string()),
-            anthropic_key: None,
-            has_managed_keys: true,
-            error: None,
-        };
-        let json = serde_json::to_string(&r).unwrap();
-        assert!(json.contains("\"deepgramKey\":\"dg-key\""), "{json}");
-        assert!(json.contains("\"hasManagedKeys\":true"), "{json}");
-        assert!(!json.contains("\"anthropicKey\""), "{json}");
     }
 
     #[test]

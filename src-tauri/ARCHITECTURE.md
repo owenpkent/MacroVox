@@ -11,7 +11,7 @@ Simultaneously, several latency problems in the Electron build all have natural 
 | Problem | Electron workaround | Tauri solution |
 |---|---|---|
 | Audio capture via ffmpeg subprocess | spawn `ffmpeg`, parse stdout | `cpal` — WASAPI native (Phase 3) |
-| Auto-paste via PowerShell SendKeys (~700 ms) | `spawn('powershell', ...)` | `enigo` — native key injection (Phase 5) |
+| Auto-paste via PowerShell SendKeys (~700 ms) | `spawn('powershell', ...)` | `enigo` — native `SendInput` key injection ✅ |
 | Deepgram cold connection per recording | none | pre-warm WebSocket on startup (Phase 4) |
 | Local STT when offline | none (cloud only) | `whisper-rs` (Phase 4) |
 
@@ -109,14 +109,11 @@ Returns `{ success: false, error: "local-stt feature not enabled" }` in default 
 
 Push events: `"theme-changed"` (string), `"settings-changed"` (object)
 
-### Auth (Phase 6 stubs — renderer will call Supabase JS SDK directly)
+### Auth (Phase 6 — removed; renderer calls Supabase JS SDK directly)
 
-`auth_get_user`, `auth_sign_up_email`, `auth_sign_in_email`, `auth_sign_in_oauth`,
-`auth_sign_out`, `auth_reset_password`, `auth_get_subscription`, `auth_get_managed_keys`,
-`auth_checkout`, `auth_billing_portal`
-
-These return `{ success: false, error: "Not implemented" }` and will be removed in Phase 6
-once the renderer talks to Supabase directly.
+All `auth_*` Tauri commands have been deleted.  Auth is now handled entirely in
+the renderer via `src/renderer/lib/auth.ts` and `src/renderer/lib/supabase.ts`.
+See the **Auth subsystem** section below for details.
 
 ---
 
@@ -226,6 +223,71 @@ Model files: download `ggml-*.bin` from
 
 ---
 
+## Auto-paste subsystem (Phase 5 — enigo native SendInput)
+
+```
+dictation_auto_paste()
+    ├── window.hide()          ← removes MacroVox from focus chain
+    └── thread::spawn:
+          sleep(50 ms)         ← OS re-focuses the previous app
+          Enigo::new()
+          ├── Key::Control  Direction::Press
+          ├── Key::Unicode('v')  Direction::Click
+          └── Key::Control  Direction::Release
+              └── → native SendInput(KEYEVENTF_KEYDOWN / KEYEVENTF_KEYUP)
+```
+
+**Why 50 ms?** Windows needs a moment after `hide()` to return focus to the
+previously active window. 50 ms is empirically sufficient on Windows 10/11;
+the old PowerShell path used 180 ms to absorb subprocess start-up time on top
+of the same focus delay.
+
+**Dependency:** `enigo = "0.2"` in Cargo.toml.  No feature flags required;
+works on Windows, macOS, and Linux.
+
+---
+
+## Auth subsystem (Phase 6 — renderer-side Supabase JS SDK)
+
+Auth is handled entirely in the renderer — no Rust IPC commands involved.
+
+```
+src/renderer/lib/
+├── supabase.ts       ← createClient singleton (localStorage session persistence)
+└── auth.ts           ← getUser, signInEmail, signUpEmail, signOut,
+                         signInWithOAuth, resetPassword,
+                         getSubscription, getManagedKeys,
+                         checkout, billingPortal
+```
+
+**Session persistence:** Supabase JS SDK stores tokens in `window.localStorage`.
+WebView2 persists localStorage across app restarts.  No Rust/safeStorage needed.
+
+**Data sources:**
+
+| Function | Source |
+|---|---|
+| `getUser()` | `supabase.auth.getSession()` — localStorage read, no network call |
+| `getSubscription()` | Supabase `subscriptions` table (`user_id` eq) |
+| `getManagedKeys()` | Supabase `managed_api_keys` table (`user_id` eq) |
+| `checkout(plan)` | Supabase Edge Function `create-checkout` → Stripe URL → `open()` |
+| `billingPortal()` | Supabase Edge Function `billing-portal` → Stripe URL → `open()` |
+
+**OAuth flow** (`signInWithOAuth`): gets the provider URL from Supabase with
+`skipBrowserRedirect: true`, then opens it in the system browser via
+`@tauri-apps/plugin-shell` `open()`.  The return callback
+(`macrovox://auth/callback`) requires deep-link registration, which is
+scheduled for Phase 7.  Email auth is fully functional today.
+
+**Environment variables** (`.env`, Vite exposes `VITE_*` to the renderer):
+
+```
+VITE_SUPABASE_URL=https://<project>.supabase.co
+VITE_SUPABASE_KEY=<publishable-key>
+```
+
+---
+
 ## Migration phases
 
 | Phase | Status | Scope |
@@ -234,8 +296,8 @@ Model files: download `ggml-*.bin` from
 | **2** | **Complete** | Port renderer IPC — `window.electronAPI.*` → `invoke()` |
 | **3** | **Complete** | `cpal` WASAPI native audio + Deepgram pre-recorded API |
 | **4** | **Complete** | Deepgram WebSocket pre-warm + `whisper-rs` local STT (`local-stt` feature) |
-| **5** | Not started | `enigo` native paste (replace PowerShell ~700 ms) |
-| **6** | Not started | Supabase JS SDK from renderer; remove auth IPC stubs |
+| **5** | **Complete** | `enigo` native paste (replace PowerShell ~700 ms) |
+| **6** | **Complete** | Supabase JS SDK from renderer; remove auth IPC stubs |
 | **7** | Not started | Tauri bundler, code signing, remove electron-builder |
 
 ---
@@ -245,7 +307,7 @@ Model files: download `ggml-*.bin` from
 - `icons/icon.png` is not square (source PNG is 1326×1294). Run `npx tauri icon <square-png>`
   before shipping to regenerate all required icon sizes.
 - `icons/tray-icon.png` is not RGBA — must be converted before wiring up the system tray in Phase 7.
-- Auth commands return `{ success: false }` — Supabase JS SDK moves to renderer in Phase 6.
+- Auth is handled in the renderer via Supabase JS SDK.  OAuth callback deep-link (`macrovox://auth/callback`) is pending Phase 7.
 - `whisper_transcribe` requires the `local-stt` Cargo feature and a downloaded GGML model.
   Without the feature it returns a clear error; the build always succeeds.
-- `auto_paste` still uses PowerShell (~700 ms delay) — replaced by `enigo` in Phase 5.
+- `auto_paste` uses `enigo` native `SendInput` with a 50 ms focus-settle delay.  PowerShell path removed.

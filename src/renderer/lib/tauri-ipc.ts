@@ -18,11 +18,19 @@
  *   "quick-dictation-toggle" payload: null
  *   "theme-changed"          payload: string  (themeId)
  *   "settings-changed"       payload: Record<string, string>
+ *
+ * Auth note (Phase 6): auth functions have been removed from this IPC bridge.
+ * Import them from `./auth` instead:
+ *   getUser, signInEmail, signUpEmail, signOut, signInWithOAuth,
+ *   resetPassword, getSubscription, getManagedKeys, checkout, billingPortal
  */
 
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { UnlistenFn } from '@tauri-apps/api/event'
+
+// Re-export AppUser so existing component imports (`from '../lib/tauri-ipc'`) still resolve.
+export type { AppUser } from './auth'
 
 // ── Shared response types ─────────────────────────────────────────────────────
 
@@ -43,40 +51,6 @@ export interface RecordingStopResult {
   transcript?: string
   confidence?: number
   duration?: number
-  error?: string
-}
-
-export interface AppUser {
-  id: string
-  email: string | null
-  displayName: string | null
-  avatarUrl: string | null
-  authMethod: string
-}
-
-export interface GetUserResult {
-  success: boolean
-  user?: AppUser
-  error?: string
-}
-
-export interface SubscriptionInfo {
-  status: 'free' | 'pro' | 'team'
-  expiresAt: string | null
-  features: { managedApiKeys: boolean; voiceMinutes: number; aiRequests: number }
-}
-
-export interface GetSubscriptionResult {
-  success: boolean
-  subscription?: SubscriptionInfo
-  error?: string
-}
-
-export interface ManagedKeysResult {
-  success: boolean
-  deepgramKey?: string | null
-  anthropicKey?: string | null
-  hasManagedKeys?: boolean
   error?: string
 }
 
@@ -201,39 +175,3 @@ export const onSettingsChanged = (
   callback: (settings: Record<string, string>) => void,
 ): () => void => makeListener('settings-changed', callback)
 
-// ── Auth (IPC stubs — replaced by direct Supabase SDK calls in Phase 6) ───────
-
-export const getUser = (): Promise<GetUserResult> =>
-  invoke('auth_get_user')
-
-export const signUpEmail = (
-  email: string,
-  password: string,
-): Promise<OkResult> => invoke('auth_sign_up_email', { email, password })
-
-export const signInEmail = (
-  email: string,
-  password: string,
-): Promise<OkResult> => invoke('auth_sign_in_email', { email, password })
-
-export const signInOAuth = (
-  provider: 'google' | 'facebook',
-): Promise<OkResult> => invoke('auth_sign_in_oauth', { provider })
-
-export const signOut = (): Promise<OkResult> =>
-  invoke('auth_sign_out')
-
-export const resetPassword = (email: string): Promise<OkResult> =>
-  invoke('auth_reset_password', { email })
-
-export const getSubscription = (): Promise<GetSubscriptionResult> =>
-  invoke('auth_get_subscription')
-
-export const getManagedKeys = (): Promise<ManagedKeysResult> =>
-  invoke('auth_get_managed_keys')
-
-export const checkout = (plan: 'pro' | 'team'): Promise<OkResult> =>
-  invoke('auth_checkout', { plan })
-
-export const billingPortal = (): Promise<OkResult> =>
-  invoke('auth_billing_portal')

@@ -92,17 +92,6 @@ pub fn run() {
             // Theme & settings broadcast
             theme_broadcast,
             settings_broadcast,
-            // Auth (stubs — removed in Phase 6)
-            auth_get_user,
-            auth_sign_up_email,
-            auth_sign_in_email,
-            auth_sign_in_oauth,
-            auth_sign_out,
-            auth_reset_password,
-            auth_get_subscription,
-            auth_get_managed_keys,
-            auth_checkout,
-            auth_billing_portal,
         ])
         .run(tauri::generate_context!())
         .expect("error while running MacroVox");

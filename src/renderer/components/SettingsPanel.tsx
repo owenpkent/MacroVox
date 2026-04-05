@@ -3,6 +3,7 @@ import { Settings, Mic, X, RefreshCw, Sparkles, Loader2, CreditCard, MessageSqua
 import { THEMES, getStoredTheme, setStoredTheme } from '../themes'
 import * as ipc from '../lib/tauri-ipc'
 import type { AppUser } from '../lib/tauri-ipc'
+import * as auth from '../lib/auth'
 
 interface SettingsPanelProps {
   isOpen: boolean
@@ -69,8 +70,8 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
     setAuthSuccess(null)
     try {
       const result = authTab === 'signin'
-        ? await ipc.signInEmail(authEmail, authPassword)
-        : await ipc.signUpEmail(authEmail, authPassword)
+        ? await auth.signInEmail(authEmail, authPassword)
+        : await auth.signUpEmail(authEmail, authPassword)
       if (result.success) {
         if (authTab === 'signup') {
           setAuthSuccess('Check your email to confirm your account.')
@@ -91,7 +92,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
     setAuthLoading(true)
     setAuthError(null)
     try {
-      await ipc.signInOAuth(provider)
+      await auth.signInWithOAuth(provider)
     } catch {
       setAuthError('OAuth sign-in failed')
     } finally {
@@ -106,7 +107,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
         return
       }
       try {
-        const subResult = await ipc.getSubscription()
+        const subResult = await auth.getSubscription()
         if (subResult.success && subResult.subscription) {
           setSubscriptionStatus(subResult.subscription.status)
         } else {
@@ -198,12 +199,12 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
 
   const handleUpgrade = async () => {
     if (!user) return
-    await ipc.checkout('pro')
+    await auth.checkout('pro')
   }
 
   const handleManageSubscription = async () => {
     if (!user) return
-    await ipc.billingPortal()
+    await auth.billingPortal()
   }
 
   const handleAutoPasteToggle = (value: boolean) => {
@@ -316,7 +317,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
                   <span className="text-xs text-slate-300 truncate max-w-[180px]">{user.displayName || user.email}</span>
                 </div>
                 <button
-                  onClick={async () => { await ipc.signOut(); onClose() }}
+                  onClick={async () => { await auth.signOut(); onClose() }}
                   className="text-xs hover:underline" style={{ color: 'var(--text-muted)' }}
                 >
                   Sign out
