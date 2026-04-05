@@ -19,11 +19,13 @@
     "package:dev": "npm run build && electron-builder --config build/electron-builder.dev.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
     "@deepgram/sdk": "^3.9.0",
     "@supabase/supabase-js": "^2.101.1",
+    "@tauri-apps/api": "^2.10.1",
     "lucide-react": "^0.454.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

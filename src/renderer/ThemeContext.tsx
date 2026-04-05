@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { Theme, THEMES, getStoredTheme, setStoredTheme } from './themes'
+import * as ipc from './lib/tauri-ipc'
 
 interface ThemeContextType {
   theme: Theme
@@ -18,17 +19,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setThemeId(newThemeId)
     setThemeState(newTheme)
     setStoredTheme(newThemeId)
-    
-    // Apply CSS variables to document
     applyThemeToDocument(newTheme)
-    
-    // Broadcast to other windows via IPC
-    if (broadcast && window.electronAPI?.broadcastThemeChange) {
-      window.electronAPI.broadcastThemeChange(newThemeId)
-    }
+    if (broadcast) ipc.broadcastThemeChange(newThemeId)
   }
 
-  // Apply theme on mount - get from localStorage directly to ensure correct theme
+  // Apply theme on mount
   useEffect(() => {
     const storedThemeId = getStoredTheme()
     const storedTheme = THEMES.find(t => t.id === storedThemeId) || THEMES[0]
@@ -37,11 +32,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setThemeState(storedTheme)
   }, [])
 
-  // Listen for theme changes from other windows via IPC
+  // Listen for theme changes from backend (other windows)
   useEffect(() => {
-    if (!window.electronAPI?.onThemeChange) return
-    const cleanup = window.electronAPI.onThemeChange((newThemeId: string) => {
-      // Don't broadcast again - this came from another window
+    const cleanup = ipc.onThemeChange((newThemeId: string) => {
       const newTheme = THEMES.find(t => t.id === newThemeId) || THEMES[0]
       setThemeId(newThemeId)
       setThemeState(newTheme)
@@ -51,11 +44,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return cleanup
   }, [])
 
-  // Listen for theme changes from settings panel (same window)
+  // Listen for theme changes from settings panel (same window, custom DOM event)
   useEffect(() => {
-    const handleThemeChange = (e: CustomEvent) => {
-      setTheme(e.detail, true)
-    }
+    const handleThemeChange = (e: CustomEvent) => setTheme(e.detail, true)
     window.addEventListener('theme-change', handleThemeChange as EventListener)
     return () => window.removeEventListener('theme-change', handleThemeChange as EventListener)
   }, [])
@@ -69,16 +60,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 export function useTheme() {
   const context = useContext(ThemeContext)
-  if (!context) {
-    throw new Error('useTheme must be used within a ThemeProvider')
-  }
+  if (!context) throw new Error('useTheme must be used within a ThemeProvider')
   return context
 }
 
 function applyThemeToDocument(theme: Theme) {
   const root = document.documentElement
   const { colors } = theme
-  
   root.style.setProperty('--bg-primary', colors.bgPrimary)
   root.style.setProperty('--bg-secondary', colors.bgSecondary)
   root.style.setProperty('--bg-tertiary', colors.bgTertiary)

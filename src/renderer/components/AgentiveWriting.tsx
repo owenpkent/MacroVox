@@ -1,17 +1,11 @@
 import { useState, useRef } from 'react'
 import { Mic, MicOff, Copy, Check, RefreshCw, Loader2 } from 'lucide-react'
 import { useAgentiveWriting } from '../hooks/useAgentiveWriting'
-
-interface DictationUser {
-  id: string
-  email: string | null
-  displayName: string | null
-  avatarUrl: string | null
-  authMethod: string
-}
+import * as ipc from '../lib/tauri-ipc'
+import type { AppUser } from '../lib/tauri-ipc'
 
 interface Props {
-  user: DictationUser | null
+  user: AppUser | null
   apiKey: string | null
 }
 
@@ -36,7 +30,7 @@ export function AgentiveWriting({ user, apiKey }: Props) {
     setIsPreparing(true)
     setAudioLevel(0)
 
-    const result = await window.electronAPI.startRecording()
+    const result = await ipc.startRecording()
     if (!result.success) {
       setError(result.error || 'Failed to start recording')
       setIsPreparing(false)
@@ -47,10 +41,8 @@ export function AgentiveWriting({ user, apiKey }: Props) {
     setIsRecording(true)
 
     audioLevelIntervalRef.current = setInterval(async () => {
-      if (window.electronAPI?.getAudioLevel) {
-        const level = await window.electronAPI.getAudioLevel()
-        setAudioLevel(level)
-      }
+      const level = await ipc.getAudioLevel()
+      setAudioLevel(level)
     }, 50)
   }
 
@@ -64,7 +56,7 @@ export function AgentiveWriting({ user, apiKey }: Props) {
     setIsRecording(false)
     setAudioLevel(0)
 
-    const result = await window.electronAPI.stopRecording(apiKey)
+    const result = await ipc.stopRecording(apiKey)
     if (!result.success || !result.transcript) {
       setError(result.error || 'Nothing was transcribed')
       return
@@ -95,11 +87,7 @@ export function AgentiveWriting({ user, apiKey }: Props) {
   const handleCopy = async () => {
     if (!output) return
     try {
-      if (window.electronAPI?.copyToClipboard) {
-        await window.electronAPI.copyToClipboard(output)
-      } else {
-        await navigator.clipboard.writeText(output)
-      }
+      await ipc.copyToClipboard(output)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {

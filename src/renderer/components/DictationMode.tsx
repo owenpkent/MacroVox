@@ -2,14 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Mic, MicOff, Copy, Check, Trash2, Loader2, Settings } from 'lucide-react'
 import { usePostProcessing } from '../hooks/usePostProcessing'
 import { AgentiveWriting } from './AgentiveWriting'
-
-interface DictationUser {
-  id: string
-  email: string | null
-  displayName: string | null
-  avatarUrl: string | null
-  authMethod: string
-}
+import * as ipc from '../lib/tauri-ipc'
+import type { AppUser } from '../lib/tauri-ipc'
 
 type Tab = 'dictate' | 'write'
 
@@ -23,23 +17,23 @@ export function DictationMode() {
   const [error, setError] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState<string | null>(null)
   const [isLoadingKey, setIsLoadingKey] = useState(true)
-  const [user, setUser] = useState<DictationUser | null>(null)
+  const [user, setUser] = useState<AppUser | null>(null)
   const [audioLevel, setAudioLevel] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const autoStopTimerRef = useRef<NodeJS.Timeout | null>(null)
   const audioLevelIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  
+
   // Quick Dictation settings from localStorage
-  const [autoCopyOnStop, setAutoCopyOnStop] = useState(() => 
+  const [autoCopyOnStop, setAutoCopyOnStop] = useState(() =>
     localStorage.getItem('dictation_auto_copy') === 'true'
   )
-  const [clearOnNewRecording, setClearOnNewRecording] = useState(() => 
+  const [clearOnNewRecording, setClearOnNewRecording] = useState(() =>
     localStorage.getItem('dictation_clear_on_new') === 'true'
   )
-  const [autoCutoffSeconds, setAutoCutoffSeconds] = useState(() => 
+  const [autoCutoffSeconds, setAutoCutoffSeconds] = useState(() =>
     localStorage.getItem('dictation_auto_cutoff') || '30'
   )
-  const [transcriptionMode, setTranscriptionMode] = useState(() => 
+  const [transcriptionMode, setTranscriptionMode] = useState(() =>
     localStorage.getItem('transcription_mode') || 'batch'
   )
   const [autoPasteEnabled, setAutoPasteEnabled] = useState(() =>
@@ -52,11 +46,9 @@ export function DictationMode() {
     githubId: user?.id?.toString(),
   })
 
-  // Listen for settings changes from other windows via IPC
+  // Listen for settings changes from backend
   useEffect(() => {
-    if (!window.electronAPI?.onSettingsChanged) return
-    const cleanup = window.electronAPI.onSettingsChanged((settings) => {
-      // Update localStorage and React state for each changed setting
+    const cleanup = ipc.onSettingsChanged((settings) => {
       for (const [key, value] of Object.entries(settings)) {
         localStorage.setItem(key, value)
         switch (key) {
@@ -74,18 +66,14 @@ export function DictationMode() {
   // Cleanup auto-stop timer on unmount
   useEffect(() => {
     return () => {
-      if (autoStopTimerRef.current) {
-        clearTimeout(autoStopTimerRef.current)
-      }
+      if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current)
     }
   }, [])
 
   // Listen for streaming transcripts from Deepgram
   useEffect(() => {
-    if (!window.electronAPI?.onTranscript) return
-    const cleanup = window.electronAPI.onTranscript(({ transcript: text, isFinal }) => {
+    const cleanup = ipc.onTranscript(({ transcript: text, isFinal }) => {
       if (isFinal && text) {
-        // Append final transcript
         streamingTranscriptRef.current = streamingTranscriptRef.current
           ? streamingTranscriptRef.current + ' ' + text
           : text
@@ -95,22 +83,13 @@ export function DictationMode() {
     return cleanup
   }, [])
 
-  // Extract as useCallback so it can be re-run whenever the window is shown
   const loadApiKey = useCallback(async () => {
-    if (!window.electronAPI) {
-      setIsLoadingKey(false)
-      return
-    }
-
-    // Load user from Supabase session
     try {
-      const userResult = await window.electronAPI.getUser()
+      const userResult = await ipc.getUser()
       if (userResult.success && userResult.user) {
         setUser(userResult.user)
-
-        // Try managed key for Pro users
         try {
-          const keysResult = await window.electronAPI.getManagedKeys()
+          const keysResult = await ipc.getManagedKeys()
           if (keysResult.success && keysResult.deepgramKey) {
             console.log('[Dictation] Got managed API key')
             setApiKey(keysResult.deepgramKey)
@@ -123,22 +102,17 @@ export function DictationMode() {
       }
     } catch {}
 
-    // No BYOK — managed keys only. User must subscribe.
     setApiKey(null)
     setIsLoadingKey(false)
   }, [])
 
-  // Load key on mount
   useEffect(() => {
     loadApiKey()
   }, [loadApiKey])
 
-  // Re-run loadApiKey every time the window is shown via Ctrl+Space.
-  // With hide-on-close + pre-warm the component never unmounts, so the
-  // mount-time load may have run before auth was complete — this retries.
+  // Re-load key each time the window is shown via Ctrl+Space
   useEffect(() => {
-    if (!window.electronAPI?.onQuickDictationToggle) return
-    const cleanup = window.electronAPI.onQuickDictationToggle(() => {
+    const cleanup = ipc.onQuickDictationToggle(() => {
       loadApiKey()
     })
     return cleanup
@@ -153,53 +127,42 @@ export function DictationMode() {
   }, [loadApiKey, user])
 
   const handleStartRecording = async () => {
-    if (!window.electronAPI || !apiKey) return
+    if (!apiKey) return
     setError(null)
-    
-    // Clear previous transcript if setting is enabled
-    if (clearOnNewRecording) {
-      setTranscript('')
-    }
-    
+
+    if (clearOnNewRecording) setTranscript('')
+
     setIsPreparing(true)
     setAudioLevel(0)
 
     if (transcriptionMode === 'streaming') {
-      // Streaming mode: real-time transcription via WebSocket
       streamingTranscriptRef.current = transcript || ''
-      const result = await window.electronAPI.startDeepgram(apiKey)
+      const result = await ipc.startDeepgram(apiKey)
       if (!result.success) {
         setError(result.error || 'Failed to start streaming')
         setIsPreparing(false)
         return
       }
     } else {
-      // Batch mode: buffer audio, transcribe after stop
-      const result = await window.electronAPI.startRecording()
+      const result = await ipc.startRecording()
       if (!result.success) {
         setError(result.error || 'Failed to start')
         setIsPreparing(false)
         return
       }
     }
-    
-    // Mic is ready — switch from preparing to recording
+
     setIsPreparing(false)
     setIsRecording(true)
-    
-    // Poll for audio level visualization
+
     audioLevelIntervalRef.current = setInterval(async () => {
-      if (window.electronAPI?.getAudioLevel) {
-        const level = await window.electronAPI.getAudioLevel()
-        setAudioLevel(level)
-      }
+      const level = await ipc.getAudioLevel()
+      setAudioLevel(level)
     }, 50)
-    
-    // Auto-stop after configured duration if setting is enabled
+
     if (autoCutoffSeconds && autoCutoffSeconds !== 'off') {
       const durationMs = parseInt(autoCutoffSeconds, 10) * 1000
       autoStopTimerRef.current = setTimeout(() => {
-        // Clear previous transcript so cutoff transcription replaces it
         setTranscript('')
         streamingTranscriptRef.current = ''
         handleStopRecording()
@@ -208,80 +171,51 @@ export function DictationMode() {
   }
 
   const handleStopRecording = async () => {
-    if (!window.electronAPI || !apiKey) return
-    
-    // Clear auto-stop timer if it exists
+    if (!apiKey) return
+
     if (autoStopTimerRef.current) {
       clearTimeout(autoStopTimerRef.current)
       autoStopTimerRef.current = null
     }
-    
-    // Stop audio level polling
     if (audioLevelIntervalRef.current) {
       clearInterval(audioLevelIntervalRef.current)
       audioLevelIntervalRef.current = null
     }
-    
+
     setIsRecording(false)
     setAudioLevel(0)
 
     if (transcriptionMode === 'streaming') {
-      // Streaming mode: just stop, transcript already accumulated in real-time
-      await window.electronAPI.stopDeepgram()
-      
-      // Auto-copy if setting is enabled
+      await ipc.stopDeepgram()
       const currentText = streamingTranscriptRef.current
       if (autoCopyOnStop && currentText) {
-        if (window.electronAPI?.copyToClipboard) {
-          await window.electronAPI.copyToClipboard(currentText)
-        } else {
-          await navigator.clipboard.writeText(currentText).catch(() => {})
-        }
+        await ipc.copyToClipboard(currentText)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
       }
     } else {
-      // Batch mode: transcribe the buffered audio
       setIsProcessing(true)
-      const result = await window.electronAPI.stopRecording(apiKey)
+      const result = await ipc.stopRecording(apiKey)
       setIsProcessing(false)
       if (result.success && result.transcript) {
         const rawSegment = result.transcript
-        // Show raw transcript immediately so there's zero wait for the user
-        // Use functional updater to avoid stale closure over `transcript`
         let rawText = ''
         setTranscript(prev => {
           rawText = prev ? prev + ' ' + rawSegment : rawSegment
           return rawText
         })
 
-        // Auto-copy raw text right away
         if (autoCopyOnStop) {
-          if (window.electronAPI?.copyToClipboard) {
-            await window.electronAPI.copyToClipboard(rawText)
-          } else {
-            await navigator.clipboard.writeText(rawText).catch(() => {})
-          }
+          await ipc.copyToClipboard(rawText)
           setCopied(true)
           setTimeout(() => setCopied(false), 2000)
         }
 
-        // Post-process in the background — updates transcript when ready
-        // Use functional updater so the .then() callback always sees the
-        // latest transcript, even if another recording completes first.
         postProcess(rawSegment).then((cleaned) => {
           if (cleaned && cleaned !== rawSegment) {
             setTranscript(prev => {
-              // Replace the raw segment with the cleaned version
               const cleanedFull = prev.replace(rawSegment, cleaned)
-              // Re-copy if auto-copy is on, since text improved
-              if (autoCopyOnStop) {
-                if (window.electronAPI?.copyToClipboard) {
-                  window.electronAPI.copyToClipboard(cleanedFull)
-                } else {
-                  navigator.clipboard.writeText(cleanedFull).catch(() => {})
-                }
-              }
+              if (autoCopyOnStop) ipc.copyToClipboard(cleanedFull)
               return cleanedFull
             })
           }
@@ -295,11 +229,7 @@ export function DictationMode() {
   const handleCopy = async () => {
     if (!transcript) return
     try {
-      if (window.electronAPI?.copyToClipboard) {
-        await window.electronAPI.copyToClipboard(transcript)
-      } else {
-        await navigator.clipboard.writeText(transcript)
-      }
+      await ipc.copyToClipboard(transcript)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
@@ -320,17 +250,15 @@ export function DictationMode() {
     }
   }, [transcript])
 
-  // Handle Ctrl+Space quick dictation shortcut
+  // Handle Ctrl+Space quick dictation shortcut (events from backend)
   useEffect(() => {
-    if (!window.electronAPI) return
-
-    const cleanupStart = window.electronAPI.onQuickDictationStart(() => {
+    const cleanupStart = ipc.onQuickDictationStart(() => {
       if (apiKey && !isRecording && !isPreparing && !isProcessing) {
         handleStartRecording()
       }
     })
 
-    const cleanupToggle = window.electronAPI.onQuickDictationToggle(() => {
+    const cleanupToggle = ipc.onQuickDictationToggle(() => {
       if (isRecording) {
         handleStopAndCopy()
       } else if (apiKey && !isPreparing && !isProcessing) {
@@ -339,68 +267,47 @@ export function DictationMode() {
     })
 
     return () => {
-      cleanupStart?.()
-      cleanupToggle?.()
+      cleanupStart()
+      cleanupToggle()
     }
   }, [apiKey, isRecording, isPreparing, isProcessing])
 
   const handleStopAndCopy = async () => {
-    if (!window.electronAPI || !apiKey) return
-    
-    // Clear auto-stop timer if it exists
+    if (!apiKey) return
+
     if (autoStopTimerRef.current) {
       clearTimeout(autoStopTimerRef.current)
       autoStopTimerRef.current = null
     }
-    
-    // Stop audio level polling
     if (audioLevelIntervalRef.current) {
       clearInterval(audioLevelIntervalRef.current)
       audioLevelIntervalRef.current = null
     }
-    
+
     setIsRecording(false)
     setIsProcessing(true)
     setAudioLevel(0)
-    const result = await window.electronAPI.stopRecording(apiKey)
+    const result = await ipc.stopRecording(apiKey)
     setIsProcessing(false)
     if (result.success && result.transcript) {
       const rawSegment = result.transcript
-      // Show raw transcript immediately — no wait for post-processing
-      // Use functional updater to avoid stale closure over `transcript`
       let rawText = ''
       setTranscript(prev => {
         rawText = prev ? prev + ' ' + rawSegment : rawSegment
         return rawText
       })
 
-      // Copy raw text right away
-      if (window.electronAPI?.copyToClipboard) {
-        await window.electronAPI.copyToClipboard(rawText)
-      } else {
-        await navigator.clipboard.writeText(rawText).catch(() => {})
-      }
+      await ipc.copyToClipboard(rawText)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
 
-      // Auto-paste: hide window and send Ctrl+V to previously focused app
-      if (autoPasteEnabled && window.electronAPI?.autoPaste) {
-        window.electronAPI.autoPaste()
-      }
+      if (autoPasteEnabled) ipc.autoPaste()
 
-      // Post-process in background — updates transcript when Claude responds
-      // Use functional updater so the .then() callback always sees the
-      // latest transcript, even if another recording completes first.
       postProcess(rawSegment).then((cleaned) => {
         if (cleaned && cleaned !== rawSegment) {
           setTranscript(prev => {
             const cleanedFull = prev.replace(rawSegment, cleaned)
-            // Re-copy improved text
-            if (window.electronAPI?.copyToClipboard) {
-              window.electronAPI.copyToClipboard(cleanedFull)
-            } else {
-              navigator.clipboard.writeText(cleanedFull).catch(() => {})
-            }
+            ipc.copyToClipboard(cleanedFull)
             return cleanedFull
           })
         }
@@ -421,12 +328,12 @@ export function DictationMode() {
   return (
     <div className="h-screen w-screen flex flex-col p-4 select-none font-mono" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       {/* Drag area for window with settings button */}
-      <div className="h-6 -mx-4 -mt-4 mb-2 flex items-center justify-between px-2" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
+      <div className="h-6 -mx-4 -mt-4 mb-2 flex items-center justify-between px-2" data-tauri-drag-region>
         <span className="text-[10px] uppercase tracking-widest ml-2" style={{ color: 'var(--accent-secondary)' }}>MacroVox</span>
         <button
-          onClick={() => window.electronAPI?.openSettingsWindow()}
+          onClick={() => ipc.openSettingsWindow()}
           className="p-1 rounded"
-          style={{ color: 'var(--text-muted)', WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+          style={{ color: 'var(--text-muted)' }}
           title="Settings"
         >
           <Settings size={14} />
@@ -466,75 +373,52 @@ export function DictationMode() {
 
         {/* Record button with voice-reactive animation */}
         <div className="relative">
-          {/* Voice-reactive rings */}
           {isRecording && (
             <>
-              {/* Outer scanning ring */}
-              <div 
+              <div
                 className="absolute inset-[-8px] rounded-full border-2 border-red-500/40"
-                style={{ 
-                  animation: 'spin 3s linear infinite',
-                  borderStyle: 'dashed'
-                }}
+                style={{ animation: 'spin 3s linear infinite', borderStyle: 'dashed' }}
               />
-              {/* Pulsing radar ring */}
-              <div 
+              <div
                 className="absolute inset-[-4px] rounded-full border-2 border-red-500/50 animate-ping"
                 style={{ animationDuration: '1.5s' }}
               />
-              {/* Audio-reactive concentric rings - amplified */}
-              <div 
+              <div
                 className="absolute inset-0 rounded-full bg-red-500/30 transition-transform duration-50"
-                style={{ 
-                  transform: `scale(${1.2 + audioLevel * 1.2})`,
-                  opacity: 0.3 + audioLevel * 0.7
-                }}
+                style={{ transform: `scale(${1.2 + audioLevel * 1.2})`, opacity: 0.3 + audioLevel * 0.7 }}
               />
-              <div 
+              <div
                 className="absolute inset-0 rounded-full bg-red-500/20 transition-transform duration-75"
-                style={{ 
-                  transform: `scale(${1.5 + audioLevel * 1.8})`,
-                  opacity: 0.2 + audioLevel * 0.5
-                }}
+                style={{ transform: `scale(${1.5 + audioLevel * 1.8})`, opacity: 0.2 + audioLevel * 0.5 }}
               />
-              <div 
+              <div
                 className="absolute inset-0 rounded-full border-2 border-red-500/40 transition-transform duration-100"
-                style={{ 
-                  transform: `scale(${1.8 + audioLevel * 2.4})`,
-                  opacity: 0.15 + audioLevel * 0.4
-                }}
+                style={{ transform: `scale(${1.8 + audioLevel * 2.4})`, opacity: 0.15 + audioLevel * 0.4 }}
               />
-              {/* Outer glow ring */}
-              <div 
+              <div
                 className="absolute inset-0 rounded-full border border-red-400/20 transition-transform duration-150"
-                style={{ 
-                  transform: `scale(${2.1 + audioLevel * 3.0})`,
-                  opacity: 0.1 + audioLevel * 0.3
-                }}
+                style={{ transform: `scale(${2.1 + audioLevel * 3.0})`, opacity: 0.1 + audioLevel * 0.3 }}
               />
-              {/* Inner core glow */}
-              <div 
+              <div
                 className="absolute inset-2 rounded-full bg-red-500/50 blur-md transition-opacity duration-50"
                 style={{ opacity: 0.5 + audioLevel * 0.5 }}
               />
             </>
           )}
-          
-          {/* Processing state */}
+
           {isProcessing && (
             <div className="absolute inset-0 rounded-full border-2 border-cyan-500/50 animate-spin" style={{ animationDuration: '1s' }} />
           )}
-          
-          {/* Preparing mic spinner */}
+
           {isPreparing && (
             <div className="absolute inset-[-4px] rounded-full border-2 border-amber-500/50 animate-spin" style={{ borderStyle: 'dashed', animationDuration: '1.5s' }} />
           )}
-          
+
           <button
             onClick={isRecording ? handleStopRecording : handleStartRecording}
             disabled={isProcessing || isPreparing || !apiKey}
             className={`relative z-10 w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-lg ${(!apiKey || isProcessing || isPreparing) ? 'opacity-50 cursor-not-allowed' : ''}`}
-            style={{ 
+            style={{
               backgroundColor: isPreparing ? 'var(--warning, #d97706)' : isRecording ? 'var(--danger)' : 'var(--accent-primary)',
               border: `2px solid ${isPreparing ? 'var(--warning, #d97706)' : isRecording ? 'var(--danger)' : 'var(--accent-hover)'}`
             }}
@@ -551,7 +435,7 @@ export function DictationMode() {
           </button>
         </div>
 
-        {/* Audio level bars — waveform visualizer */}
+        {/* Audio level bars */}
         {isRecording && (
           <div className="flex items-center gap-[3px] h-8">
             {[...Array(11)].map((_, i) => {
@@ -560,10 +444,10 @@ export function DictationMode() {
               const amplified = Math.min(audioLevel * 4, 1)
               const barLevel = Math.max(0.08, amplified - (dist * 0.05))
               return (
-                <div 
+                <div
                   key={i}
                   className="w-[3px] rounded-full transition-all duration-[60ms]"
-                  style={{ 
+                  style={{
                     backgroundColor: 'var(--danger)',
                     height: `${3 + barLevel * 28}px`,
                     opacity: 0.3 + barLevel * 0.7
@@ -576,16 +460,16 @@ export function DictationMode() {
 
         {/* Status */}
         <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-          {!apiKey 
-            ? 'Sign in & subscribe to start' 
+          {!apiKey
+            ? 'Sign in & subscribe to start'
             : isPostProcessing
               ? '◎ AI cleanup...'
-              : isProcessing 
-              ? '◎ Transcribing...' 
+              : isProcessing
+              ? '◎ Transcribing...'
               : isPreparing
                 ? '◎ Preparing mic — please wait...'
-                : isRecording 
-                  ? '● Recording — click to stop' 
+                : isRecording
+                  ? '● Recording — click to stop'
                   : '○ Click to record'}
         </p>
       </div>
@@ -600,7 +484,7 @@ export function DictationMode() {
           className="w-full flex-1 min-h-[60px] p-2 rounded text-sm resize-none focus:outline-none overflow-y-auto"
           style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
         />
-        
+
         {/* Actions */}
         <div className="flex justify-between items-center">
           <button
