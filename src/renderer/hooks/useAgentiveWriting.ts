@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { ANTHROPIC_MODEL, API } from '../config'
+import { supabase } from '../lib/supabase'
 
 const SYSTEM_PROMPT = `You are an expert writer. Based on the user's spoken request, produce the appropriate written content — an email, a message, a book chapter, meeting notes, a document, or anything else. Infer the format and tone entirely from context. Return only the finished text — no commentary, no preamble, no meta-explanation of what you wrote.`
 
@@ -14,6 +15,9 @@ export function useAgentiveWriting({ useProxy, userId }: Options) {
   const generate = useCallback(async (command: string): Promise<string | null> => {
     if (!useProxy || !userId) return null
 
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) return null
+
     setIsGenerating(true)
 
     const styleProfile = localStorage.getItem('writing_style_profile') || ''
@@ -24,9 +28,12 @@ export function useAgentiveWriting({ useProxy, userId }: Options) {
     try {
       const response = await fetch(API.claudeProxy, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
-          github_id: userId,
+          user_id: userId,
           model: ANTHROPIC_MODEL,
           max_tokens: 2048,
           system: systemPrompt,

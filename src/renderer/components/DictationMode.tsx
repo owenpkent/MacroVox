@@ -44,7 +44,7 @@ export function DictationMode() {
 
   const { postProcess, isPostProcessing } = usePostProcessing({
     useProxy: !!user,
-    githubId: user?.id?.toString(),
+    userId: user?.id,
   })
 
   // Listen for settings changes from backend

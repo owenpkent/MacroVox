@@ -115,6 +115,9 @@ CREATE POLICY "Users read own keys" ON managed_api_keys
 
 ## Step 5: Deploy Netlify Functions
 
+The Netlify functions handle the Claude AI proxy and Deepgram proxy for Pro subscribers.
+Billing (Stripe checkout, billing portal, webhook) runs as Supabase Edge Functions — see Step 5b.
+
 ### 5a. Create a Netlify site
 
 1. Go to [netlify.com](https://netlify.com), sign in
@@ -125,73 +128,56 @@ CREATE POLICY "Users read own keys" ON managed_api_keys
    - **Publish directory**: `public` (or create an empty folder)
 5. Deploy
 
-### 5b. Add environment variables
+### 5b. Deploy Supabase Edge Functions (Stripe billing)
+
+Billing functions run in Deno on Supabase's edge network. Deploy them with the Supabase CLI:
+
+```powershell
+# Install Supabase CLI if not already installed
+npm install -g supabase
+
+# Login and link your project
+supabase login
+supabase link --project-ref YOUR_PROJECT_REF
+
+# Set secrets (these become Deno.env in the functions)
+supabase secrets set STRIPE_SECRET_KEY=sk_live_...
+supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...
+supabase secrets set STRIPE_PRICE_ID_PRO=price_...
+supabase secrets set STRIPE_PRICE_ID_TEAM=price_...   # optional
+supabase secrets set DEEPGRAM_MANAGED_KEY=dg_...
+supabase secrets set ANTHROPIC_MANAGED_KEY=sk-ant-...
+supabase secrets set SITE_URL=https://macrovox.netlify.app
+
+# Deploy all three billing functions
+supabase functions deploy create-checkout
+supabase functions deploy billing-portal
+supabase functions deploy stripe-webhook
+```
+
+The webhook URL will be:
+```
+https://YOUR_PROJECT_REF.supabase.co/functions/v1/stripe-webhook
+```
+Register this in Stripe Dashboard → Developers → Webhooks with these events:
+- `checkout.session.completed`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+
+### 5c. Add environment variables to Netlify
 
 In Netlify dashboard: **Site settings > Environment variables**:
 
 ```
 SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=eyJ...  (from Supabase Settings > API > service_role)
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_PRICE_ID=price_...
-DEEPGRAM_MANAGED_KEY=...          (required — Deepgram key for all Pro users)
-ANTHROPIC_MANAGED_KEY=...         (required — Claude key for all Pro users)
+ANTHROPIC_MANAGED_KEY=sk-ant-... (required — Claude key for all Pro users)
+DEEPGRAM_MANAGED_KEY=dg_...      (optional — for future server-side transcription proxy)
 ```
 
-### 5c. Create Netlify Functions
+> **Note**: Stripe keys are only needed in the Supabase Edge Functions, not in Netlify.
 
-Create `netlify/functions/create-checkout.ts`:
-
-```typescript
-// Stripe checkout session for Pro upgrade
-import Stripe from 'stripe'
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
-
-export default async (req: Request) => {
-  const { userId, plan } = await req.json()
-  
-  const session = await stripe.checkout.sessions.create({
-    mode: 'subscription',
-    line_items: [{ price: process.env.STRIPE_PRICE_ID!, quantity: 1 }],
-    success_url: 'https://macrovox.netlify.app/success',
-    cancel_url: 'https://macrovox.netlify.app/cancel',
-    metadata: { userId },
-  })
-
-  return new Response(JSON.stringify({ url: session.url }))
-}
-```
-
-Create `netlify/functions/billing-portal.ts`:
-
-```typescript
-import Stripe from 'stripe'
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
-
-export default async (req: Request) => {
-  const { userId } = await req.json()
-  // Look up Stripe customer ID from Supabase
-  // ...
-  const session = await stripe.billingPortal.sessions.create({
-    customer: 'cus_...',
-    return_url: 'https://macrovox.netlify.app',
-  })
-  return new Response(JSON.stringify({ url: session.url }))
-}
-```
-
-### 5d. Create Stripe Webhook
-
-1. Go to Stripe Dashboard → Developers → Webhooks
-2. Click **+ Add endpoint**
-3. **Endpoint URL**: `https://YOUR-SITE.netlify.app/.netlify/functions/stripe-webhook`
-4. **Events**: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
-5. Copy the **Signing secret** → add as `STRIPE_WEBHOOK_SECRET` in Netlify
-
-### 5e. Update config.ts
+### 5d. Update config.ts
 
 After deploying, update `src/renderer/config.ts` with your Netlify URL:
 
@@ -224,20 +210,16 @@ python run.py
 │  Rust backend: audio capture, clipboard, paste, IPC  │
 │  React renderer: Supabase Auth JS SDK (email/OAuth)  │
 │  Session stored in localStorage (Supabase JS SDK)    │
-└───────────────────────┬──────────────────────────────┘
-                        │
-         ┌──────────────▼──────────────┐
-         │       Supabase (hosted)      │
-         │  Auth: email, Google, FB     │
-         │  DB: subscriptions, keys     │
-         └──────────────┬──────────────┘
-                        │
-         ┌──────────────▼──────────────┐
-         │    Netlify Functions          │
-         │  create-checkout (Stripe)    │
-         │  stripe-webhook              │
-         │  billing-portal (Stripe)     │
-         │  claude-proxy                │
-         │  deepgram-proxy              │
-         └─────────────────────────────┘
+└───────────┬──────────────────────────┬───────────────┘
+            │ auth / billing           │ AI proxy (Bearer JWT)
+┌───────────▼──────────────┐  ┌────────▼────────────────┐
+│   Supabase (hosted)       │  │   Netlify Functions      │
+│  Auth: email, Google, FB  │  │  claude-proxy            │
+│  DB: subscriptions, keys  │  │  deepgram-proxy          │
+│                           │  └─────────────────────────┘
+│  Edge Functions (Deno):   │
+│  create-checkout (Stripe) │
+│  billing-portal (Stripe)  │
+│  stripe-webhook           │
+└───────────────────────────┘
 ```

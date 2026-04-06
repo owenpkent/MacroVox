@@ -1,6 +1,6 @@
 # MacroVox — Status & Roadmap
 
-**Last Updated**: April 5, 2026  
+**Last Updated**: April 5, 2026 — Phase 7: Netlify + Supabase Edge Functions  
 **Repository**: https://github.com/owenpkent/MacroVox
 
 ---
@@ -31,9 +31,10 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 |----------|--------|
 | **Windows App** | ✅ Released — v1.0.6 (EV code signed) |
 | **Auth (Supabase)** | ✅ Complete — email/password |
-| **Stripe Billing** | 🔧 In Progress — checkout + webhook integration |
+| **Stripe Billing** | 🔧 In Progress — functions written, pending deployment |
 | **Managed API Keys** | ✅ Complete — Deepgram + Claude both required, provisioned for Pro users |
-| **Netlify Functions** | 🔧 In Progress — proxy functions for managed keys |
+| **Netlify Functions** | ✅ Complete — claude-proxy + deepgram-proxy written |
+| **Supabase Edge Functions** | ✅ Complete — create-checkout, billing-portal, stripe-webhook written |
 | **macOS / Linux** | 🔜 Planned |
 
 ---
@@ -75,18 +76,25 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 - [x] Stripe billing portal (via Netlify function)
 - [x] Managed-only model — no user-provided API keys
 
+### Serverless Functions (Phase 7)
+- [x] `supabase/functions/create-checkout` — Stripe checkout session (Supabase Edge Function)
+- [x] `supabase/functions/billing-portal` — Stripe billing portal (Supabase Edge Function)
+- [x] `supabase/functions/stripe-webhook` — provision/deprovision keys on subscription events (Supabase Edge Function)
+- [x] `netlify/functions/claude-proxy` — authenticated Claude AI proxy for Pro subscribers
+- [x] `netlify/functions/deepgram-proxy` — authenticated Deepgram proxy (future use)
+- [x] Bearer token auth in `usePostProcessing` and `useAgentiveWriting` hooks
+
 ---
 
 ## 🔧 In Progress
 
-### Stripe Integration
-- [ ] Deploy `create-checkout` Netlify function (Stripe checkout)
-- [ ] Deploy `stripe-webhook` Netlify function (subscription lifecycle)
-- [ ] Deploy `billing-portal` Netlify function (manage subscription)
-- [ ] Deploy `claude-proxy` Netlify function (AI post-processing)
-- [ ] Deploy `deepgram-proxy` Netlify function (transcription)
-- [ ] Create Stripe product + price for MacroVox Pro
-- [ ] Create Stripe webhook endpoint
+### Stripe Deployment (Phase 7 functions written — needs wiring)
+- [ ] Deploy Supabase Edge Functions (`supabase functions deploy create-checkout billing-portal stripe-webhook`)
+- [ ] Deploy Netlify site + functions (`git push` to Netlify-linked repo)
+- [ ] Create Stripe product + price for MacroVox Pro ($9.99/month)
+- [ ] Add env vars to Netlify: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_MANAGED_KEY`, `DEEPGRAM_MANAGED_KEY`
+- [ ] Add env vars to Supabase Edge Functions: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID_PRO`, `DEEPGRAM_MANAGED_KEY`, `ANTHROPIC_MANAGED_KEY`, `SITE_URL`
+- [ ] Create Stripe webhook endpoint pointing to Supabase Edge Function URL
 - [ ] Test end-to-end: sign up → subscribe → dictate → cancel
 
 ---

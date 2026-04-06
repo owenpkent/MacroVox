@@ -17,19 +17,22 @@
     "package": "npm run build && electron-builder",
     "package:win": "npm run build && electron-builder --config build/electron-builder.json",
     "package:dev": "npm run build && electron-builder --config build/electron-builder.dev.json",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
+    "test": "vitest run --config vitest.config.ts",
+    "test:watch": "vitest --config vitest.config.ts",
+    "test:coverage": "vitest run --config vitest.config.ts --coverage",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.51.0",
     "@deepgram/sdk": "^3.9.0",
+    "@netlify/functions": "^2.8.2",
     "@supabase/supabase-js": "^2.101.1",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-shell": "^2.3.5",
     "lucide-react": "^0.454.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "stripe": "^17.7.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.10.1",

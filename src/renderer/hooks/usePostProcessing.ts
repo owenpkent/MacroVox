@@ -1,19 +1,23 @@
 import { useState, useCallback } from 'react'
 import { ANTHROPIC_MODEL, API } from '../config'
+import { supabase } from '../lib/supabase'
 
 interface UsePostProcessingOptions {
   useProxy?: boolean
-  githubId?: string
+  userId?: string
 }
 
-export function usePostProcessing({ useProxy = false, githubId }: UsePostProcessingOptions = {}) {
+export function usePostProcessing({ useProxy = false, userId }: UsePostProcessingOptions = {}) {
   const [isPostProcessing, setIsPostProcessing] = useState(false)
 
   const postProcess = useCallback(async (rawTranscript: string): Promise<string | null> => {
     const context = localStorage.getItem('post_processing_context') || ''
 
     // Managed only — must be a Pro subscriber using the proxy
-    if (!useProxy || !githubId) return null
+    if (!useProxy || !userId) return null
+
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) return null
 
     setIsPostProcessing(true)
 
@@ -22,9 +26,12 @@ export function usePostProcessing({ useProxy = false, githubId }: UsePostProcess
 
       const response = await fetch(API.claudeProxy, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
-          github_id: githubId,
+          user_id: userId,
           model: ANTHROPIC_MODEL,
           max_tokens: 4096,
           system: systemPrompt,
@@ -45,7 +52,7 @@ export function usePostProcessing({ useProxy = false, githubId }: UsePostProcess
     } finally {
       setIsPostProcessing(false)
     }
-  }, [useProxy, githubId])
+  }, [useProxy, userId])
 
   return { postProcess, isPostProcessing }
 }
