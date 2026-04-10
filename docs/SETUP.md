@@ -107,9 +107,10 @@ CREATE POLICY "Users read own keys" ON managed_api_keys
 
 1. Go to [Stripe Dashboard](https://dashboard.stripe.com) → **Products**
 2. Click **+ Add product**
-3. Create **MacroVox Pro** — `$9.99/month` recurring
+3. Create **MacroVox** — `$6.99/month` recurring
+   - **Description**: `Customizable voice-to-text with AI post-processing you control. Define custom AI prompts to transform your speech into any format — meeting notes, code comments, emails, or polished prose. Tailor hotkeys, recording modes, and processing rules to fit your exact workflow.`
 4. Save the **Price ID** (starts with `price_`)
-5. Optionally create **MacroVox Team** tier
+5. Optionally create additional tiers
 
 ---
 
@@ -143,8 +144,7 @@ supabase link --project-ref YOUR_PROJECT_REF
 # Set secrets (these become Deno.env in the functions)
 supabase secrets set STRIPE_SECRET_KEY=sk_live_...
 supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...
-supabase secrets set STRIPE_PRICE_ID_PRO=price_...
-supabase secrets set STRIPE_PRICE_ID_TEAM=price_...   # optional
+supabase secrets set STRIPE_PRICE_ID=price_...
 supabase secrets set DEEPGRAM_MANAGED_KEY=dg_...
 supabase secrets set ANTHROPIC_MANAGED_KEY=sk-ant-...
 supabase secrets set SITE_URL=https://macrovox.netlify.app
@@ -163,15 +163,15 @@ Register this in Stripe Dashboard → Developers → Webhooks with these events:
 - `checkout.session.completed`
 - `customer.subscription.updated`
 - `customer.subscription.deleted`
+- `charge.refunded`
 
 ### 5c. Add environment variables to Netlify
 
 In Netlify dashboard: **Site settings > Environment variables**:
 
 ```
-SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=eyJ...  (from Supabase Settings > API > service_role)
-ANTHROPIC_MANAGED_KEY=sk-ant-... (required — Claude key for all Pro users)
+ANTHROPIC_MANAGED_KEY=sk-ant-... (required — Claude key for all subscribers)
 DEEPGRAM_MANAGED_KEY=dg_...      (optional — for future server-side transcription proxy)
 ```
 

@@ -558,11 +558,11 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
                 </div>
               ) : (
                 <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)' }}>
-                  <p className="text-sm mb-2" style={{ color: 'var(--text-primary)' }}>Free Plan</p>
-                  <p className="text-xs text-slate-400 mb-3">Subscribe to Pro to unlock voice dictation and AI post-processing.</p>
+                  <p className="text-sm mb-2" style={{ color: 'var(--text-primary)' }}>No Active Subscription</p>
+                  <p className="text-xs text-slate-400 mb-3">Subscribe to unlock voice dictation and AI post-processing.</p>
                   <button onClick={handleUpgrade} className="w-full py-2 text-white text-sm rounded flex items-center justify-center gap-2 font-medium tracking-wide" style={{ backgroundColor: 'var(--accent-primary)' }}>
                     <Sparkles size={14} />
-                    Upgrade to Pro
+                    Subscribe — $6.99/mo
                   </button>
                 </div>
               )}

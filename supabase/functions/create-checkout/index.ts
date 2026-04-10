@@ -1,13 +1,12 @@
 /**
  * Supabase Edge Function — create-checkout
  *
- * Creates a Stripe checkout session for MacroVox Pro/Team upgrade.
+ * Creates a Stripe checkout session for MacroVox/Team upgrade.
  * Called from the renderer via `supabase.functions.invoke('create-checkout', { body: { userId, plan } })`.
  *
  * Required environment variables (set in Supabase dashboard → Settings → Edge Functions):
  *   STRIPE_SECRET_KEY    — Stripe secret key (sk_live_... or sk_test_...)
- *   STRIPE_PRICE_ID_PRO  — Stripe Price ID for MacroVox Pro ($9.99/month)
- *   STRIPE_PRICE_ID_TEAM — Stripe Price ID for MacroVox Team (optional)
+ *   STRIPE_PRICE_ID  — Stripe Price ID for MacroVox ($6.99/month)
  *   SITE_URL             — Your Netlify site URL (https://macrovox.netlify.app)
  */
 
@@ -58,9 +57,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    const priceId = plan === 'team'
-      ? Deno.env.get('STRIPE_PRICE_ID_TEAM')
-      : Deno.env.get('STRIPE_PRICE_ID_PRO')
+    const priceId = Deno.env.get('STRIPE_PRICE_ID')
 
     if (!priceId) {
       return new Response(JSON.stringify({ error: `No price configured for plan: ${plan}` }), {

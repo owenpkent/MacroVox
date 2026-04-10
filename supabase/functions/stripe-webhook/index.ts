@@ -3,9 +3,10 @@
  *
  * Handles Stripe webhook events to keep subscription state in sync.
  * Events handled:
- *   checkout.session.completed       — provision managed API keys for new Pro subscriber
+ *   checkout.session.completed       — provision managed API keys for new subscriber
  *   customer.subscription.updated    — sync subscription status changes
  *   customer.subscription.deleted    — deprovision keys on cancellation
+ *   charge.refunded                  — deprovision keys on refund
  *
  * Required environment variables (set in Supabase dashboard → Settings → Edge Functions):
  *   STRIPE_SECRET_KEY         — Stripe secret key
@@ -61,6 +62,11 @@ Deno.serve(async (req) => {
       case 'customer.subscription.deleted': {
         const sub = event.data.object as Stripe.Subscription
         await handleSubscriptionDeleted(sub)
+        break
+      }
+      case 'charge.refunded': {
+        const charge = event.data.object as Stripe.Charge
+        await handleChargeRefunded(charge)
         break
       }
       default:
@@ -158,6 +164,20 @@ async function handleSubscriptionUpdated(sub: Stripe.Subscription) {
 
 async function handleSubscriptionDeleted(sub: Stripe.Subscription) {
   await deprovisionByStripeCustomer(sub.customer as string)
+}
+
+async function handleChargeRefunded(charge: Stripe.Charge) {
+  const customerId = typeof charge.customer === 'string'
+    ? charge.customer
+    : charge.customer?.id
+
+  if (!customerId) {
+    console.error('[stripe-webhook] charge.refunded missing customer')
+    return
+  }
+
+  await deprovisionByStripeCustomer(customerId)
+  console.log(`[stripe-webhook] Deprovisioned after refund for customer ${customerId}`)
 }
 
 async function deprovisionByStripeCustomer(customerId: string) {
