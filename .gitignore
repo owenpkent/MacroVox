@@ -27,6 +27,9 @@ build/MacroVox/
 __pycache__/
 *.spec
 
+# Supabase CLI local state
+supabase/.temp/
+
 # Rust / Tauri build artifacts
 src-tauri/target/
 *.pdb
