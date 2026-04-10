@@ -25,10 +25,15 @@ import type { Handler } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 
 export const handler: Handler = async (event) => {
+  const origin = event.headers['origin'] ?? ''
+  const allowedOrigins = ['https://macrovox.netlify.app', 'tauri://localhost', 'https://tauri.localhost']
+  const corsOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0]
+
   const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': corsOrigin,
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
   }
 
   if (event.httpMethod === 'OPTIONS') {
