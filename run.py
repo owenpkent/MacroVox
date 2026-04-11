@@ -3,6 +3,7 @@ MacroVox dev launcher.
 
 Usage:
     python run.py            # start Tauri dev (Vite + Rust, first run compiles)
+    python run.py functions  # start Netlify dev (local API functions + Vite)
     python run.py install    # npm install only
     python run.py test       # run JS tests (vitest)
     python run.py test:rust  # run Rust unit tests
@@ -74,6 +75,18 @@ def main():
 
     if mode == "test:rust":
         sys.exit(run("cargo test --manifest-path src-tauri/Cargo.toml"))
+
+    if mode == "functions":
+        ensure_node_modules()
+        print("\nStarting Netlify dev (local API functions)...")
+        print("  Vite renderer     → http://localhost:8888")
+        print("  Netlify functions → http://localhost:8888/.netlify/functions/*")
+        print("  (Reads API keys from .env)\n")
+        try:
+            sys.exit(run("npx netlify dev"))
+        except KeyboardInterrupt:
+            print("\nStopped.")
+            sys.exit(0)
 
     if mode == "build":
         sys.exit(run("npm run build:renderer"))
