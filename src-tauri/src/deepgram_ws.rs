@@ -55,7 +55,9 @@ pub enum DgMessage {
 }
 
 /// Sender half of the channel connecting the audio callback to the WS task.
-pub type DgSender = mpsc::UnboundedSender<DgMessage>;
+/// Bounded to 500 messages (~5 seconds of audio at 10 ms frames) to prevent
+/// unbounded memory growth if the WebSocket is slower than the audio callback.
+pub type DgSender = mpsc::Sender<DgMessage>;
 
 // ── Session start ─────────────────────────────────────────────────────────────
 
@@ -71,9 +73,10 @@ pub async fn start_session(
     api_key: &str,
     sample_rate: u32,
     channels: u16,
+    keywords: &[String],
     app: tauri::AppHandle,
 ) -> Result<DgSender, String> {
-    let url = format!(
+    let mut url = format!(
         "wss://api.deepgram.com/v1/listen\
          ?model=nova-2\
          &punctuate=true\
@@ -84,6 +87,10 @@ pub async fn start_session(
          &interim_results=true"
     );
 
+    for kw in keywords {
+        url.push_str(&format!("&keywords={}", urlencoding::encode(kw)));
+    }
+
     // Build HTTP upgrade request and inject the Authorization header.
     let mut request = url
         .into_client_request()
@@ -91,7 +98,7 @@ pub async fn start_session(
     request.headers_mut().insert(
         AUTHORIZATION,
         HeaderValue::from_str(&format!("Token {api_key}"))
-            .map_err(|e| format!("Invalid API key header: {e}"))?,
+            .map_err(|_| "Invalid API key format".to_string())?,
     );
 
     // Establish the WebSocket — this is the pre-warm step.
@@ -100,7 +107,9 @@ pub async fn start_session(
         .map_err(|e| format!("Deepgram WebSocket connect failed: {e}"))?;
 
     let (mut ws_sink, mut ws_rx) = ws_stream.split();
-    let (tx, mut rx) = mpsc::unbounded_channel::<DgMessage>();
+    // Bounded channel: 500 messages ≈ 5 s of 10 ms audio frames.
+    // If the WebSocket can't keep up, old frames are dropped silently.
+    let (tx, mut rx) = mpsc::channel::<DgMessage>(500);
 
     // Spawn the background task that forwards PCM → WebSocket and
     // WebSocket transcript events → Tauri events.
@@ -269,9 +278,9 @@ mod tests {
 
     #[test]
     fn dg_sender_send_and_recv() {
-        let (tx, mut rx) = mpsc::unbounded_channel::<DgMessage>();
-        tx.send(DgMessage::Pcm(vec![1, 2])).unwrap();
-        tx.send(DgMessage::Stop).unwrap();
+        let (tx, mut rx) = mpsc::channel::<DgMessage>(500);
+        tx.try_send(DgMessage::Pcm(vec![1, 2])).unwrap();
+        tx.try_send(DgMessage::Stop).unwrap();
         drop(tx);
 
         match rx.blocking_recv() {

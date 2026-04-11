@@ -22,18 +22,27 @@ const supabase = createClient(
 const ALLOWED_ORIGINS = ['https://macrovox.netlify.app', 'tauri://localhost', 'https://tauri.localhost']
 
 function getCorsHeaders(req: Request) {
-  const origin = req.headers.get('origin') ?? ''
-  const corsOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  const origin = (req.headers.get('origin') ?? '').toLowerCase()
+  const corsOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : null
   return {
-    'Access-Control-Allow-Origin': corsOrigin,
+    'Access-Control-Allow-Origin': corsOrigin || '',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Vary': 'Origin',
   }
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req)
+  const origin = (req.headers.get('origin') ?? '').toLowerCase()
+  if (!ALLOWED_ORIGINS.includes(origin)) {
+    return new Response(JSON.stringify({ error: 'Origin not allowed' }), {
+      status: 403,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: getCorsHeaders(req) })
+    return new Response(null, { headers: corsHeaders })
   }
 
   try {
@@ -42,7 +51,7 @@ Deno.serve(async (req) => {
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
-        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
@@ -51,25 +60,33 @@ Deno.serve(async (req) => {
     if (authError || !user) {
       return new Response(JSON.stringify({ error: 'Invalid token' }), {
         status: 401,
-        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    const { userId, plan } = await req.json() as { userId: string; plan: 'pro' | 'team' }
+    const { userId, plan } = await req.json() as { userId: string; plan: string }
 
     if (user.id !== userId) {
       return new Response(JSON.stringify({ error: 'Forbidden' }), {
         status: 403,
-        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const allowedPlans = ['pro', 'team']
+    if (!plan || !allowedPlans.includes(plan)) {
+      return new Response(JSON.stringify({ error: 'Invalid plan' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
     const priceId = Deno.env.get('STRIPE_PRICE_ID')
 
     if (!priceId) {
-      return new Response(JSON.stringify({ error: `No price configured for plan: ${plan}` }), {
+      return new Response(JSON.stringify({ error: 'Pricing not configured' }), {
         status: 500,
-        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
@@ -86,13 +103,13 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({ url: session.url }), {
       status: 200,
-      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err) {
-    console.error('[create-checkout]', err)
+    console.error('[create-checkout]', err instanceof Error ? err.message : 'unknown')
     return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500,
-      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
 })

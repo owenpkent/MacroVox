@@ -24,16 +24,28 @@
 import type { Handler } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 
+const MAX_AUDIO_SIZE = 25 * 1024 * 1024 // 25 MB
+const ALLOWED_AUDIO_TYPES = ['audio/wav', 'audio/webm', 'audio/mp3', 'audio/mpeg', 'audio/flac', 'audio/ogg', 'audio/mp4']
+const ALLOWED_LANGUAGES = ['en', 'es', 'fr', 'de', 'it', 'pt', 'nl', 'ja', 'ko', 'zh', 'ru', 'hi', 'ar']
+const ALLOWED_MODELS = ['nova-2', 'nova-2-general', 'nova', 'enhanced', 'base']
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000 // 1 hour
+const RATE_LIMIT_MAX_CALLS = 300 // per user per hour (higher than claude — audio is lighter)
+
 export const handler: Handler = async (event) => {
-  const origin = event.headers['origin'] ?? ''
+  const origin = (event.headers['origin'] ?? '').toLowerCase()
   const allowedOrigins = ['https://macrovox.netlify.app', 'tauri://localhost', 'https://tauri.localhost']
-  const corsOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0]
+  const corsOrigin = allowedOrigins.includes(origin) ? origin : null
 
   const corsHeaders = {
-    'Access-Control-Allow-Origin': corsOrigin,
+    'Access-Control-Allow-Origin': corsOrigin || '',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Vary': 'Origin',
+  }
+
+  // Reject requests from unknown origins
+  if (!corsOrigin) {
+    return { statusCode: 403, headers: corsHeaders, body: JSON.stringify({ error: 'Origin not allowed' }) }
   }
 
   if (event.httpMethod === 'OPTIONS') {
@@ -42,6 +54,26 @@ export const handler: Handler = async (event) => {
 
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, headers: corsHeaders, body: 'Method Not Allowed' }
+  }
+
+  // Reject oversized audio payloads
+  const bodySize = Buffer.byteLength(event.body || '', event.isBase64Encoded ? 'base64' : 'utf8')
+  if (bodySize > MAX_AUDIO_SIZE) {
+    return {
+      statusCode: 413,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Audio file too large (max 25 MB)' }),
+    }
+  }
+
+  // Validate Content-Type
+  const contentType = (event.headers['content-type'] ?? 'audio/wav').toLowerCase()
+  if (!ALLOWED_AUDIO_TYPES.some(t => contentType.startsWith(t))) {
+    return {
+      statusCode: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Invalid audio format' }),
+    }
   }
 
   // Verify bearer token
@@ -84,6 +116,26 @@ export const handler: Handler = async (event) => {
     }
   }
 
+  // Rate limiting: count recent calls from this user
+  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString()
+  const { count: recentCalls } = await supabase
+    .from('api_usage')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('service', 'deepgram')
+    .gte('created_at', windowStart)
+
+  if ((recentCalls ?? 0) >= RATE_LIMIT_MAX_CALLS) {
+    return {
+      statusCode: 429,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '3600' },
+      body: JSON.stringify({ error: 'Rate limit exceeded — try again later' }),
+    }
+  }
+
+  // Log this call for rate limiting (fire-and-forget)
+  supabase.from('api_usage').insert({ user_id: user.id, service: 'deepgram' }).then(() => {})
+
   const deepgramKey = process.env.DEEPGRAM_MANAGED_KEY
   if (!deepgramKey) {
     return {
@@ -93,13 +145,15 @@ export const handler: Handler = async (event) => {
     }
   }
 
-  // Build Deepgram URL — preserve any query params the caller passed
+  // Build Deepgram URL — whitelist allowed params
   const params = event.queryStringParameters ?? {}
+  const model = ALLOWED_MODELS.includes(params.model ?? '') ? params.model! : 'nova-2'
+  const language = ALLOWED_LANGUAGES.includes(params.language ?? '') ? params.language! : 'en'
   const qs = new URLSearchParams({
-    model: params.model ?? 'nova-2',
-    punctuate: params.punctuate ?? 'true',
-    language: params.language ?? 'en',
-    smart_format: params.smart_format ?? 'true',
+    model,
+    punctuate: params.punctuate === 'false' ? 'false' : 'true',
+    language,
+    smart_format: params.smart_format === 'false' ? 'false' : 'true',
   }).toString()
 
   const deepgramUrl = `https://api.deepgram.com/v1/listen?${qs}`
@@ -113,7 +167,7 @@ export const handler: Handler = async (event) => {
       method: 'POST',
       headers: {
         Authorization: `Token ${deepgramKey}`,
-        'Content-Type': event.headers['content-type'] ?? 'audio/wav',
+        'Content-Type': contentType,
       },
       body,
     })
@@ -125,7 +179,7 @@ export const handler: Handler = async (event) => {
       body: data,
     }
   } catch (err) {
-    console.error('[deepgram-proxy] Error:', err)
+    console.error('[deepgram-proxy] Error:', err instanceof Error ? err.message : 'unknown')
     return {
       statusCode: 502,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

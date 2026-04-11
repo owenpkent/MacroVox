@@ -30,6 +30,9 @@ cpal = "0.15"
 # HTTP client for Deepgram pre-recorded API in recording_stop
 reqwest = { version = "0.12", features = ["json"] }
 
+# URL-encode keyword boost parameters for Deepgram API
+urlencoding = "2"
+
 # Phase 4: Deepgram WebSocket streaming (pre-warmed real-time STT)
 tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
 futures-util = "0.3"

@@ -35,17 +35,28 @@ const ALLOWED_MODELS = [
 ]
 
 const MAX_TOKENS_LIMIT = 4096
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000 // 1 hour
+const RATE_LIMIT_MAX_CALLS = 200 // per user per hour
+
+const MAX_BODY_SIZE = 512 * 1024 // 512 KB
+const MAX_SYSTEM_PROMPT_LENGTH = 10_000
+const MAX_MESSAGE_LENGTH = 100_000
 
 export const handler: Handler = async (event) => {
-  const origin = event.headers['origin'] ?? ''
+  const origin = (event.headers['origin'] ?? '').toLowerCase()
   const allowedOrigins = ['https://macrovox.netlify.app', 'tauri://localhost', 'https://tauri.localhost']
-  const corsOrigin = allowedOrigins.includes(origin) ? origin : allowedOrigins[0]
+  const corsOrigin = allowedOrigins.includes(origin) ? origin : null
 
   const corsHeaders = {
-    'Access-Control-Allow-Origin': corsOrigin,
+    'Access-Control-Allow-Origin': corsOrigin || '',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Vary': 'Origin',
+  }
+
+  // Reject requests from unknown origins
+  if (!corsOrigin) {
+    return { statusCode: 403, headers: corsHeaders, body: JSON.stringify({ error: 'Origin not allowed' }) }
   }
 
   if (event.httpMethod === 'OPTIONS') {
@@ -54,6 +65,16 @@ export const handler: Handler = async (event) => {
 
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, headers: corsHeaders, body: 'Method Not Allowed' }
+  }
+
+  // Reject oversized payloads before parsing
+  const bodySize = Buffer.byteLength(event.body || '', 'utf8')
+  if (bodySize > MAX_BODY_SIZE) {
+    return {
+      statusCode: 413,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Payload too large' }),
+    }
   }
 
   // Verify bearer token
@@ -97,6 +118,26 @@ export const handler: Handler = async (event) => {
     }
   }
 
+  // Rate limiting: count recent calls from this user
+  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString()
+  const { count: recentCalls } = await supabase
+    .from('api_usage')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('service', 'claude')
+    .gte('created_at', windowStart)
+
+  if ((recentCalls ?? 0) >= RATE_LIMIT_MAX_CALLS) {
+    return {
+      statusCode: 429,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '3600' },
+      body: JSON.stringify({ error: 'Rate limit exceeded — try again later' }),
+    }
+  }
+
+  // Log this call for rate limiting (fire-and-forget)
+  supabase.from('api_usage').insert({ user_id: user.id, service: 'claude' }).then(() => {})
+
   // Parse request body
   let body: {
     user_id?: string
@@ -115,13 +156,50 @@ export const handler: Handler = async (event) => {
     }
   }
 
-  const { model, max_tokens, system, messages } = body
+  const { user_id: bodyUserId, model, max_tokens, system, messages } = body
 
-  if (!messages?.length) {
+  // Reject if body user_id doesn't match the authenticated JWT user
+  if (bodyUserId && bodyUserId !== user.id) {
+    return {
+      statusCode: 403,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'user_id mismatch' }),
+    }
+  }
+
+  if (!Array.isArray(messages) || !messages.length) {
     return {
       statusCode: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       body: JSON.stringify({ error: 'messages is required' }),
+    }
+  }
+
+  // Validate message structure and size
+  const validRoles = ['user', 'assistant']
+  for (const msg of messages) {
+    if (!msg || typeof msg !== 'object' || !validRoles.includes(msg.role) || typeof msg.content !== 'string') {
+      return {
+        statusCode: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Invalid message format' }),
+      }
+    }
+    if (msg.content.length > MAX_MESSAGE_LENGTH) {
+      return {
+        statusCode: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Message too long' }),
+      }
+    }
+  }
+
+  // Validate system prompt length
+  if (system && typeof system === 'string' && system.length > MAX_SYSTEM_PROMPT_LENGTH) {
+    return {
+      statusCode: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'System prompt too long' }),
     }
   }
 
@@ -143,7 +221,7 @@ export const handler: Handler = async (event) => {
       body: JSON.stringify(response),
     }
   } catch (err) {
-    console.error('[claude-proxy] Anthropic error:', err)
+    console.error('[claude-proxy] Anthropic error:', err instanceof Error ? err.message : 'unknown')
     return {
       statusCode: 502,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

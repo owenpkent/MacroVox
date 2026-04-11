@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
       Deno.env.get('STRIPE_WEBHOOK_SECRET')!,
     )
   } catch (err) {
-    console.error('[stripe-webhook] Signature verification failed:', err)
+    console.error('[stripe-webhook] Signature verification failed')
     return new Response('Webhook signature verification failed', { status: 400 })
   }
 
@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
         console.log(`[stripe-webhook] Unhandled event type: ${event.type}`)
     }
   } catch (err) {
-    console.error('[stripe-webhook] Handler error:', err)
+    console.error('[stripe-webhook] Handler error:', err instanceof Error ? err.message : 'unknown')
     return new Response('Handler error', { status: 500 })
   }
 
@@ -112,7 +112,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     }, { onConflict: 'user_id' })
 
   if (subError) {
-    console.error('[stripe-webhook] Failed to upsert subscription:', subError)
+    console.error('[stripe-webhook] Failed to upsert subscription')
     return
   }
 
@@ -129,9 +129,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     }, { onConflict: 'user_id' })
 
   if (keyError) {
-    console.error('[stripe-webhook] Failed to provision managed keys:', keyError)
+    console.error('[stripe-webhook] Failed to provision managed keys')
   } else {
-    console.log(`[stripe-webhook] Provisioned keys for user ${userId} (${plan})`)
+    console.log(`[stripe-webhook] Provisioned keys (${plan})`)
   }
 }
 
@@ -177,7 +177,7 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
   }
 
   await deprovisionByStripeCustomer(customerId)
-  console.log(`[stripe-webhook] Deprovisioned after refund for customer ${customerId}`)
+  console.log('[stripe-webhook] Deprovisioned after refund')
 }
 
 async function deprovisionByStripeCustomer(customerId: string) {
@@ -208,5 +208,5 @@ async function deprovisionByStripeCustomer(customerId: string) {
     .delete()
     .eq('user_id', userId)
 
-  console.log(`[stripe-webhook] Deprovisioned keys for user ${userId}`)
+  console.log('[stripe-webhook] Deprovisioned keys')
 }

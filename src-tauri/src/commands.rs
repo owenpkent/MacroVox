@@ -170,8 +170,9 @@ pub async fn deepgram_start(
 ) -> Result<OkResponse, String> {
     let sample_rate = *state.audio_sample_rate.lock().unwrap();
     let channels = *state.audio_channels.lock().unwrap();
+    let keywords = state.deepgram_keywords.lock().unwrap().clone();
 
-    match crate::deepgram_ws::start_session(&api_key, sample_rate, channels, app).await {
+    match crate::deepgram_ws::start_session(&api_key, sample_rate, channels, &keywords, app).await {
         Ok(sender) => {
             // Store sender before setting is_recording so the first callback
             // frame is not missed.
@@ -197,7 +198,7 @@ pub fn deepgram_stop(state: State<AppState>) -> OkResponse {
     // Take the sender out of state — dropping it signals the task to close,
     // but sending Stop first gives Deepgram a chance to flush its buffer.
     if let Some(sender) = state.dg_sender.lock().unwrap().take() {
-        let _ = sender.send(crate::deepgram_ws::DgMessage::Stop);
+        let _ = sender.try_send(crate::deepgram_ws::DgMessage::Stop);
     }
 
     OkResponse::ok()
@@ -243,17 +244,22 @@ pub async fn recording_stop(
         });
     }
 
+    let keywords = state.deepgram_keywords.lock().unwrap().clone();
+
     let duration = samples.len() as f64 / (sample_rate as f64 * channels as f64);
     let wav = crate::audio::pcm_to_wav(&samples, sample_rate, channels);
 
     // --- Upload to Deepgram pre-recorded API ---
     // model=nova-2: best accuracy/speed balance as of 2025
-    const URL: &str =
-        "https://api.deepgram.com/v1/listen?model=nova-2&punctuate=true&smart_format=true";
+    let mut url =
+        "https://api.deepgram.com/v1/listen?model=nova-2&punctuate=true&smart_format=true".to_string();
+    for kw in &keywords {
+        url.push_str(&format!("&keywords={}", urlencoding::encode(kw)));
+    }
 
     let client = reqwest::Client::new();
     let resp = match client
-        .post(URL)
+        .post(&url)
         .header("Authorization", format!("Token {api_key}"))
         .header("Content-Type", "audio/wav")
         .body(wav)
@@ -521,7 +527,8 @@ pub fn settings_broadcast(
         let keywords: Vec<String> = raw
             .split('\n')
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
+            .filter(|s| !s.is_empty() && s.len() <= 100)
+            .take(50)
             .collect();
         *state.deepgram_keywords.lock().unwrap() = keywords;
     }

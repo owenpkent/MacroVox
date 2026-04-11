@@ -51,8 +51,8 @@ Owen — wheelchair user with muscular dystrophy.
 - **Renderer:** TypeScript, React 18, Vite 6, Tailwind CSS
 - **Backend:** Rust, Tauri 2
 - **Audio:** cpal (WASAPI on Windows)
-- **STT:** Deepgram nova-2 (WebSocket streaming + batch)
-- **AI:** Claude (transcript cleanup + agentic writing, via Netlify proxy)
+- **STT:** Deepgram nova-2 (WebSocket streaming default, batch fallback)
+- **AI:** Claude Haiku (transcript cleanup) + Claude Sonnet (agentic writing), via Netlify proxy
 - **Auth:** Supabase JS SDK (email/password, session in localStorage)
 - **Billing:** Stripe (via Supabase Edge Functions)
 - **Paste:** enigo (native Windows input simulation)

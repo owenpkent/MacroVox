@@ -26,7 +26,7 @@ export function DictationMode() {
 
   // Quick Dictation settings from localStorage
   const [autoCopyOnStop, setAutoCopyOnStop] = useState(() =>
-    localStorage.getItem('dictation_auto_copy') === 'true'
+    localStorage.getItem('dictation_auto_copy') !== 'false'
   )
   const [clearOnNewRecording, setClearOnNewRecording] = useState(() =>
     localStorage.getItem('dictation_clear_on_new') === 'true'
@@ -35,7 +35,7 @@ export function DictationMode() {
     localStorage.getItem('dictation_auto_cutoff') || '30'
   )
   const [transcriptionMode, setTranscriptionMode] = useState(() =>
-    localStorage.getItem('transcription_mode') || 'batch'
+    localStorage.getItem('transcription_mode') || 'streaming'
   )
   const [autoPasteEnabled, setAutoPasteEnabled] = useState(() =>
     localStorage.getItem('dictation_auto_paste') === 'true'
@@ -92,13 +92,12 @@ export function DictationMode() {
         try {
           const keysResult = await auth.getManagedKeys()
           if (keysResult.success && keysResult.deepgramKey) {
-            console.log('[Dictation] Got managed API key')
             setApiKey(keysResult.deepgramKey)
             setIsLoadingKey(false)
             return
           }
-        } catch (err) {
-          console.log('[Dictation] Managed keys not available:', err)
+        } catch {
+          // Managed keys not available — fall through to free tier
         }
       }
     } catch {}
@@ -189,10 +188,24 @@ export function DictationMode() {
     if (transcriptionMode === 'streaming') {
       await ipc.stopDeepgram()
       const currentText = streamingTranscriptRef.current
-      if (autoCopyOnStop && currentText) {
-        await ipc.copyToClipboard(currentText)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
+      if (currentText) {
+        // Optimistic: copy raw transcript immediately, don't wait for cleanup
+        if (autoCopyOnStop) {
+          await ipc.copyToClipboard(currentText)
+          setCopied(true)
+          setTimeout(() => setCopied(false), 2000)
+        }
+
+        if (autoPasteEnabled && autoCopyOnStop) ipc.autoPaste()
+
+        // AI cleanup in background — update clipboard if result differs
+        postProcess(currentText).then((cleaned) => {
+          if (cleaned && cleaned !== currentText) {
+            setTranscript(cleaned)
+            streamingTranscriptRef.current = cleaned
+            if (autoCopyOnStop) ipc.copyToClipboard(cleaned)
+          }
+        })
       }
     } else {
       setIsProcessing(true)
@@ -211,6 +224,8 @@ export function DictationMode() {
           setCopied(true)
           setTimeout(() => setCopied(false), 2000)
         }
+
+        if (autoPasteEnabled && autoCopyOnStop) ipc.autoPaste()
 
         postProcess(rawSegment).then((cleaned) => {
           if (cleaned && cleaned !== rawSegment) {

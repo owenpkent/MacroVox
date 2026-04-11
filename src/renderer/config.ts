@@ -10,4 +10,6 @@ export const API = {
   deepgramProxy:    `${SITE_URL}/.netlify/functions/deepgram-proxy`,
 } as const
 
-export const ANTHROPIC_MODEL   = 'claude-sonnet-4-20250514'
+// Haiku for fast cleanup tasks; Sonnet for quality writing generation
+export const ANTHROPIC_MODEL_CLEANUP  = 'claude-haiku-4-5-20251001'
+export const ANTHROPIC_MODEL_WRITING  = 'claude-sonnet-4-20250514'

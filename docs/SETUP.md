@@ -89,10 +89,22 @@ CREATE TABLE managed_api_keys (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- API usage tracking for rate limiting (populated by Netlify proxy functions)
+CREATE TABLE api_usage (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  service TEXT NOT NULL,       -- 'claude' or 'deepgram'
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX idx_api_usage_user_service_time ON api_usage (user_id, service, created_at);
+
 -- Row Level Security (RLS) — users can only read their own data
 -- Note: Automatic RLS should be enabled in Settings > API for future tables
 ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE managed_api_keys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE api_usage ENABLE ROW LEVEL SECURITY;
+-- api_usage is written/read only by the service role key (Netlify functions);
+-- no user-facing RLS policy needed.
 
 CREATE POLICY "Users read own subscription" ON subscriptions
   FOR SELECT USING (auth.uid() = user_id);

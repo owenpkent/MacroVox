@@ -1,5 +1,51 @@
 # MacroVox Changelog
 
+## Unreleased — Security Hardening + Pre-Launch Fixes
+
+### Fixes
+- **App icon made square** — Source PNG was 1326×1294 (not square), causing rendering issues. Padded to 1326×1326 and regenerated all sizes (32, 64, 128, 256, 512, ICO, ICNS) via `npx tauri icon`.
+- **Tray icon converted to RGBA** — Was RGB (no transparency). Converted to RGBA PNG.
+
+### Security
+- **CORS: reject unknown origins** — Netlify proxy functions (`claude-proxy`, `deepgram-proxy`) previously fell back to the first allowed origin when the request origin didn't match the allowlist, effectively allowing any origin. Now returns 403 for unknown origins.
+- **Payload size limits** — `claude-proxy` rejects request bodies over 512 KB. `deepgram-proxy` rejects audio over 25 MB. Prevents resource exhaustion and cost abuse.
+- **Input validation on claude-proxy** — Messages array structure validated (role must be `user`/`assistant`, content must be string). System prompt capped at 10,000 chars. Individual messages capped at 100,000 chars.
+- **Deepgram proxy parameter whitelisting** — Model and language parameters are whitelisted against known-good values. Content-Type validated against allowed audio formats.
+- **Removed `shell:allow-execute` capability** — Unused but dangerous IPC permission removed from Tauri capabilities. `shell:allow-open` retained for OAuth URL opening.
+- **CSP pinned to specific subdomains** — Replaced wildcard `https://*.supabase.co` and `https://*.netlify.app` with exact project URLs (`hlioqbizljywisvnbtat.supabase.co`, `macrovox.netlify.app`). Removed unnecessary `wasm-unsafe-eval`. Added `wss://api.deepgram.com` for WebSocket streaming.
+- **Recording buffer capped at 5 minutes** — Prevents unbounded memory growth if recording is never stopped. At 16 kHz mono, cap is ~18 MB. New frames are silently dropped after the cap.
+- **Keywords capped at 50 entries, 100 chars each** — Prevents URL length abuse and Deepgram API rejection from excessively long keyword lists.
+- **API key error messages sanitized** — Deepgram WebSocket connection errors no longer include the API key value in error strings.
+- **CORS origin comparison now case-insensitive** — Prevents bypass via case variation.
+- **Per-user rate limiting on proxy functions** — Both `claude-proxy` (200/hour) and `deepgram-proxy` (300/hour) now track API calls per user via Supabase `api_usage` table. Returns 429 with `Retry-After` header when exceeded.
+- **user_id body parameter validated against JWT** — `claude-proxy` now rejects requests where the `user_id` in the body doesn't match the authenticated JWT user, preventing impersonation.
+- **Deepgram WebSocket channel bounded to 500 messages** — Prevents unbounded memory growth if the WebSocket connection is slower than audio capture. Frames are silently dropped when the channel is full.
+- **Prompt injection mitigation** — User-controlled context fields (`post_processing_context`, `writing_style_profile`) are now wrapped in XML boundary tags with explicit instructions not to follow any instructions within them. Both fields capped at 1,000 chars.
+- **Console log cleanup** — Removed API key confirmation logs, replaced `console.error` with `console.warn` for non-critical failures, stripped error objects from log output to prevent leaking internals. Server-side logs now only include error messages, not full stack traces.
+- **Supabase Edge Functions hardened** — `create-checkout` and `billing-portal` now reject unknown CORS origins (was falling back to first allowed origin). Plan parameter validated against allowlist. Error logs sanitized to not leak stack traces or PII (user IDs removed from webhook logs). `stripe-webhook` signature verification error no longer logs the raw error.
+
+---
+
+## Unreleased — Pre-Launch Speed & Quality Pass
+
+### Performance
+- **Default transcription mode changed from batch to streaming** — Words now appear as you speak instead of after you stop recording. Perceived latency drops to near-zero for transcript display.
+- **AI cleanup model switched from Claude Sonnet to Claude Haiku** — 3–5× faster cleanup (~200–500 ms vs ~1–2 s). Haiku is more than capable for grammar and punctuation correction.
+- **Optimistic auto-copy** — Raw transcript is copied to clipboard and auto-pasted immediately when recording stops. AI cleanup runs in the background and silently updates the clipboard if the cleaned text differs. Users no longer wait for cleanup before the text lands in their target app.
+
+### Bug Fixes
+- **Fixed keyword boosting being silently ignored** — Keywords were parsed from settings and stored in `AppState` but never actually appended to either the Deepgram streaming WebSocket URL or the batch REST API URL. Both paths now include `&keywords=` parameters with proper URL encoding. This is MacroVox's key differentiator — custom vocabulary now actually works.
+- **Fixed auto-paste missing from batch and streaming stop paths** — Auto-paste (`Ctrl+V` injection) only fired from the `Ctrl+Space` toggle path (`handleStopAndCopy`). Now fires from both the button-click stop handler and streaming mode stop handler too.
+
+### UX
+- **Auto-copy defaults to ON for new users** — Changed from opt-in to opt-out. New installs get clipboard copy behavior immediately without visiting settings.
+- **Auto-copy and auto-paste settings surfaced more prominently** — Reordered Quick Dictation toggles to put auto-copy and auto-paste first (above "Clear on new recording"). Descriptions rewritten to be clearer about what each toggle does.
+
+### Dependencies
+- Added `urlencoding` crate (v2) for encoding keyword boost parameters in Deepgram API URLs.
+
+---
+
 ## Unreleased — Settings Window Fix + Titlebar Controls
 
 ### Bug Fixes

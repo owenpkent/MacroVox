@@ -28,7 +28,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>('loading')
 
   const [autoCopyOnStop, setAutoCopyOnStop] = useState(() =>
-    localStorage.getItem('dictation_auto_copy') === 'true'
+    localStorage.getItem('dictation_auto_copy') !== 'false'
   )
   const [clearOnNewRecording, setClearOnNewRecording] = useState(() =>
     localStorage.getItem('dictation_clear_on_new') === 'true'
@@ -43,7 +43,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
     localStorage.getItem('deepgram_dictation') !== 'false'
   )
   const [transcriptionMode, setTranscriptionMode] = useState(() =>
-    localStorage.getItem('transcription_mode') || 'batch'
+    localStorage.getItem('transcription_mode') || 'streaming'
   )
   const [postProcessingContext, setPostProcessingContext] = useState(() =>
     localStorage.getItem('post_processing_context') || ''
@@ -129,7 +129,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
         setSelectedDevice(result.selected)
       }
     } catch (error) {
-      console.error('Failed to load devices:', error)
+      console.warn('[Settings] Failed to load devices')
     } finally {
       setIsLoading(false)
     }
@@ -159,7 +159,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
       await ipc.setAudioDevice(device)
       setSelectedDevice(device)
     } catch (error) {
-      console.error('Failed to set device:', error)
+      console.warn('[Settings] Failed to set device')
     }
   }
 
@@ -361,9 +361,9 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
             </h3>
             <div className="space-y-3">
               {[
-                { label: 'Auto-copy on stop', desc: 'Copy transcript to clipboard when recording stops', value: autoCopyOnStop, onChange: handleAutoCopyToggle },
-                { label: 'Clear on new recording', desc: 'Delete previous transcript when starting new', value: clearOnNewRecording, onChange: handleClearOnNewToggle },
-                { label: 'Auto-paste on stop', desc: 'After copying, paste into previously focused app (Windows)', value: autoPasteEnabled, onChange: handleAutoPasteToggle },
+                { label: 'Auto-copy on stop', desc: 'Instantly copy transcript to clipboard when you stop recording', value: autoCopyOnStop, onChange: handleAutoCopyToggle },
+                { label: 'Auto-paste on stop', desc: 'Paste into the app you were typing in — text lands where your cursor was', value: autoPasteEnabled, onChange: handleAutoPasteToggle },
+                { label: 'Clear on new recording', desc: 'Delete previous transcript when starting a new one', value: clearOnNewRecording, onChange: handleClearOnNewToggle },
               ].map(({ label, desc, value, onChange }) => (
                 <label key={label} className="flex items-center justify-between cursor-pointer">
                   <div>

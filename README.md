@@ -12,12 +12,12 @@ Active — Tauri 2 migration complete. Stripe/Netlify backend deployment in prog
 
 ## Features
 
-- **Voice-to-text dictation** — Deepgram nova-2, batch or real-time streaming modes
+- **Voice-to-text dictation** — Deepgram nova-2, real-time streaming (default) or batch mode
 - **Agentic writing** — speak a request ("write an email to Mike rescheduling Thursday") and Claude produces the finished content
 - **Writing style profile** — describe your voice once; every generated piece matches your style
 - **Global hotkey** — `Ctrl+Space` to toggle recording from any app
-- **AI post-processing** — Claude cleans up every transcript automatically (Pro)
-- **Auto-copy & auto-paste** — transcript goes straight to clipboard and active app (native Windows input via enigo)
+- **AI post-processing** — Claude Haiku cleans up every transcript automatically, non-blocking (Pro)
+- **Auto-copy & auto-paste** — transcript goes straight to clipboard and active app instantly (native Windows input via enigo); AI cleanup updates in background
 - **Keyword boosting** — improve recognition of custom terms
 - **6 themed UI skins** — MCRN, Mars, Belter, Earth, Protomolecule, Laconia
 - **System tray** — runs in background, toggles with tray icon

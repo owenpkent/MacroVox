@@ -31,6 +31,7 @@ function makeEvent(overrides: Partial<{
     headers: {
       authorization: 'Bearer test-token',
       'content-type': 'audio/wav',
+      origin: 'https://tauri.localhost',
     },
     body: '',
     isBase64Encoded: false,
@@ -46,12 +47,30 @@ function makeEvent(overrides: Partial<{
 
 function mockProUser() {
   mockGetUser.mockResolvedValue({ data: { user: { id: 'user-123' } }, error: null })
-  const mockSelect = vi.fn().mockReturnValue({
-    eq: vi.fn().mockReturnValue({
-      single: vi.fn().mockResolvedValue({ data: { status: 'pro' }, error: null }),
-    }),
+  mockFrom.mockImplementation((table: string) => {
+    if (table === 'subscriptions') {
+      return {
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({ data: { status: 'pro' }, error: null }),
+          }),
+        }),
+      }
+    }
+    if (table === 'api_usage') {
+      return {
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              gte: vi.fn().mockResolvedValue({ count: 0, error: null }),
+            }),
+          }),
+        }),
+        insert: vi.fn().mockReturnValue({ then: (cb: () => void) => cb() }),
+      }
+    }
+    return {}
   })
-  mockFrom.mockReturnValue({ select: mockSelect })
 }
 
 describe('deepgram-proxy', () => {
@@ -71,7 +90,7 @@ describe('deepgram-proxy', () => {
 
   it('returns 401 when no Authorization header', async () => {
     const result = await handler(
-      makeEvent({ headers: { 'content-type': 'audio/wav' } }),
+      makeEvent({ headers: { 'content-type': 'audio/wav', origin: 'https://tauri.localhost' } }),
       {} as never,
       vi.fn(),
     )
@@ -80,12 +99,18 @@ describe('deepgram-proxy', () => {
 
   it('returns 403 when user is on free plan', async () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'user-123' } }, error: null })
-    const mockSelect = vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        single: vi.fn().mockResolvedValue({ data: { status: 'free' }, error: null }),
-      }),
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'subscriptions') {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: { status: 'free' }, error: null }),
+            }),
+          }),
+        }
+      }
+      return {}
     })
-    mockFrom.mockReturnValue({ select: mockSelect })
 
     const result = await handler(makeEvent(), {} as never, vi.fn())
     expect(result?.statusCode).toBe(403)

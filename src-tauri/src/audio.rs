@@ -69,11 +69,17 @@ pub fn f32_to_i16_bytes(samples: &[f32]) -> Vec<u8> {
 
 // ── Capture callback ──────────────────────────────────────────────────────────
 
+/// Maximum recording buffer size in f32 samples.
+/// At 16 kHz mono this is 5 minutes of audio (~18 MB of f32 data).
+/// Prevents unbounded memory growth if the renderer never calls recording_stop.
+const MAX_BUFFER_SAMPLES: usize = 16_000 * 60 * 5;
+
 /// Called from the cpal input-stream callback with a slice of f32 samples.
 ///
 /// - Updates `level` with the RMS value of the frame (always).
 /// - When `is_recording` is true:
-///   - Appends samples to `buffer` (for batch/pre-recorded API path).
+///   - Appends samples to `buffer` (for batch/pre-recorded API path),
+///     capped at `MAX_BUFFER_SAMPLES` to prevent unbounded memory growth.
 ///   - If a Deepgram WebSocket session is active (`dg_sender` is `Some`),
 ///     converts the frame to i16 LE bytes and sends it over the channel for
 ///     real-time streaming.
@@ -94,14 +100,22 @@ pub fn process_audio_frame(
     *level.lock().unwrap() = rms as f64;
 
     if *is_recording.lock().unwrap() {
-        // Batch path: always buffer raw f32 samples for WAV upload fallback.
-        buffer.lock().unwrap().extend_from_slice(data);
+        // Batch path: buffer raw f32 samples for WAV upload fallback.
+        // Cap at MAX_BUFFER_SAMPLES to prevent unbounded memory growth.
+        {
+            let mut buf = buffer.lock().unwrap();
+            let remaining = MAX_BUFFER_SAMPLES.saturating_sub(buf.len());
+            if remaining > 0 {
+                let take = data.len().min(remaining);
+                buf.extend_from_slice(&data[..take]);
+            }
+        }
 
         // Streaming path: if a WebSocket session is active, also send i16 bytes.
         if let Some(sender) = dg_sender.lock().unwrap().as_ref() {
             let bytes = f32_to_i16_bytes(data);
-            // Non-blocking send — drop the frame silently if the channel is closed.
-            let _ = sender.send(DgMessage::Pcm(bytes));
+            // Non-blocking try_send — drop frames silently if channel is full or closed.
+            let _ = sender.try_send(DgMessage::Pcm(bytes));
         }
     }
 }
@@ -281,7 +295,7 @@ mod tests {
         let buffer = Arc::new(Mutex::new(Vec::new()));
         let is_recording = Arc::new(Mutex::new(true));
 
-        let (tx, mut rx) = mpsc::unbounded_channel::<DgMessage>();
+        let (tx, mut rx) = mpsc::channel::<DgMessage>(500);
         let dg_sender = Arc::new(Mutex::new(Some(tx)));
 
         process_audio_frame(&[0.5, -0.5], &level, &buffer, &is_recording, &dg_sender);
@@ -308,7 +322,7 @@ mod tests {
         let buffer = Arc::new(Mutex::new(Vec::new()));
         let is_recording = Arc::new(Mutex::new(false)); // not recording
 
-        let (tx, mut rx) = mpsc::unbounded_channel::<DgMessage>();
+        let (tx, mut rx) = mpsc::channel::<DgMessage>(500);
         let dg_sender = Arc::new(Mutex::new(Some(tx)));
 
         process_audio_frame(&[0.5], &level, &buffer, &is_recording, &dg_sender);
