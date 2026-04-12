@@ -11,7 +11,7 @@
  * Request (multipart/form-data or raw audio):
  *   Authorization: Bearer <supabase_jwt>
  *   Body: audio file binary
- *   Query params: ?model=nova-2&punctuate=true&language=en
+ *   Query params: ?model=nova-3&punctuate=true&language=en
  *
  * Response: Deepgram transcription JSON
  *
@@ -27,13 +27,17 @@ import { createClient } from '@supabase/supabase-js'
 const MAX_AUDIO_SIZE = 25 * 1024 * 1024 // 25 MB
 const ALLOWED_AUDIO_TYPES = ['audio/wav', 'audio/webm', 'audio/mp3', 'audio/mpeg', 'audio/flac', 'audio/ogg', 'audio/mp4']
 const ALLOWED_LANGUAGES = ['en', 'es', 'fr', 'de', 'it', 'pt', 'nl', 'ja', 'ko', 'zh', 'ru', 'hi', 'ar']
-const ALLOWED_MODELS = ['nova-2', 'nova-2-general', 'nova', 'enhanced', 'base']
+const ALLOWED_MODELS = ['nova-3', 'nova-2', 'nova-2-general', 'nova', 'enhanced', 'base']
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000 // 1 hour
 const RATE_LIMIT_MAX_CALLS = 300 // per user per hour (higher than claude — audio is lighter)
+
+// Local dev: skip auth when running under `netlify dev` with DEV_BYPASS_AUTH=true
+const isDevBypass = process.env.DEV_BYPASS_AUTH === 'true'
 
 export const handler: Handler = async (event) => {
   const origin = (event.headers['origin'] ?? '').toLowerCase()
   const allowedOrigins = ['https://macrovox.netlify.app', 'tauri://localhost', 'https://tauri.localhost']
+  if (isDevBypass) allowedOrigins.push('http://localhost:8888', 'http://localhost:5173')
   const corsOrigin = allowedOrigins.includes(origin) ? origin : null
 
   const corsHeaders = {
@@ -76,65 +80,64 @@ export const handler: Handler = async (event) => {
     }
   }
 
-  // Verify bearer token
-  const authHeader = event.headers['authorization'] || event.headers['Authorization']
-  const token = authHeader?.replace(/^Bearer\s+/i, '')
-  if (!token) {
-    return {
-      statusCode: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Unauthorized' }),
+  // ── Auth, subscription & rate-limit checks (skipped in local dev) ───────
+  if (!isDevBypass) {
+    const authHeader = event.headers['authorization'] || event.headers['Authorization']
+    const token = authHeader?.replace(/^Bearer\s+/i, '')
+    if (!token) {
+      return {
+        statusCode: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Unauthorized' }),
+      }
     }
-  }
 
-  const supabase = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+    const supabase = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    )
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-  if (authError || !user) {
-    return {
-      statusCode: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Invalid token' }),
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    if (authError || !user) {
+      return {
+        statusCode: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Invalid token' }),
+      }
     }
-  }
 
-  // Check Pro or Team subscription
-  const { data: sub } = await supabase
-    .from('subscriptions')
-    .select('status')
-    .eq('user_id', user.id)
-    .single()
+    const { data: sub } = await supabase
+      .from('subscriptions')
+      .select('status')
+      .eq('user_id', user.id)
+      .single()
 
-  if (!sub || !['pro', 'team'].includes(sub.status)) {
-    return {
-      statusCode: 403,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Pro subscription required' }),
+    if (!sub || !['pro', 'team'].includes(sub.status)) {
+      return {
+        statusCode: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Pro subscription required' }),
+      }
     }
-  }
 
-  // Rate limiting: count recent calls from this user
-  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString()
-  const { count: recentCalls } = await supabase
-    .from('api_usage')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id)
-    .eq('service', 'deepgram')
-    .gte('created_at', windowStart)
+    const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString()
+    const { count: recentCalls } = await supabase
+      .from('api_usage')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('service', 'deepgram')
+      .gte('created_at', windowStart)
 
-  if ((recentCalls ?? 0) >= RATE_LIMIT_MAX_CALLS) {
-    return {
-      statusCode: 429,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '3600' },
-      body: JSON.stringify({ error: 'Rate limit exceeded — try again later' }),
+    if ((recentCalls ?? 0) >= RATE_LIMIT_MAX_CALLS) {
+      return {
+        statusCode: 429,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '3600' },
+        body: JSON.stringify({ error: 'Rate limit exceeded — try again later' }),
+      }
     }
-  }
 
-  // Log this call for rate limiting (fire-and-forget)
-  supabase.from('api_usage').insert({ user_id: user.id, service: 'deepgram' }).then(() => {})
+    supabase.from('api_usage').insert({ user_id: user.id, service: 'deepgram' }).then(() => {})
+  }
 
   const deepgramKey = process.env.DEEPGRAM_MANAGED_KEY
   if (!deepgramKey) {
@@ -147,7 +150,7 @@ export const handler: Handler = async (event) => {
 
   // Build Deepgram URL — whitelist allowed params
   const params = event.queryStringParameters ?? {}
-  const model = ALLOWED_MODELS.includes(params.model ?? '') ? params.model! : 'nova-2'
+  const model = ALLOWED_MODELS.includes(params.model ?? '') ? params.model! : 'nova-3'
   const language = ALLOWED_LANGUAGES.includes(params.language ?? '') ? params.language! : 'en'
   const qs = new URLSearchParams({
     model,

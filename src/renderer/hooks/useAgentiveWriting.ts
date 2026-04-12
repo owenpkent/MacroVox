@@ -15,8 +15,10 @@ export function useAgentiveWriting({ useProxy, userId }: Options) {
   const generate = useCallback(async (command: string): Promise<string | null> => {
     if (!useProxy || !userId) return null
 
+    const isDev = import.meta.env.DEV && import.meta.env.VITE_DEV_MODE === 'true'
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.access_token) return null
+    if (!isDev && !session?.access_token) return null
+    const token = session?.access_token || 'dev-bypass'
 
     setIsGenerating(true)
 
@@ -30,7 +32,7 @@ export function useAgentiveWriting({ useProxy, userId }: Options) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           user_id: userId,

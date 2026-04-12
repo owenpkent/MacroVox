@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Mic, MicOff, Copy, Check, Trash2, Loader2, Settings, Minus, X } from 'lucide-react'
 import { usePostProcessing } from '../hooks/usePostProcessing'
 import { AgentiveWriting } from './AgentiveWriting'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import * as ipc from '../lib/tauri-ipc'
 import type { AppUser } from '../lib/tauri-ipc'
 import * as auth from '../lib/auth'
@@ -35,7 +36,7 @@ export function DictationMode() {
     localStorage.getItem('dictation_auto_cutoff') || '30'
   )
   const [transcriptionMode, setTranscriptionMode] = useState(() =>
-    localStorage.getItem('transcription_mode') || 'streaming'
+    localStorage.getItem('transcription_mode') || 'batch'
   )
   const [autoPasteEnabled, setAutoPasteEnabled] = useState(() =>
     localStorage.getItem('dictation_auto_paste') === 'true'
@@ -130,13 +131,16 @@ export function DictationMode() {
     if (!apiKey) return
     setError(null)
 
-    if (clearOnNewRecording) setTranscript('')
+    if (clearOnNewRecording) {
+      setTranscript('')
+      streamingTranscriptRef.current = ''
+    }
 
     setIsPreparing(true)
     setAudioLevel(0)
 
     if (transcriptionMode === 'streaming') {
-      streamingTranscriptRef.current = transcript || ''
+      if (!clearOnNewRecording) streamingTranscriptRef.current = transcript || ''
       const result = await ipc.startDeepgram(apiKey)
       if (!result.success) {
         setError(result.error || 'Failed to start streaming')
@@ -343,9 +347,15 @@ export function DictationMode() {
 
   return (
     <div className="h-screen w-screen flex flex-col p-4 select-none font-mono" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
-      {/* Titlebar: drag region covers the full bar, buttons sit outside it */}
-      <div className="h-8 -mx-4 -mt-4 mb-2 flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-widest ml-4 flex-1" style={{ color: 'var(--accent-secondary)' }} data-tauri-drag-region />
+      {/* Titlebar: drag the window by pressing anywhere on this bar */}
+      <div
+        className="h-8 -mx-4 -mt-4 mb-2 flex items-center justify-between cursor-grab active:cursor-grabbing"
+        onMouseDown={(e) => {
+          if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return
+          getCurrentWindow().startDragging()
+        }}
+      >
+        <div className="ml-4 flex-1 h-full" />
         <div className="flex items-center gap-1 pr-1">
           <button
             onClick={() => ipc.openSettingsWindow()}
@@ -356,10 +366,7 @@ export function DictationMode() {
             <Settings size={14} />
           </button>
           <button
-            onClick={async () => {
-              const { getCurrentWindow } = await import('@tauri-apps/api/window')
-              getCurrentWindow().minimize()
-            }}
+            onClick={() => getCurrentWindow().minimize()}
             className="p-1 rounded hover:bg-white/10"
             style={{ color: 'var(--text-muted)' }}
             title="Minimize"
@@ -367,10 +374,7 @@ export function DictationMode() {
             <Minus size={14} />
           </button>
           <button
-            onClick={async () => {
-              const { getCurrentWindow } = await import('@tauri-apps/api/window')
-              getCurrentWindow().close()
-            }}
+            onClick={() => getCurrentWindow().close()}
             className="p-1 rounded hover:bg-red-500/20"
             style={{ color: 'var(--text-muted)' }}
             title="Close"
@@ -403,7 +407,7 @@ export function DictationMode() {
 
       {/* Main content */}
       {activeTab === 'dictate' && <>
-      <div className="shrink-0 flex flex-col items-center justify-center gap-4">
+      <div className="shrink-0 flex flex-col items-center justify-center gap-3 pt-2">
         {/* Error */}
         {error && (
           <div className="text-xs px-3 py-1 rounded" style={{ color: 'var(--danger)', backgroundColor: 'var(--danger-bg)', border: '1px solid var(--danger)' }}>
@@ -411,73 +415,51 @@ export function DictationMode() {
           </div>
         )}
 
-        {/* Record button with voice-reactive animation */}
-        <div className="relative">
+        {/* Record button with subtle voice-reactive glow */}
+        <div className="relative flex items-center justify-center" style={{ width: 80, height: 80 }}>
           {isRecording && (
             <>
               <div
-                className="absolute inset-[-8px] rounded-full border-2 border-red-500/40"
-                style={{ animation: 'spin 3s linear infinite', borderStyle: 'dashed' }}
-              />
-              <div
-                className="absolute inset-[-4px] rounded-full border-2 border-red-500/50 animate-ping"
-                style={{ animationDuration: '1.5s' }}
-              />
-              <div
-                className="absolute inset-0 rounded-full bg-red-500/30 transition-transform duration-50"
-                style={{ transform: `scale(${1.2 + audioLevel * 1.2})`, opacity: 0.3 + audioLevel * 0.7 }}
-              />
-              <div
                 className="absolute inset-0 rounded-full bg-red-500/20 transition-transform duration-75"
-                style={{ transform: `scale(${1.5 + audioLevel * 1.8})`, opacity: 0.2 + audioLevel * 0.5 }}
+                style={{ transform: `scale(${1.1 + audioLevel * 0.3})`, opacity: 0.3 + audioLevel * 0.5 }}
               />
               <div
-                className="absolute inset-0 rounded-full border-2 border-red-500/40 transition-transform duration-100"
-                style={{ transform: `scale(${1.8 + audioLevel * 2.4})`, opacity: 0.15 + audioLevel * 0.4 }}
-              />
-              <div
-                className="absolute inset-0 rounded-full border border-red-400/20 transition-transform duration-150"
-                style={{ transform: `scale(${2.1 + audioLevel * 3.0})`, opacity: 0.1 + audioLevel * 0.3 }}
-              />
-              <div
-                className="absolute inset-2 rounded-full bg-red-500/50 blur-md transition-opacity duration-50"
-                style={{ opacity: 0.5 + audioLevel * 0.5 }}
+                className="absolute inset-1 rounded-full bg-red-500/40 blur-md transition-opacity duration-50"
+                style={{ opacity: 0.4 + audioLevel * 0.6 }}
               />
             </>
           )}
 
           {isProcessing && (
-            <div className="absolute inset-0 rounded-full border-2 border-cyan-500/50 animate-spin" style={{ animationDuration: '1s' }} />
+            <div className="absolute inset-1 rounded-full border-2 border-cyan-500/50 animate-spin" style={{ animationDuration: '1s' }} />
           )}
 
           {isPreparing && (
-            <div className="absolute inset-[-4px] rounded-full border-2 border-amber-500/50 animate-spin" style={{ borderStyle: 'dashed', animationDuration: '1.5s' }} />
+            <div className="absolute inset-1 rounded-full border-2 border-amber-500/50 animate-spin" style={{ borderStyle: 'dashed', animationDuration: '1.5s' }} />
           )}
 
           <button
             onClick={isRecording ? handleStopRecording : handleStartRecording}
             disabled={isProcessing || isPreparing || !apiKey}
-            className={`relative z-10 w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-lg ${(!apiKey || isProcessing || isPreparing) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`relative z-10 w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${(!apiKey || isProcessing || isPreparing) ? 'opacity-50 cursor-not-allowed' : ''}`}
             style={{
               backgroundColor: isPreparing ? 'var(--warning, #d97706)' : isRecording ? 'var(--danger)' : 'var(--accent-primary)',
               border: `2px solid ${isPreparing ? 'var(--warning, #d97706)' : isRecording ? 'var(--danger)' : 'var(--accent-hover)'}`
             }}
           >
-            {isProcessing ? (
-              <Loader2 className="w-6 h-6 text-white animate-spin" />
-            ) : isPreparing ? (
-              <Loader2 className="w-6 h-6 text-white animate-spin" />
+            {isProcessing || isPreparing ? (
+              <Loader2 className="w-5 h-5 text-white animate-spin" />
             ) : isRecording ? (
-              <MicOff className="w-6 h-6 text-white" />
+              <MicOff className="w-5 h-5 text-white" />
             ) : (
-              <Mic className="w-6 h-6 text-white" />
+              <Mic className="w-5 h-5 text-white" />
             )}
           </button>
         </div>
 
         {/* Audio level bars */}
         {isRecording && (
-          <div className="flex items-center gap-[3px] h-8">
+          <div className="flex items-center gap-[3px] h-6">
             {[...Array(11)].map((_, i) => {
               const center = 5
               const dist = Math.abs(i - center)
@@ -489,7 +471,7 @@ export function DictationMode() {
                   className="w-[3px] rounded-full transition-all duration-[60ms]"
                   style={{
                     backgroundColor: 'var(--danger)',
-                    height: `${3 + barLevel * 28}px`,
+                    height: `${3 + barLevel * 22}px`,
                     opacity: 0.3 + barLevel * 0.7
                   }}
                 />

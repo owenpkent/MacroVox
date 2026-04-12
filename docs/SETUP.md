@@ -119,7 +119,7 @@ CREATE POLICY "Users read own keys" ON managed_api_keys
 
 1. Go to [Stripe Dashboard](https://dashboard.stripe.com) → **Products**
 2. Click **+ Add product**
-3. Create **MacroVox** — `$6.99/month` recurring
+3. Create **MacroVox** — `\$6.99/month` recurring
    - **Description**: `Customizable voice-to-text with AI post-processing you control. Define custom AI prompts to transform your speech into any format — meeting notes, code comments, emails, or polished prose. Tailor hotkeys, recording modes, and processing rules to fit your exact workflow.`
 4. Save the **Price ID** (starts with `price_`)
 5. Optionally create additional tiers

@@ -42,9 +42,13 @@ const MAX_BODY_SIZE = 512 * 1024 // 512 KB
 const MAX_SYSTEM_PROMPT_LENGTH = 10_000
 const MAX_MESSAGE_LENGTH = 100_000
 
+// Local dev: skip auth when running under `netlify dev` with DEV_BYPASS_AUTH=true
+const isDevBypass = process.env.DEV_BYPASS_AUTH === 'true'
+
 export const handler: Handler = async (event) => {
   const origin = (event.headers['origin'] ?? '').toLowerCase()
   const allowedOrigins = ['https://macrovox.netlify.app', 'tauri://localhost', 'https://tauri.localhost']
+  if (isDevBypass) allowedOrigins.push('http://localhost:8888', 'http://localhost:5173')
   const corsOrigin = allowedOrigins.includes(origin) ? origin : null
 
   const corsHeaders = {
@@ -77,66 +81,68 @@ export const handler: Handler = async (event) => {
     }
   }
 
-  // Verify bearer token
-  const authHeader = event.headers['authorization'] || event.headers['Authorization']
-  const token = authHeader?.replace(/^Bearer\s+/i, '')
-  if (!token) {
-    return {
-      statusCode: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Unauthorized' }),
+  // ── Auth, subscription & rate-limit checks (skipped in local dev) ───────
+  let authedUserId: string | null = null
+
+  if (!isDevBypass) {
+    const authHeader = event.headers['authorization'] || event.headers['Authorization']
+    const token = authHeader?.replace(/^Bearer\s+/i, '')
+    if (!token) {
+      return {
+        statusCode: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Unauthorized' }),
+      }
     }
-  }
 
-  const supabase = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+    const supabase = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    )
 
-  // Verify JWT
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-  if (authError || !user) {
-    return {
-      statusCode: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Invalid token' }),
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    if (authError || !user) {
+      return {
+        statusCode: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Invalid token' }),
+      }
     }
-  }
 
-  // Check Pro or Team subscription
-  const { data: sub } = await supabase
-    .from('subscriptions')
-    .select('status')
-    .eq('user_id', user.id)
-    .single()
+    authedUserId = user.id
 
-  if (!sub || !['pro', 'team'].includes(sub.status)) {
-    return {
-      statusCode: 403,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Pro subscription required' }),
+    const { data: sub } = await supabase
+      .from('subscriptions')
+      .select('status')
+      .eq('user_id', user.id)
+      .single()
+
+    if (!sub || !['pro', 'team'].includes(sub.status)) {
+      return {
+        statusCode: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Pro subscription required' }),
+      }
     }
-  }
 
-  // Rate limiting: count recent calls from this user
-  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString()
-  const { count: recentCalls } = await supabase
-    .from('api_usage')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id)
-    .eq('service', 'claude')
-    .gte('created_at', windowStart)
+    const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString()
+    const { count: recentCalls } = await supabase
+      .from('api_usage')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('service', 'claude')
+      .gte('created_at', windowStart)
 
-  if ((recentCalls ?? 0) >= RATE_LIMIT_MAX_CALLS) {
-    return {
-      statusCode: 429,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '3600' },
-      body: JSON.stringify({ error: 'Rate limit exceeded — try again later' }),
+    if ((recentCalls ?? 0) >= RATE_LIMIT_MAX_CALLS) {
+      return {
+        statusCode: 429,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '3600' },
+        body: JSON.stringify({ error: 'Rate limit exceeded — try again later' }),
+      }
     }
-  }
 
-  // Log this call for rate limiting (fire-and-forget)
-  supabase.from('api_usage').insert({ user_id: user.id, service: 'claude' }).then(() => {})
+    supabase.from('api_usage').insert({ user_id: user.id, service: 'claude' }).then(() => {})
+  }
 
   // Parse request body
   let body: {
@@ -159,7 +165,7 @@ export const handler: Handler = async (event) => {
   const { user_id: bodyUserId, model, max_tokens, system, messages } = body
 
   // Reject if body user_id doesn't match the authenticated JWT user
-  if (bodyUserId && bodyUserId !== user.id) {
+  if (authedUserId && bodyUserId && bodyUserId !== authedUserId) {
     return {
       statusCode: 403,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

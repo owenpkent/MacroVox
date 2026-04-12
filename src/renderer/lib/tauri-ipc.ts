@@ -72,10 +72,21 @@ function makeListener<T>(
   callback: (payload: T) => void,
 ): () => void {
   let unlisten: UnlistenFn | undefined
-  listen<T>(eventName, (event) => callback(event.payload)).then((fn) => {
-    unlisten = fn
+  let cancelled = false
+  listen<T>(eventName, (event) => {
+    if (!cancelled) callback(event.payload)
+  }).then((fn) => {
+    if (cancelled) {
+      // Cleanup was called before listen() resolved (React StrictMode race)
+      fn()
+    } else {
+      unlisten = fn
+    }
   })
-  return () => unlisten?.()
+  return () => {
+    cancelled = true
+    unlisten?.()
+  }
 }
 
 // ── Audio ─────────────────────────────────────────────────────────────────────

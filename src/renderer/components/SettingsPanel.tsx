@@ -43,7 +43,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
     localStorage.getItem('deepgram_dictation') !== 'false'
   )
   const [transcriptionMode, setTranscriptionMode] = useState(() =>
-    localStorage.getItem('transcription_mode') || 'streaming'
+    localStorage.getItem('transcription_mode') || 'batch'
   )
   const [postProcessingContext, setPostProcessingContext] = useState(() =>
     localStorage.getItem('post_processing_context') || ''

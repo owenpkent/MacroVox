@@ -78,7 +78,7 @@ pub async fn start_session(
 ) -> Result<DgSender, String> {
     let mut url = format!(
         "wss://api.deepgram.com/v1/listen\
-         ?model=nova-2\
+         ?model=nova-3\
          &punctuate=true\
          &smart_format=true\
          &encoding=linear16\

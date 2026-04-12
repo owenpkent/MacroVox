@@ -10,6 +10,9 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Activate RUST_LOG-based logging (e.g. RUST_LOG=debug python run.py debug)
+    env_logger::init();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -53,6 +56,12 @@ pub fn run() {
             let _ = main_window.show();
             let _ = main_window.set_focus();
 
+            // Open DevTools automatically when RUST_LOG is set (debug mode)
+            #[cfg(debug_assertions)]
+            if std::env::var("RUST_LOG").is_ok() {
+                main_window.open_devtools();
+            }
+
             let app_handle = app.handle().clone();
             main_window.on_window_event(move |event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -66,6 +75,20 @@ pub fn run() {
                     }
                 }
             });
+
+            // Settings window: always hide on close instead of destroying,
+            // so it can be re-shown without recreating.
+            let settings_handle = app.handle().clone();
+            if let Some(settings_window) = app.get_webview_window("settings") {
+                settings_window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        if let Some(win) = settings_handle.get_webview_window("settings") {
+                            let _ = win.hide();
+                        }
+                    }
+                });
+            }
 
             Ok(())
         })

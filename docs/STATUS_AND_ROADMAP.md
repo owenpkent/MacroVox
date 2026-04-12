@@ -94,7 +94,7 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 - [ ] Run SQL migration for `api_usage` table (`supabase/migrations/20260411_create_api_usage.sql`)
 - [ ] Deploy Supabase Edge Functions (`supabase functions deploy create-checkout billing-portal stripe-webhook`)
 - [ ] Deploy Netlify site + functions (`git push` to Netlify-linked repo)
-- [ ] Create Stripe product + price for MacroVox ($6.99/month)
+- [ ] Create Stripe product + price for MacroVox (\$6.99/month)
 - [ ] Add env vars to Netlify: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_MANAGED_KEY`, `DEEPGRAM_MANAGED_KEY`
 - [ ] Add env vars to Supabase Edge Functions: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `DEEPGRAM_MANAGED_KEY`, `ANTHROPIC_MANAGED_KEY`, `SITE_URL`
 - [ ] Create Stripe webhook endpoint pointing to Supabase Edge Function URL
@@ -125,7 +125,7 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 ## 📋 Next Steps
 
 ### Step 1: Stripe Product Setup
-1. Create MacroVox product in Stripe Dashboard ($6.99/month)
+1. Create MacroVox product in Stripe Dashboard (\$6.99/month)
 2. Save Price ID for Netlify environment variable
 3. Create webhook endpoint pointing to Netlify function
 

@@ -4,6 +4,8 @@ MacroVox dev launcher.
 Usage:
     python run.py            # start Tauri dev (Vite + Rust, first run compiles)
     python run.py functions  # start Netlify dev (local API functions + Vite)
+    python run.py ui         # start Vite only (browser at localhost:5173, no Rust build)
+    python run.py debug      # start Tauri dev with RUST_LOG=debug and DevTools open
     python run.py install    # npm install only
     python run.py test       # run JS tests (vitest)
     python run.py test:rust  # run Rust unit tests
@@ -13,6 +15,16 @@ Usage:
 import subprocess
 import sys
 import os
+import io
+
+# Ensure stdout handles unicode on Windows (cp1252 terminals choke on arrows etc.)
+if sys.stdout.encoding and sys.stdout.encoding.lower().replace("-", "") != "utf8":
+    sys.stdout = io.TextIOWrapper(
+        sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True
+    )
+    sys.stderr = io.TextIOWrapper(
+        sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True
+    )
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
@@ -79,8 +91,8 @@ def main():
     if mode == "functions":
         ensure_node_modules()
         print("\nStarting Netlify dev (local API functions)...")
-        print("  Vite renderer     → http://localhost:8888")
-        print("  Netlify functions → http://localhost:8888/.netlify/functions/*")
+        print("  Vite renderer     -> http://localhost:8888")
+        print("  Netlify functions -> http://localhost:8888/.netlify/functions/*")
         print("  (Reads API keys from .env)\n")
         try:
             sys.exit(run("npx netlify dev"))
@@ -88,10 +100,26 @@ def main():
             print("\nStopped.")
             sys.exit(0)
 
+    if mode == "ui":
+        ensure_node_modules()
+        print("\nStarting Vite dev server only (no Rust build)...")
+        print("  Renderer -> http://localhost:5173")
+        print("  (Tauri IPC calls will fail — use for UI/CSS work only)\n")
+        try:
+            sys.exit(run("npm run dev:renderer"))
+        except KeyboardInterrupt:
+            print("\nStopped.")
+            sys.exit(0)
+
     if mode == "build":
         sys.exit(run("npm run build:renderer"))
 
-    # Default: dev
+    # ── Tauri dev modes ──────────────────────────────────────────────────────
+    if mode not in ("dev", "debug"):
+        print(f"\n  Unknown mode: {mode}")
+        print("  Valid: dev, debug, ui, functions, install, test, test:rust, build")
+        sys.exit(1)
+
     print()
     if not check_prerequisites():
         sys.exit(1)
@@ -103,13 +131,26 @@ def main():
     if code != 0:
         sys.exit("npm install failed.")
 
-    print("\nStarting Tauri dev environment...")
-    print("  Vite renderer  → http://localhost:5173")
-    print("  Tauri window   → opens automatically")
+    env = os.environ.copy()
+
+    if mode == "debug":
+        env["RUST_LOG"] = "debug"
+        env["RUST_BACKTRACE"] = "1"
+        print("\nStarting Tauri dev (DEBUG mode)...")
+        print("  RUST_LOG=debug  RUST_BACKTRACE=1")
+        print("  DevTools will open automatically")
+        print("  Watch the terminal for audio/Deepgram/window logs")
+    else:
+        print("\nStarting Tauri dev environment...")
+
+    print("  Vite renderer  -> http://localhost:5173")
+    print("  Tauri window   -> opens automatically")
     print("  (First run compiles Rust — takes a few minutes)\n")
 
     try:
-        code = run("npx tauri dev")
+        code = subprocess.run(
+            "npx tauri dev", cwd=ROOT, shell=True, env=env
+        ).returncode
         sys.exit(code)
     except KeyboardInterrupt:
         print("\nStopped.")

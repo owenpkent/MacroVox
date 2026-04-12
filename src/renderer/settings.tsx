@@ -49,7 +49,10 @@ function SettingsApp() {
   return (
     <ErrorBoundary>
       <ThemeProvider>
-        <SettingsPanel isOpen={true} onClose={() => window.close()} user={user} isPopup={true} />
+        <SettingsPanel isOpen={true} onClose={async () => {
+          const { getCurrentWindow } = await import('@tauri-apps/api/window')
+          getCurrentWindow().hide()
+        }} user={user} isPopup={true} />
       </ThemeProvider>
     </ErrorBoundary>
   )

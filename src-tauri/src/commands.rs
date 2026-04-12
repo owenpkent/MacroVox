@@ -12,6 +12,7 @@
 ///   ✅ Phase 6 — auth stubs removed; Supabase JS SDK used from renderer
 use std::collections::HashMap;
 use std::sync::Arc;
+use log::{debug, warn};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
@@ -68,6 +69,7 @@ pub fn audio_list_devices(state: State<AppState>) -> AudioDevicesResponse {
         .map(|iter| iter.filter_map(|d| d.name().ok()).collect())
         .unwrap_or_default();
     let selected = state.selected_mic_device.lock().unwrap().clone();
+    debug!("[audio] devices found: {:?}, selected: {:?}", devices, selected);
     AudioDevicesResponse { success: true, devices, selected, error: None }
 }
 
@@ -88,25 +90,42 @@ pub fn audio_start(state: State<AppState>) -> OkResponse {
 
     let host = cpal::default_host();
     let device_name = state.selected_mic_device.lock().unwrap().clone();
+    debug!("[audio] audio_start called, selected device: {:?}", device_name);
 
     // Find the requested device, or fall back to the system default.
     let device = if let Some(ref name) = device_name {
         host.input_devices()
             .ok()
             .and_then(|mut iter| iter.find(|d| d.name().ok().as_deref() == Some(name.as_str())))
-            .or_else(|| host.default_input_device())
+            .or_else(|| {
+                warn!("[audio] Device {:?} not found, falling back to default", name);
+                host.default_input_device()
+            })
     } else {
         host.default_input_device()
     };
 
     let device = match device {
-        Some(d) => d,
-        None => return OkResponse::err("No input device found"),
+        Some(d) => {
+            debug!("[audio] Using device: {:?}", d.name().unwrap_or_default());
+            d
+        }
+        None => {
+            warn!("[audio] No input device found!");
+            return OkResponse::err("No input device found");
+        }
     };
 
     let config = match device.default_input_config() {
-        Ok(c) => c,
-        Err(e) => return OkResponse::err(format!("Failed to get input config: {e}")),
+        Ok(c) => {
+            debug!("[audio] Input config: {:?}ch @ {}Hz, format={:?}",
+                   c.channels(), c.sample_rate().0, c.sample_format());
+            c
+        }
+        Err(e) => {
+            warn!("[audio] Failed to get input config: {e}");
+            return OkResponse::err(format!("Failed to get input config: {e}"));
+        }
     };
 
     // Persist stream parameters for WAV encoding in recording_stop.
@@ -122,12 +141,17 @@ pub fn audio_start(state: State<AppState>) -> OkResponse {
     match crate::audio::build_input_stream(&device, &config, level, buffer, is_recording, dg_sender) {
         Ok(stream) => {
             if let Err(e) = stream.play() {
+                warn!("[audio] Failed to start stream: {e}");
                 return OkResponse::err(format!("Failed to start stream: {e}"));
             }
+            debug!("[audio] Stream started successfully");
             *state.audio_stream.lock().unwrap() = Some(crate::state::AudioStream(stream));
             OkResponse::ok()
         }
-        Err(e) => OkResponse::err(format!("Failed to build audio stream: {e}")),
+        Err(e) => {
+            warn!("[audio] Failed to build audio stream: {e}");
+            OkResponse::err(format!("Failed to build audio stream: {e}"))
+        }
     }
 }
 
@@ -168,20 +192,39 @@ pub async fn deepgram_start(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<OkResponse, String> {
+    // Ensure the audio capture stream is running before opening the WebSocket.
+    // Without this the cpal callback never fires and Deepgram receives no audio.
+    {
+        let has_stream = state.audio_stream.lock().unwrap().is_some();
+        if !has_stream {
+            debug!("[deepgram] No audio stream running — starting one");
+            let res = audio_start(state.clone());
+            if !res.success {
+                warn!("[deepgram] Failed to start audio: {:?}", res.error);
+                return Ok(res);
+            }
+        }
+    }
+
     let sample_rate = *state.audio_sample_rate.lock().unwrap();
     let channels = *state.audio_channels.lock().unwrap();
     let keywords = state.deepgram_keywords.lock().unwrap().clone();
+    debug!("[deepgram] Starting session: {}Hz, {}ch, {} keywords, key={}...",
+           sample_rate, channels, keywords.len(),
+           if api_key.len() > 8 { &api_key[..8] } else { &api_key });
 
     match crate::deepgram_ws::start_session(&api_key, sample_rate, channels, &keywords, app).await {
         Ok(sender) => {
-            // Store sender before setting is_recording so the first callback
-            // frame is not missed.
+            debug!("[deepgram] WebSocket session established");
             *state.dg_sender.lock().unwrap() = Some(sender);
             state.recording_buffer.lock().unwrap().clear();
             *state.is_recording.lock().unwrap() = true;
             Ok(OkResponse::ok())
         }
-        Err(e) => Ok(OkResponse::err(e)),
+        Err(e) => {
+            warn!("[deepgram] Failed to start session: {e}");
+            Ok(OkResponse::err(e))
+        }
     }
 }
 
@@ -207,8 +250,19 @@ pub fn deepgram_stop(state: State<AppState>) -> OkResponse {
 // ── Buffered recording ✅ Phase 3 ─────────────────────────────────────────────
 
 /// Clears any stale buffer and signals the cpal callback to start accumulating.
+/// Starts the audio capture stream if it's not already running.
 #[tauri::command]
 pub fn recording_start(state: State<AppState>) -> OkResponse {
+    // Ensure audio stream is running
+    let has_stream = state.audio_stream.lock().unwrap().is_some();
+    if !has_stream {
+        debug!("[recording] No audio stream running — starting one");
+        let res = audio_start(state.clone());
+        if !res.success {
+            warn!("[recording] Failed to start audio: {:?}", res.error);
+            return res;
+        }
+    }
     state.recording_buffer.lock().unwrap().clear();
     *state.is_recording.lock().unwrap() = true;
     OkResponse::ok()
@@ -250,9 +304,8 @@ pub async fn recording_stop(
     let wav = crate::audio::pcm_to_wav(&samples, sample_rate, channels);
 
     // --- Upload to Deepgram pre-recorded API ---
-    // model=nova-2: best accuracy/speed balance as of 2025
     let mut url =
-        "https://api.deepgram.com/v1/listen?model=nova-2&punctuate=true&smart_format=true".to_string();
+        "https://api.deepgram.com/v1/listen?model=nova-3&punctuate=true&smart_format=true".to_string();
     for kw in &keywords {
         url.push_str(&format!("&keywords={}", urlencoding::encode(kw)));
     }

@@ -63,6 +63,25 @@ export interface ManagedKeysResult {
   error?: string
 }
 
+// ── Dev mode ─────────────────────────────────────────────────────────────────
+// When running locally via `python run.py functions`, bypass Supabase auth
+// and use API keys from .env directly. Never active in production builds.
+const DEV_MODE = import.meta.env.DEV && import.meta.env.VITE_DEV_MODE === 'true'
+
+const DEV_USER: AppUser = {
+  id: 'dev-local-user',
+  email: 'dev@localhost',
+  displayName: 'Local Dev',
+  avatarUrl: null,
+  authMethod: 'email',
+}
+
+const DEV_SUBSCRIPTION: SubscriptionInfo = {
+  status: 'pro',
+  expiresAt: null,
+  features: { managedApiKeys: true, voiceMinutes: 9999, aiRequests: 9999 },
+}
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 const DEFAULT_SUBSCRIPTION: SubscriptionInfo = {
@@ -91,6 +110,7 @@ function mapUser(user: User): AppUser {
  * since this is polled on a 5-second interval by DictationMode.
  */
 export async function getUser(): Promise<GetUserResult> {
+  if (DEV_MODE) return { success: true, user: DEV_USER }
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.user) return { success: false }
   return { success: true, user: mapUser(session.user) }
@@ -144,6 +164,7 @@ export async function resetPassword(email: string): Promise<OkResult> {
  * Returns free-tier defaults if the user has no subscription row.
  */
 export async function getSubscription(): Promise<GetSubscriptionResult> {
+  if (DEV_MODE) return { success: true, subscription: DEV_SUBSCRIPTION }
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.user) return { success: false, error: 'Not signed in' }
 
@@ -171,6 +192,11 @@ export async function getSubscription(): Promise<GetSubscriptionResult> {
  * `managed_api_keys` table.  Only provisioned for Pro/Team subscribers.
  */
 export async function getManagedKeys(): Promise<ManagedKeysResult> {
+  if (DEV_MODE) {
+    const dk = import.meta.env.VITE_DEEPGRAM_KEY || null
+    const ak = import.meta.env.VITE_ANTHROPIC_KEY || null
+    return { success: true, deepgramKey: dk, anthropicKey: ak, hasManagedKeys: !!(dk || ak) }
+  }
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.user) return { success: false, hasManagedKeys: false }
 
