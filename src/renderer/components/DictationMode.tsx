@@ -217,11 +217,9 @@ export function DictationMode() {
       setIsProcessing(false)
       if (result.success && result.transcript) {
         const rawSegment = result.transcript
-        let rawText = ''
-        setTranscript(prev => {
-          rawText = prev ? prev + ' ' + rawSegment : rawSegment
-          return rawText
-        })
+        const prevText = transcript
+        const rawText = prevText ? prevText + ' ' + rawSegment : rawSegment
+        setTranscript(rawText)
 
         if (autoCopyOnStop) {
           await ipc.copyToClipboard(rawText)

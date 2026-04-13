@@ -72,6 +72,9 @@ pub fn run() {
                         if let Some(win) = app_handle.get_webview_window("main") {
                             let _ = win.hide();
                         }
+                    } else {
+                        // Quit the entire app when the main window is closed
+                        app_handle.exit(0);
                     }
                 }
             });
