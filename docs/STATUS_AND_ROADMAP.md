@@ -219,6 +219,7 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 | [provider-selection-design.md](provider-selection-design.md) | Design doc for multi-provider STT selection |
 | [stt-provider-evaluation.md](stt-provider-evaluation.md) | STT provider evaluation notes |
 | [voice-memo-buffer-design.md](voice-memo-buffer-design.md) | Design doc for voice memo buffer + model training |
+| [distribution-flow.md](distribution-flow.md) | Build, sign, release, and auto-update pipeline |
 
 ---
 
