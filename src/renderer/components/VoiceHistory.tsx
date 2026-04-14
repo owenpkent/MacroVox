@@ -43,8 +43,8 @@ export function VoiceHistory() {
 
     setLoadingAudio(file)
     try {
-      const base64 = await ipc.voiceBufferGetAudio(file)
-      const audio = new Audio(`data:audio/wav;base64,${base64}`)
+      const { base64, mime } = await ipc.voiceBufferGetAudio(file)
+      const audio = new Audio(`data:${mime};base64,${base64}`)
       audio.onended = () => setPlayingFile(null)
       audioRef.current = audio
       await audio.play()

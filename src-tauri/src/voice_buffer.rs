@@ -118,11 +118,30 @@ pub fn evict_if_needed(
     }
 }
 
+/// Converts f32 PCM samples to i16 (clamped to [-1.0, 1.0]).
+fn f32_to_i16_samples(samples: &[f32]) -> Vec<i16> {
+    samples
+        .iter()
+        .map(|&s| (s.clamp(-1.0, 1.0) * i16::MAX as f32) as i16)
+        .collect()
+}
+
+/// Encodes f32 PCM samples as OGG Opus.
+///
+/// Uses the `ogg-opus` crate which handles both Opus encoding and OGG
+/// container in one step. Input must be 16kHz mono (the MacroVox default).
+/// Falls back to WAV if Opus encoding fails.
+fn encode_opus(samples: &[f32]) -> Result<Vec<u8>, String> {
+    let i16_samples = f32_to_i16_samples(samples);
+    ogg_opus::encode::<16000, 1>(&i16_samples)
+        .map_err(|e| format!("Opus encoding failed: {e}"))
+}
+
 /// Saves a new recording to the voice buffer.
 ///
-/// - Encodes `samples` as WAV using the existing `pcm_to_wav` function
+/// - Encodes `samples` as OGG Opus (~10x smaller than WAV)
 /// - Evicts old recordings if needed to stay within `max_size_bytes`
-/// - Writes the WAV file and updates the manifest
+/// - Writes the file and updates the manifest
 ///
 /// Returns the filename of the saved recording on success.
 pub fn save_recording(
@@ -141,14 +160,28 @@ pub fn save_recording(
     fs::create_dir_all(buffer_dir)
         .map_err(|e| format!("Failed to create voice buffer directory: {e}"))?;
 
+    // Encode as OGG Opus (falls back to WAV if encoding fails)
+    let (encoded_bytes, extension) = match encode_opus(samples) {
+        Ok(opus_bytes) => {
+            debug!("[voice_buffer] Opus encoded: {} samples → {} bytes ({:.0}x compression)",
+                samples.len() * 2, // WAV would be 2 bytes per sample + 44 header
+                opus_bytes.len(),
+                (samples.len() * 2) as f64 / opus_bytes.len().max(1) as f64,
+            );
+            (opus_bytes, "ogg")
+        }
+        Err(e) => {
+            warn!("[voice_buffer] Opus encoding failed, falling back to WAV: {e}");
+            (crate::audio::pcm_to_wav(samples, sample_rate, channels), "wav")
+        }
+    };
+
     // Generate timestamp-based filename with milliseconds for uniqueness
     let now = chrono::Local::now();
-    let filename = format!("{}.wav", now.format("%Y-%m-%dT%H-%M-%S%.3f"));
+    let filename = format!("{}.{}", now.format("%Y-%m-%dT%H-%M-%S%.3f"), extension);
     let file_path = buffer_dir.join(&filename);
 
-    // Encode as WAV
-    let wav_bytes = crate::audio::pcm_to_wav(samples, sample_rate, channels);
-    let file_size = wav_bytes.len() as u64;
+    let file_size = encoded_bytes.len() as u64;
 
     // Load manifest and apply max_size override if provided
     let mut manifest = load_manifest(buffer_dir);
@@ -159,9 +192,9 @@ pub fn save_recording(
     // Evict old recordings to make room
     evict_if_needed(buffer_dir, &mut manifest, file_size);
 
-    // Write the WAV file
-    fs::write(&file_path, &wav_bytes)
-        .map_err(|e| format!("Failed to write WAV file: {e}"))?;
+    // Write the encoded file
+    fs::write(&file_path, &encoded_bytes)
+        .map_err(|e| format!("Failed to write audio file: {e}"))?;
 
     let duration_secs = samples.len() as f64 / (sample_rate as f64 * channels as f64);
 
@@ -327,32 +360,40 @@ mod tests {
     }
 
     #[test]
-    fn save_recording_creates_wav_and_manifest() {
+    fn save_recording_creates_ogg_and_manifest() {
         let dir = temp_dir();
         let samples = vec![0.0f32; 16_000]; // 1 second at 16kHz mono
         let result = save_recording(&dir, &samples, 16_000, 1, "test transcript", None);
         assert!(result.is_ok());
 
         let filename = result.unwrap();
-        assert!(filename.ends_with(".wav"));
+        assert!(filename.ends_with(".ogg"), "Expected .ogg, got: {filename}");
         assert!(dir.join(&filename).exists());
 
         let manifest = load_manifest(&dir);
         assert_eq!(manifest.recordings.len(), 1);
         assert_eq!(manifest.recordings[0].transcript, "test transcript");
         assert!((manifest.recordings[0].duration_secs - 1.0).abs() < 0.01);
+
+        // OGG Opus should be much smaller than WAV (WAV = 32044 bytes for 1s @ 16kHz)
+        assert!(manifest.recordings[0].size_bytes < 10_000,
+            "OGG Opus should be much smaller than WAV, got {} bytes", manifest.recordings[0].size_bytes);
         cleanup(&dir);
     }
 
     #[test]
     fn eviction_removes_oldest_when_full() {
         let dir = temp_dir();
-        // Set a very small buffer (10 KB)
-        let small_max = 10 * 1024;
-        let samples = vec![0.0f32; 4000]; // ~8KB WAV
+        // Opus files are small (~1-2KB for short clips), so use a tiny buffer
+        let samples = vec![0.1f32; 16_000]; // 1 second of audio
 
-        // Save two recordings — second should evict first
-        let f1 = save_recording(&dir, &samples, 16_000, 1, "first", Some(small_max)).unwrap();
+        // Save one to measure the Opus file size
+        let f1 = save_recording(&dir, &samples, 16_000, 1, "first", Some(100 * 1024 * 1024)).unwrap();
+        let manifest = load_manifest(&dir);
+        let one_file_size = manifest.recordings[0].size_bytes;
+
+        // Set max to fit only one file — second should evict first
+        let small_max = one_file_size + 100; // room for one but not two
         let _f2 = save_recording(&dir, &samples, 16_000, 1, "second", Some(small_max)).unwrap();
 
         // First file should be evicted
@@ -394,6 +435,18 @@ mod tests {
         assert!(manifest.recordings.is_empty());
         assert_eq!(manifest.current_size_bytes, 0);
         cleanup(&dir);
+    }
+
+    #[test]
+    fn opus_encoding_compresses_significantly() {
+        // 5 seconds of audio at 16kHz mono
+        let samples: Vec<f32> = (0..80_000)
+            .map(|i| (i as f32 * 0.01).sin() * 0.5)
+            .collect();
+        let opus_bytes = encode_opus(&samples).unwrap();
+        let wav_size = samples.len() * 2 + 44; // i16 samples + WAV header
+        let ratio = wav_size as f64 / opus_bytes.len() as f64;
+        assert!(ratio > 5.0, "Expected >5x compression, got {ratio:.1}x (WAV={wav_size}, Opus={})", opus_bytes.len());
     }
 
     #[test]

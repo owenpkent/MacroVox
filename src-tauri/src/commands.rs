@@ -698,17 +698,30 @@ pub fn voice_buffer_info(state: State<AppState>) -> crate::voice_buffer::VoiceBu
     crate::voice_buffer::get_info(&dir, enabled)
 }
 
-/// Returns the WAV bytes of a recording as a base64-encoded string.
-/// This allows the frontend to play it via an HTML5 `<audio>` element.
+/// Returns audio bytes as base64 with MIME type for HTML5 `<audio>` playback.
+#[derive(serde::Serialize)]
+pub struct AudioDataResponse {
+    pub base64: String,
+    pub mime: String,
+}
+
 #[tauri::command]
 pub fn voice_buffer_get_audio(
     filename: String,
     state: State<AppState>,
-) -> Result<String, String> {
+) -> Result<AudioDataResponse, String> {
     use base64::Engine;
     let dir = lock_or_recover(&state.voice_buffer_dir).clone();
     let bytes = crate::voice_buffer::get_audio(&dir, &filename)?;
-    Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+    let mime = if filename.ends_with(".ogg") {
+        "audio/ogg"
+    } else {
+        "audio/wav"
+    };
+    Ok(AudioDataResponse {
+        base64: base64::engine::general_purpose::STANDARD.encode(&bytes),
+        mime: mime.to_string(),
+    })
 }
 
 /// Deletes a single recording from the voice buffer.

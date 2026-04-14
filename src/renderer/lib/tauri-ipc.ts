@@ -198,7 +198,12 @@ export const voiceBufferList = (): Promise<VoiceRecording[]> =>
 export const voiceBufferInfo = (): Promise<VoiceBufferInfo> =>
   invoke('voice_buffer_info')
 
-export const voiceBufferGetAudio = (filename: string): Promise<string> =>
+export interface AudioDataResult {
+  base64: string
+  mime: string
+}
+
+export const voiceBufferGetAudio = (filename: string): Promise<AudioDataResult> =>
   invoke('voice_buffer_get_audio', { filename })
 
 export const voiceBufferDelete = (filename: string): Promise<OkResult> =>
