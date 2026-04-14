@@ -369,13 +369,31 @@ pub async fn recording_stop(
         .and_then(|a| a.get(0));
 
     match alt {
-        Some(alt) => Ok(RecordingStopResponse {
-            success: true,
-            transcript: Some(alt["transcript"].as_str().unwrap_or("").to_string()),
-            confidence: alt["confidence"].as_f64(),
-            duration: Some(duration),
-            error: None,
-        }),
+        Some(alt) => {
+            let transcript_text = alt["transcript"].as_str().unwrap_or("").to_string();
+
+            // Auto-save to voice buffer if enabled
+            let vb_enabled = *lock_or_recover(&state.voice_buffer_enabled);
+            if vb_enabled && !transcript_text.is_empty() {
+                let dir = lock_or_recover(&state.voice_buffer_dir).clone();
+                let max_size = *lock_or_recover(&state.voice_buffer_max_size);
+                if !dir.as_os_str().is_empty() {
+                    if let Err(e) = crate::voice_buffer::save_recording(
+                        &dir, &samples, sample_rate, channels, &transcript_text, Some(max_size),
+                    ) {
+                        warn!("[voice_buffer] Auto-save failed: {e}");
+                    }
+                }
+            }
+
+            Ok(RecordingStopResponse {
+                success: true,
+                transcript: Some(transcript_text),
+                confidence: alt["confidence"].as_f64(),
+                duration: Some(duration),
+                error: None,
+            })
+        }
         None => Ok(RecordingStopResponse {
             success: false,
             transcript: None,
@@ -633,9 +651,116 @@ pub fn settings_broadcast(
         *lock_or_recover(&state.minimize_to_tray) = val == "true";
     }
 
+    if let Some(val) = settings.get("voice_buffer_enabled") {
+        *lock_or_recover(&state.voice_buffer_enabled) = val == "true";
+    }
+    if let Some(val) = settings.get("voice_buffer_max_size") {
+        if let Ok(size) = val.parse::<u64>() {
+            *lock_or_recover(&state.voice_buffer_max_size) = size;
+            let dir = lock_or_recover(&state.voice_buffer_dir).clone();
+            if !dir.as_os_str().is_empty() {
+                let _ = crate::voice_buffer::set_max_size(&dir, size);
+            }
+        }
+    }
+
     app.emit("settings-changed", &settings)
         .map(|_| OkResponse::ok())
         .unwrap_or_else(|e| OkResponse::err(e.to_string()))
+}
+
+// ── Voice buffer ─────────────────────────────────────────────────────────────
+
+/// Lists all voice buffer recordings (newest first).
+#[tauri::command]
+pub fn voice_buffer_list(state: State<AppState>) -> Vec<crate::voice_buffer::VoiceRecording> {
+    let dir = lock_or_recover(&state.voice_buffer_dir).clone();
+    if dir.as_os_str().is_empty() {
+        return Vec::new();
+    }
+    crate::voice_buffer::list_recordings(&dir)
+}
+
+/// Returns voice buffer info (size, count, etc.).
+#[tauri::command]
+pub fn voice_buffer_info(state: State<AppState>) -> crate::voice_buffer::VoiceBufferInfo {
+    let dir = lock_or_recover(&state.voice_buffer_dir).clone();
+    let enabled = *lock_or_recover(&state.voice_buffer_enabled);
+    if dir.as_os_str().is_empty() {
+        return crate::voice_buffer::VoiceBufferInfo {
+            enabled,
+            max_size_bytes: 0,
+            current_size_bytes: 0,
+            recording_count: 0,
+            total_duration_secs: 0.0,
+        };
+    }
+    crate::voice_buffer::get_info(&dir, enabled)
+}
+
+/// Returns the WAV bytes of a recording as a base64-encoded string.
+/// This allows the frontend to play it via an HTML5 `<audio>` element.
+#[tauri::command]
+pub fn voice_buffer_get_audio(
+    filename: String,
+    state: State<AppState>,
+) -> Result<String, String> {
+    use base64::Engine;
+    let dir = lock_or_recover(&state.voice_buffer_dir).clone();
+    let bytes = crate::voice_buffer::get_audio(&dir, &filename)?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+}
+
+/// Deletes a single recording from the voice buffer.
+#[tauri::command]
+pub fn voice_buffer_delete(
+    filename: String,
+    state: State<AppState>,
+) -> OkResponse {
+    let dir = lock_or_recover(&state.voice_buffer_dir).clone();
+    match crate::voice_buffer::delete_recording(&dir, &filename) {
+        Ok(()) => OkResponse::ok(),
+        Err(e) => OkResponse::err(e),
+    }
+}
+
+/// Clears all recordings from the voice buffer.
+#[tauri::command]
+pub fn voice_buffer_clear(state: State<AppState>) -> OkResponse {
+    let dir = lock_or_recover(&state.voice_buffer_dir).clone();
+    match crate::voice_buffer::clear_all(&dir) {
+        Ok(()) => OkResponse::ok(),
+        Err(e) => OkResponse::err(e),
+    }
+}
+
+/// Saves the current recording buffer to the voice buffer.
+/// Called automatically after recording_stop if voice buffer is enabled,
+/// or manually from the frontend.
+#[tauri::command]
+pub fn voice_buffer_save(
+    transcript: String,
+    state: State<AppState>,
+) -> OkResponse {
+    let enabled = *lock_or_recover(&state.voice_buffer_enabled);
+    if !enabled {
+        return OkResponse::err("Voice buffer is disabled");
+    }
+    let dir = lock_or_recover(&state.voice_buffer_dir).clone();
+    if dir.as_os_str().is_empty() {
+        return OkResponse::err("Voice buffer directory not initialized");
+    }
+    let samples = lock_or_recover(&state.recording_buffer).clone();
+    let sample_rate = *lock_or_recover(&state.audio_sample_rate);
+    let channels = *lock_or_recover(&state.audio_channels);
+    let max_size = *lock_or_recover(&state.voice_buffer_max_size);
+
+    match crate::voice_buffer::save_recording(
+        &dir, &samples, sample_rate, channels, &transcript, Some(max_size),
+    ) {
+        Ok(_filename) => OkResponse::ok(),
+        Err(e) => OkResponse::err(e),
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

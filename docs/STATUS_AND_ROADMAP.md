@@ -70,6 +70,7 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 - [x] Voice-reactive animation rings + waveform visualizer
 - [x] Single-instance lock
 - [x] Launch readiness hardening (race conditions, mutex poison recovery, fetch timeouts, streaming error handling)
+- [x] Voice memo buffer — rolling WAV buffer with playback, configurable size, FIFO eviction, manifest tracking
 
 ### Auth & Billing
 - [x] Supabase Auth integration (email/password)
@@ -159,7 +160,7 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 
 ### Medium-term
 - [ ] **Multi-provider STT** — selectable dictation provider (Deepgram, OpenAI Whisper, ElevenLabs Scribe) — see [provider-selection-design.md](provider-selection-design.md)
-- [ ] **Voice memo buffer** — rolling ~100 MB buffer of recent recordings for playback and model training — see [voice-memo-buffer-design.md](voice-memo-buffer-design.md)
+- [x] **Voice memo buffer** — rolling WAV buffer with playback and manifest (v1 uses WAV, Opus compression planned) — see [voice-memo-buffer-design.md](voice-memo-buffer-design.md)
 - [ ] **Agentic Writing tab** — speak a request, Claude generates the content (deferred from v1 launch)
 - [ ] **macOS support** — cpal audio capture on macOS
 - [ ] **Linux support** — PulseAudio/PipeWire capture
@@ -235,6 +236,7 @@ MacroVox/
 │   │   ├── commands.rs      # IPC commands (audio, recording, clipboard, paste)
 │   │   ├── audio.rs         # cpal WASAPI native audio capture
 │   │   ├── deepgram_ws.rs   # Deepgram WebSocket streaming
+│   │   ├── voice_buffer.rs  # Voice memo rolling buffer (WAV storage + manifest)
 │   │   └── state.rs         # Shared app state (Mutex-wrapped)
 │   ├── capabilities/        # Tauri 2 permission capabilities
 │   ├── Cargo.toml

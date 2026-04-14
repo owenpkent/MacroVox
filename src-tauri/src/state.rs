@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
@@ -87,6 +88,18 @@ pub struct AppState {
     /// `Arc` so the cpal capture callback can hold a clone without borrowing
     /// `AppState` (which is not available in the callback closure).
     pub dg_sender: Arc<Mutex<Option<DgSender>>>,
+
+    // ── Voice buffer ─────────────────────────────────────────────────────────
+
+    /// Directory where voice memo WAV files and manifest are stored.
+    /// Set during app setup to `%LOCALAPPDATA%/com.okstudio.macrovox/voice-buffer/`.
+    pub voice_buffer_dir: Mutex<PathBuf>,
+
+    /// Whether the voice buffer feature is enabled (opt-in).
+    pub voice_buffer_enabled: Mutex<bool>,
+
+    /// Maximum voice buffer size in bytes (default 100 MB).
+    pub voice_buffer_max_size: Mutex<u64>,
 }
 
 impl Default for AppState {
@@ -104,6 +117,9 @@ impl Default for AppState {
             audio_channels: Mutex::new(1),
             deepgram_keywords: Mutex::new(Vec::new()),
             dg_sender: Arc::new(Mutex::new(None)),
+            voice_buffer_dir: Mutex::new(PathBuf::new()),
+            voice_buffer_enabled: Mutex::new(false),
+            voice_buffer_max_size: Mutex::new(100 * 1024 * 1024), // 100 MB
         }
     }
 }
@@ -157,6 +173,14 @@ mod tests {
     fn state_dg_sender_is_none_by_default() {
         let state = AppState::default();
         assert!(state.dg_sender.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn state_voice_buffer_defaults() {
+        let state = AppState::default();
+        assert!(!*state.voice_buffer_enabled.lock().unwrap());
+        assert_eq!(*state.voice_buffer_max_size.lock().unwrap(), 100 * 1024 * 1024);
+        assert!(state.voice_buffer_dir.lock().unwrap().as_os_str().is_empty());
     }
 
     #[test]

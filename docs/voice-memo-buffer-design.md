@@ -1,5 +1,7 @@
 # Voice Memo Buffer — Design Document
 
+**Status**: v1 implemented (WAV storage). Opus compression and model training integration are future work.
+
 ## Idea
 
 MacroVox already captures audio for every dictation session. Instead of discarding the raw audio after transcription, retain a rolling buffer of the user's most recent voice data (capped at ~100 MB). This serves two purposes:

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Settings, Mic, X, RefreshCw, Sparkles, Loader2, CreditCard, MessageSquare, Pin, Palette, LogIn, User } from 'lucide-react'
+import { Settings, Mic, X, RefreshCw, Sparkles, Loader2, CreditCard, MessageSquare, Pin, Palette, LogIn, User, HardDrive, Trash2 } from 'lucide-react'
 import { THEMES, getStoredTheme, setStoredTheme } from '../themes'
+import { VoiceHistory } from './VoiceHistory'
 import * as ipc from '../lib/tauri-ipc'
 import type { AppUser } from '../lib/tauri-ipc'
 import * as auth from '../lib/auth'
@@ -61,6 +62,18 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
     localStorage.getItem('deepgram_keywords') || ''
   )
   const [selectedTheme, setSelectedTheme] = useState(() => getStoredTheme())
+  const [voiceBufferEnabled, setVoiceBufferEnabled] = useState(() =>
+    localStorage.getItem('voice_buffer_enabled') === 'true'
+  )
+  const [voiceBufferMaxSize, setVoiceBufferMaxSize] = useState(() =>
+    localStorage.getItem('voice_buffer_max_size') || String(100 * 1024 * 1024)
+  )
+  const [voiceBufferInfo, setVoiceBufferInfo] = useState<ipc.VoiceBufferInfo | null>(null)
+
+  // Load voice buffer info
+  useEffect(() => {
+    ipc.voiceBufferInfo().then(setVoiceBufferInfo).catch(() => {})
+  }, [voiceBufferEnabled])
 
   const handleEmailAuth = async () => {
     if (!authEmail || !authPassword) return
@@ -520,6 +533,76 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
                   </div>
                 </label>
               ))}
+            </div>
+          </section>
+
+          {/* Voice Buffer */}
+          <section>
+            <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
+              <HardDrive size={16} style={{ color: 'var(--accent-secondary)' }} />
+              Voice Buffer
+            </h3>
+            <div className="space-y-3">
+              <label className="flex items-center justify-between cursor-pointer">
+                <div>
+                  <span className="text-sm text-slate-200">Save recordings</span>
+                  <p className="text-xs text-slate-500">Keep recent audio for playback and model training</p>
+                </div>
+                <div
+                  onClick={() => {
+                    const next = !voiceBufferEnabled
+                    setVoiceBufferEnabled(next)
+                    saveSetting('voice_buffer_enabled', String(next))
+                  }}
+                  className="w-10 h-5 rounded-full transition-colors cursor-pointer"
+                  style={{ backgroundColor: voiceBufferEnabled ? 'var(--accent-primary)' : 'var(--bg-tertiary)' }}
+                >
+                  <div className={`w-4 h-4 rounded-full bg-white mt-0.5 transition-transform ${voiceBufferEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </div>
+              </label>
+
+              {voiceBufferEnabled && (
+                <>
+                  <div>
+                    <span className="text-sm text-slate-200">Buffer size</span>
+                    <select
+                      value={voiceBufferMaxSize}
+                      onChange={(e) => {
+                        setVoiceBufferMaxSize(e.target.value)
+                        saveSetting('voice_buffer_max_size', e.target.value)
+                      }}
+                      className="w-full mt-1 px-3 py-1.5 rounded text-sm focus:outline-none"
+                      style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
+                    >
+                      <option value={String(50 * 1024 * 1024)}>50 MB (~26 min)</option>
+                      <option value={String(100 * 1024 * 1024)}>100 MB (~53 min)</option>
+                      <option value={String(250 * 1024 * 1024)}>250 MB (~2.2 hr)</option>
+                      <option value={String(500 * 1024 * 1024)}>500 MB (~4.4 hr)</option>
+                    </select>
+                  </div>
+
+                  {voiceBufferInfo && voiceBufferInfo.recording_count > 0 && (
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {voiceBufferInfo.recording_count} recording{voiceBufferInfo.recording_count !== 1 ? 's' : ''} · {(voiceBufferInfo.current_size_bytes / (1024 * 1024)).toFixed(1)} / {(voiceBufferInfo.max_size_bytes / (1024 * 1024)).toFixed(0)} MB
+                      </p>
+                      <button
+                        onClick={async () => {
+                          await ipc.voiceBufferClear()
+                          const info = await ipc.voiceBufferInfo()
+                          setVoiceBufferInfo(info)
+                        }}
+                        className="flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-red-900/40 transition-colors"
+                        style={{ color: '#f87171' }}
+                      >
+                        <Trash2 size={12} /> Clear all
+                      </button>
+                    </div>
+                  )}
+
+                  <VoiceHistory />
+                </>
+              )}
             </div>
           </section>
 

@@ -2,11 +2,13 @@ mod audio;
 mod commands;
 mod deepgram_ws;
 mod state;
+mod voice_buffer;
 
 use commands::*;
 use state::AppState;
 use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use log::debug;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -47,6 +49,14 @@ pub fn run() {
             // Register Ctrl+Space global shortcut
             app.global_shortcut()
                 .register(Shortcut::new(Some(Modifiers::CONTROL), Code::Space))?;
+
+            // Initialize voice buffer directory
+            if let Some(app_data) = app.path().app_local_data_dir().ok() {
+                let voice_dir = app_data.join("voice-buffer");
+                debug!("[setup] Voice buffer directory: {:?}", voice_dir);
+                let state = app.state::<AppState>();
+                *state.voice_buffer_dir.lock().unwrap() = voice_dir;
+            }
 
             // Minimize-to-tray close handler: intercept the close event on the
             // main window and hide instead of destroying if the setting is on.
@@ -141,6 +151,13 @@ pub fn run() {
             // Theme & settings broadcast
             theme_broadcast,
             settings_broadcast,
+            // Voice buffer
+            voice_buffer_list,
+            voice_buffer_info,
+            voice_buffer_get_audio,
+            voice_buffer_delete,
+            voice_buffer_clear,
+            voice_buffer_save,
         ])
         .run(tauri::generate_context!())
         .expect("error while running MacroVox");

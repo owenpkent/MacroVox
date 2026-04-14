@@ -45,6 +45,10 @@ whisper-rs = { version = "0.10", optional = true }
 # Phase 5: replace PowerShell SendKeys paste (~700ms) with native input
 enigo = "0.2"
 
+# Voice buffer: timestamps + base64 encoding for audio playback
+chrono = "0.4"
+base64 = "0.22"
+
 # Debug logging (activate with RUST_LOG=debug)
 log = "0.4"
 env_logger = "0.11"

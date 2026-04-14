@@ -174,6 +174,42 @@ export const broadcastSettings = (
   settings: Record<string, string>,
 ): Promise<OkResult> => invoke('settings_broadcast', { settings })
 
+// ── Voice buffer ─────────────────────────────────────────────────────────────
+
+export interface VoiceRecording {
+  file: string
+  timestamp: string
+  duration_secs: number
+  size_bytes: number
+  transcript: string
+}
+
+export interface VoiceBufferInfo {
+  enabled: boolean
+  max_size_bytes: number
+  current_size_bytes: number
+  recording_count: number
+  total_duration_secs: number
+}
+
+export const voiceBufferList = (): Promise<VoiceRecording[]> =>
+  invoke('voice_buffer_list')
+
+export const voiceBufferInfo = (): Promise<VoiceBufferInfo> =>
+  invoke('voice_buffer_info')
+
+export const voiceBufferGetAudio = (filename: string): Promise<string> =>
+  invoke('voice_buffer_get_audio', { filename })
+
+export const voiceBufferDelete = (filename: string): Promise<OkResult> =>
+  invoke('voice_buffer_delete', { filename })
+
+export const voiceBufferClear = (): Promise<OkResult> =>
+  invoke('voice_buffer_clear')
+
+export const voiceBufferSave = (transcript: string): Promise<OkResult> =>
+  invoke('voice_buffer_save', { transcript })
+
 // ── Events ────────────────────────────────────────────────────────────────────
 
 export const onQuickDictationStart = (callback: () => void): () => void =>

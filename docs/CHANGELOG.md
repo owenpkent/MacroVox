@@ -1,10 +1,14 @@
 # MacroVox Changelog
 
-## Unreleased — Launch Readiness Hardening
+## Unreleased — Launch Readiness Hardening + Voice Buffer
+
+### New Features
+- **Voice memo buffer** — opt-in rolling buffer that saves dictation recordings as WAV files for playback and future model training. Configurable size (50–500 MB, default 100 MB). FIFO eviction deletes oldest recordings when the buffer is full. Recordings are paired with their transcripts in a JSON manifest. Playback via HTML5 audio in the settings panel. Auto-saves on batch recording stop; streaming mode saves via frontend call.
 
 ### UI
 - **Writing tab removed** — Agentic Writing tab and settings section removed from the UI for initial release. Source files kept in repo for potential re-addition later.
 - **Processing ring removed** — Removed the spinning cyan ring around the record button during transcript processing.
+- **Voice buffer settings** — New "Voice Buffer" section in settings with enable toggle, buffer size selector, usage stats, clear button, and recording history with playback controls.
 
 ### Stability
 - **Race condition on rapid start/stop fixed** — Added `operationInProgressRef` guard to prevent concurrent `handleStartRecording`, `handleStopRecording`, and `handleStopAndCopy` calls from overlapping when the record button is clicked rapidly.
