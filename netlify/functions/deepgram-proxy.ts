@@ -31,8 +31,9 @@ const ALLOWED_MODELS = ['nova-3', 'nova-2', 'nova-2-general', 'nova', 'enhanced'
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000 // 1 hour
 const RATE_LIMIT_MAX_CALLS = 300 // per user per hour (higher than claude — audio is lighter)
 
-// Local dev: skip auth when running under `netlify dev` with DEV_BYPASS_AUTH=true
-const isDevBypass = process.env.DEV_BYPASS_AUTH === 'true'
+// Local dev: skip auth when running under `netlify dev` with DEV_BYPASS_AUTH=true.
+// Safety: never allow bypass in production deploys.
+const isDevBypass = process.env.DEV_BYPASS_AUTH === 'true' && process.env.CONTEXT !== 'production'
 
 export const handler: Handler = async (event) => {
   const origin = (event.headers['origin'] ?? '').toLowerCase()
@@ -136,7 +137,9 @@ export const handler: Handler = async (event) => {
       }
     }
 
-    supabase.from('api_usage').insert({ user_id: user.id, service: 'deepgram' }).then(() => {})
+    supabase.from('api_usage').insert({ user_id: user.id, service: 'deepgram' })
+      .then(() => {})
+      .catch(err => console.error('[deepgram-proxy] Failed to log API usage:', err))
   }
 
   const deepgramKey = process.env.DEEPGRAM_MANAGED_KEY

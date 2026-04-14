@@ -1,6 +1,6 @@
 # MacroVox — Status & Roadmap
 
-**Last Updated**: April 11, 2026 — Security audit + pre-launch speed pass  
+**Last Updated**: April 14, 2026 — Launch readiness hardening + Writing tab deferred  
 **Repository**: https://github.com/owenpkent/MacroVox
 
 ---
@@ -14,7 +14,7 @@
 A premium, managed voice dictation experience — no API keys to configure, no setup friction. Users sign in, subscribe via Stripe, and start dictating immediately. All infrastructure (Deepgram, Claude, auth) is managed server-side.
 
 **Core Features**:
-- Real-time voice transcription (Deepgram nova-2, streaming default) with batch fallback
+- Real-time voice transcription (Deepgram nova-3, streaming default) with batch fallback
 - AI post-processing transcript cleanup (Claude Haiku — fast, non-blocking) — always on for Pro subscribers
 - Global hotkey (`Ctrl+Space`) for instant dictation from any app
 - Auto-copy, auto-paste, keyword boosting
@@ -69,6 +69,7 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 - [x] Auto-cutoff (15/30/45/60 seconds)
 - [x] Voice-reactive animation rings + waveform visualizer
 - [x] Single-instance lock
+- [x] Launch readiness hardening (race conditions, mutex poison recovery, fetch timeouts, streaming error handling)
 
 ### Auth & Billing
 - [x] Supabase Auth integration (email/password)
@@ -84,7 +85,7 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 - [x] `supabase/functions/stripe-webhook` — provision/deprovision keys on subscription events (Supabase Edge Function)
 - [x] `netlify/functions/claude-proxy` — authenticated Claude AI proxy for Pro subscribers
 - [x] `netlify/functions/deepgram-proxy` — authenticated Deepgram proxy (future use)
-- [x] Bearer token auth in `usePostProcessing` and `useAgentiveWriting` hooks
+- [x] Bearer token auth in `usePostProcessing` hook
 
 ---
 
@@ -157,7 +158,9 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 - [ ] **Usage limits** — enforce Pro tier quotas
 
 ### Medium-term
-- [ ] **macOS support** — ffmpeg audio capture on macOS
+- [ ] **Multi-provider STT** — selectable dictation provider (Deepgram, OpenAI Whisper, ElevenLabs Scribe) — see [provider-selection-design.md](provider-selection-design.md)
+- [ ] **Agentic Writing tab** — speak a request, Claude generates the content (deferred from v1 launch)
+- [ ] **macOS support** — cpal audio capture on macOS
 - [ ] **Linux support** — PulseAudio/PipeWire capture
 - [ ] **Team tier** — shared billing for organizations
 - [ ] **Custom vocabulary training** — domain-specific term recognition
@@ -211,6 +214,8 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 | [SETUP.md](SETUP.md) | Backend setup guide (Supabase + Netlify + Stripe) |
 | [STATUS_AND_ROADMAP.md](STATUS_AND_ROADMAP.md) | This document — status and roadmap |
 | [CHANGELOG.md](CHANGELOG.md) | Detailed release history |
+| [provider-selection-design.md](provider-selection-design.md) | Design doc for multi-provider STT selection |
+| [stt-provider-evaluation.md](stt-provider-evaluation.md) | STT provider evaluation notes |
 
 ---
 
@@ -234,7 +239,7 @@ MacroVox/
 │   └── tauri.conf.json      # Tauri config (windows, build, plugins)
 ├── src/
 │   └── renderer/            # React UI (Vite + Tailwind)
-│       ├── components/      # DictationMode, SettingsPanel, AgentiveWriting
+│       ├── components/      # DictationMode, SettingsPanel
 │       ├── hooks/           # usePostProcessing
 │       ├── lib/             # tauri-ipc, auth (Supabase JS), supabase client
 │       ├── themes.ts        # 6 themed color schemes
@@ -256,8 +261,8 @@ MacroVox/
 |-------|-----------|
 | **App** | Tauri 2, React 18, Vite 6, Tailwind 3 |
 | **Backend** | Rust (cpal WASAPI audio, enigo paste, reqwest HTTP) |
-| **Speech-to-Text** | Deepgram nova-2 (WebSocket streaming default, batch fallback) |
-| **AI Post-Processing** | Claude Haiku (cleanup) + Claude Sonnet (agentic writing), via Netlify proxy |
+| **Speech-to-Text** | Deepgram nova-3 (WebSocket streaming default, batch fallback) |
+| **AI Post-Processing** | Claude Haiku (transcript cleanup), via Netlify proxy |
 | **Auth** | Supabase Auth JS SDK (email/password; OAuth planned) |
 | **Database** | Supabase (PostgreSQL) |
 | **Billing** | Stripe (subscriptions) |

@@ -118,6 +118,10 @@ export const onTranscript = (
   callback: (data: TranscriptEvent) => void,
 ): () => void => makeListener('deepgram:transcript', callback)
 
+export const onStreamingError = (
+  callback: (data: { error: string }) => void,
+): () => void => makeListener('deepgram:error', callback)
+
 // ── Buffered recording ────────────────────────────────────────────────────────
 
 export const startRecording = (): Promise<OkResult> =>

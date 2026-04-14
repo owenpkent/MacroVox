@@ -1,16 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Mic, MicOff, Copy, Check, Trash2, Loader2, Settings, Minus, X } from 'lucide-react'
 import { usePostProcessing } from '../hooks/usePostProcessing'
-import { AgentiveWriting } from './AgentiveWriting'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import * as ipc from '../lib/tauri-ipc'
 import type { AppUser } from '../lib/tauri-ipc'
 import * as auth from '../lib/auth'
 
-type Tab = 'dictate' | 'write'
-
 export function DictationMode() {
-  const [activeTab, setActiveTab] = useState<Tab>('dictate')
   const [isRecording, setIsRecording] = useState(false)
   const [isPreparing, setIsPreparing] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -24,6 +20,7 @@ export function DictationMode() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const autoStopTimerRef = useRef<NodeJS.Timeout | null>(null)
   const audioLevelIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const operationInProgressRef = useRef(false)
 
   // Quick Dictation settings from localStorage
   const [autoCopyOnStop, setAutoCopyOnStop] = useState(() =>
@@ -69,16 +66,17 @@ export function DictationMode() {
     return cleanup
   }, [])
 
-  // Cleanup auto-stop timer on unmount
+  // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current)
+      if (audioLevelIntervalRef.current) clearInterval(audioLevelIntervalRef.current)
     }
   }, [])
 
   // Listen for streaming transcripts from Deepgram
   useEffect(() => {
-    const cleanup = ipc.onTranscript(({ transcript: text, isFinal }) => {
+    const cleanupTranscript = ipc.onTranscript(({ transcript: text, isFinal }) => {
       if (isFinal && text) {
         streamingTranscriptRef.current = streamingTranscriptRef.current
           ? streamingTranscriptRef.current + ' ' + text
@@ -86,7 +84,16 @@ export function DictationMode() {
         setTranscript(streamingTranscriptRef.current)
       }
     })
-    return cleanup
+    const cleanupError = ipc.onStreamingError(({ error }) => {
+      setError(error)
+      setIsRecording(false)
+      setAudioLevel(0)
+      if (audioLevelIntervalRef.current) {
+        clearInterval(audioLevelIntervalRef.current)
+        audioLevelIntervalRef.current = null
+      }
+    })
+    return () => { cleanupTranscript(); cleanupError() }
   }, [])
 
   const loadApiKey = useCallback(async () => {
@@ -132,7 +139,8 @@ export function DictationMode() {
   }, [loadApiKey, user])
 
   const handleStartRecording = async () => {
-    if (!apiKey) return
+    if (!apiKey || operationInProgressRef.current) return
+    operationInProgressRef.current = true
     setError(null)
 
     if (clearOnNewRecording) {
@@ -143,25 +151,26 @@ export function DictationMode() {
     setIsPreparing(true)
     setAudioLevel(0)
 
-    if (transcriptionMode === 'streaming') {
-      if (!clearOnNewRecording) streamingTranscriptRef.current = transcript || ''
-      const result = await ipc.startDeepgram(apiKey)
-      if (!result.success) {
-        setError(result.error || 'Failed to start streaming')
-        setIsPreparing(false)
-        return
+    try {
+      if (transcriptionMode === 'streaming') {
+        if (!clearOnNewRecording) streamingTranscriptRef.current = transcript || ''
+        const result = await ipc.startDeepgram(apiKey)
+        if (!result.success) {
+          setError(result.error || 'Failed to start streaming')
+          setIsPreparing(false)
+          return
+        }
+      } else {
+        const result = await ipc.startRecording()
+        if (!result.success) {
+          setError(result.error || 'Failed to start')
+          setIsPreparing(false)
+          return
+        }
       }
-    } else {
-      const result = await ipc.startRecording()
-      if (!result.success) {
-        setError(result.error || 'Failed to start')
-        setIsPreparing(false)
-        return
-      }
-    }
 
-    setIsPreparing(false)
-    setIsRecording(true)
+      setIsPreparing(false)
+      setIsRecording(true)
 
     audioLevelIntervalRef.current = setInterval(async () => {
       const level = await ipc.getAudioLevel()
@@ -177,11 +186,16 @@ export function DictationMode() {
         streamingTranscriptRef.current = ''
       }, durationMs)
     }
+    } finally {
+      operationInProgressRef.current = false
+    }
   }
 
   const handleStopRecording = async () => {
-    if (!apiKey) return
+    if (!apiKey || operationInProgressRef.current) return
+    operationInProgressRef.current = true
 
+    try {
     if (autoStopTimerRef.current) {
       clearTimeout(autoStopTimerRef.current)
       autoStopTimerRef.current = null
@@ -251,6 +265,9 @@ export function DictationMode() {
         setError(result.error)
       }
     }
+    } finally {
+      operationInProgressRef.current = false
+    }
   }
 
   const handleCopy = async () => {
@@ -300,8 +317,10 @@ export function DictationMode() {
   }, [apiKey, isRecording, isPreparing, isProcessing])
 
   const handleStopAndCopy = async () => {
-    if (!apiKey) return
+    if (!apiKey || operationInProgressRef.current) return
+    operationInProgressRef.current = true
 
+    try {
     if (autoStopTimerRef.current) {
       clearTimeout(autoStopTimerRef.current)
       autoStopTimerRef.current = null
@@ -343,6 +362,9 @@ export function DictationMode() {
       }
     } else if (!result.success && result.error) {
       setError(result.error)
+    }
+    } finally {
+      operationInProgressRef.current = false
     }
   }
 
@@ -393,29 +415,8 @@ export function DictationMode() {
         </div>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex gap-3 mb-1 border-b" style={{ borderColor: 'var(--border-primary)' }}>
-        {(['dictate', 'write'] as Tab[]).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className="pb-1 text-[10px] uppercase tracking-widest transition-colors"
-            style={{
-              color:        activeTab === tab ? 'var(--accent-primary)' : 'var(--text-muted)',
-              borderBottom: activeTab === tab ? '1px solid var(--accent-primary)' : '1px solid transparent',
-              marginBottom: '-1px',
-            }}
-          >
-            {tab === 'dictate' ? 'Dictate' : 'Write'}
-          </button>
-        ))}
-      </div>
-
-      {/* Write tab */}
-      {activeTab === 'write' && <AgentiveWriting user={user} apiKey={apiKey} />}
-
       {/* Main content */}
-      {activeTab === 'dictate' && <>
+      <>
       <div className="shrink-0 flex flex-col items-center justify-center gap-3 pt-2">
         {/* Error */}
         {error && (
@@ -426,10 +427,6 @@ export function DictationMode() {
 
         {/* Record button */}
         <div className="relative flex items-center justify-center" style={{ width: 80, height: 80 }}>
-
-          {isProcessing && (
-            <div className="absolute inset-1 rounded-full border-2 border-cyan-500/50 animate-spin" style={{ animationDuration: '1s' }} />
-          )}
 
           {isPreparing && (
             <div className="absolute inset-1 rounded-full border-2 border-amber-500/50 animate-spin" style={{ borderStyle: 'dashed', animationDuration: '1.5s' }} />
@@ -535,7 +532,7 @@ export function DictationMode() {
           </button>
         </div>
       </div>
-      </>}
+      </>
 
     </div>
   )

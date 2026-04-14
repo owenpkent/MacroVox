@@ -1,5 +1,27 @@
 # MacroVox Changelog
 
+## Unreleased — Launch Readiness Hardening
+
+### UI
+- **Writing tab removed** — Agentic Writing tab and settings section removed from the UI for initial release. Source files kept in repo for potential re-addition later.
+- **Processing ring removed** — Removed the spinning cyan ring around the record button during transcript processing.
+
+### Stability
+- **Race condition on rapid start/stop fixed** — Added `operationInProgressRef` guard to prevent concurrent `handleStartRecording`, `handleStopRecording`, and `handleStopAndCopy` calls from overlapping when the record button is clicked rapidly.
+- **Mutex poison recovery** — All `.lock().unwrap()` calls in `audio.rs` and `commands.rs` replaced with `lock_or_recover()` helper that recovers from poisoned mutexes instead of panicking the app.
+- **Audio level interval cleaned up on unmount** — `audioLevelIntervalRef` is now cleared when the dictation component unmounts, preventing leaked polling intervals.
+- **AI cleanup fetch timeout** — `usePostProcessing` now uses an `AbortController` with a 15-second timeout. Previously could hang indefinitely if the proxy was slow or offline.
+- **Global unhandled promise rejection handler** — Both `dictation.tsx` and `settings.tsx` entry points now catch unhandled rejections to prevent silent failures.
+- **Streaming network failure surfaced to user** — WebSocket task now emits a `deepgram:error` event on unexpected disconnection. Frontend listens and shows error, stops recording state, cleans up intervals.
+
+### Security
+- **Dev bypass flags hardened for production** — Netlify proxy functions now check `process.env.CONTEXT !== 'production'` in addition to `DEV_BYPASS_AUTH`, preventing accidental bypass on production deploys.
+- **API usage logging errors caught** — Fire-and-forget `.insert()` calls in both proxy functions now have `.catch()` handlers to log failures instead of silently swallowing them.
+- **API key removed from debug logs** — `deepgram_start` no longer logs the first 8 characters of the API key.
+- **Deepgram response validation** — `recording_stop` now checks HTTP status before parsing, validates JSON structure with `.get()` chains, and returns proper error messages on non-2xx or malformed responses. Previously treated error responses as empty successful transcriptions.
+
+---
+
 ## Unreleased — Security Hardening + Pre-Launch Fixes
 
 ### Fixes

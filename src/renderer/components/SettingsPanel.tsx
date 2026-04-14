@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings, Mic, X, RefreshCw, Sparkles, Loader2, CreditCard, MessageSquare, Pin, Palette, LogIn, User, PenLine } from 'lucide-react'
+import { Settings, Mic, X, RefreshCw, Sparkles, Loader2, CreditCard, MessageSquare, Pin, Palette, LogIn, User } from 'lucide-react'
 import { THEMES, getStoredTheme, setStoredTheme } from '../themes'
 import * as ipc from '../lib/tauri-ipc'
 import type { AppUser } from '../lib/tauri-ipc'
@@ -60,10 +60,6 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
   const [keywordBoosts, setKeywordBoosts] = useState(() =>
     localStorage.getItem('deepgram_keywords') || ''
   )
-  const [writingStyleProfile, setWritingStyleProfile] = useState(() =>
-    localStorage.getItem('writing_style_profile') || ''
-  )
-
   const [selectedTheme, setSelectedTheme] = useState(() => getStoredTheme())
 
   const handleEmailAuth = async () => {
@@ -492,29 +488,6 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
                   onChange={(e) => { setPostProcessingContext(e.target.value); saveSetting('post_processing_context', e.target.value) }}
                   placeholder={"e.g. I have a speech impediment that affects 'r' and 'l' sounds."}
                   rows={3}
-                  className="w-full px-3 py-2 rounded text-sm focus:outline-none resize-none"
-                  style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
-                />
-              </div>
-            </div>
-          </section>
-
-          {/* Agentic Writing */}
-          <section>
-            <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
-              <PenLine size={16} style={{ color: 'var(--accent-secondary)' }} />
-              Agentic Writing
-            </h3>
-            <div className="space-y-3">
-              <p className="text-xs text-slate-500">Speak a request and Claude generates the full content.</p>
-              <div>
-                <span className="text-sm text-slate-200">Writing style profile</span>
-                <p className="text-xs text-slate-500 mb-2">Describe your voice, tone, and preferences</p>
-                <textarea
-                  value={writingStyleProfile}
-                  onChange={(e) => { setWritingStyleProfile(e.target.value); saveSetting('writing_style_profile', e.target.value) }}
-                  placeholder={'e.g. I write casually but precisely. Short sentences.'}
-                  rows={4}
                   className="w-full px-3 py-2 rounded text-sm focus:outline-none resize-none"
                   style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
                 />

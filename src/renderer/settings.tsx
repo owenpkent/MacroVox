@@ -10,6 +10,11 @@ import type { AppUser } from './lib/auth'
 import { getUser } from './lib/auth'
 import './index.css'
 
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[UnhandledRejection]', event.reason)
+  event.preventDefault()
+})
+
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
   state = { error: null as string | null }
   static getDerivedStateFromError(error: Error) {

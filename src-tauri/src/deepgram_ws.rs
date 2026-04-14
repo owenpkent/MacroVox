@@ -114,6 +114,7 @@ pub async fn start_session(
     // Spawn the background task that forwards PCM → WebSocket and
     // WebSocket transcript events → Tauri events.
     tokio::spawn(async move {
+        let mut graceful = false;
         loop {
             tokio::select! {
                 // ── Outbound: PCM bytes or control messages ────────────────
@@ -126,6 +127,7 @@ pub async fn start_session(
                             }
                         }
                         Some(DgMessage::Stop) | None => {
+                            graceful = true;
                             // Graceful close: tell Deepgram we are done.
                             let _ = ws_sink
                                 .send(Message::Text(
@@ -151,6 +153,12 @@ pub async fn start_session(
                     }
                 }
             }
+        }
+
+        if !graceful {
+            let _ = app.emit("deepgram:error", serde_json::json!({
+                "error": "Connection lost — recording may be incomplete"
+            }));
         }
 
         // Drain any remaining messages after sending CloseStream so Deepgram

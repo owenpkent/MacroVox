@@ -6,9 +6,14 @@
 /// - `process_audio_frame` — cpal callback body; updates level, buffer, and streams PCM
 /// - `build_input_stream`  — open a cpal capture stream, dispatching on sample format
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use cpal::traits::DeviceTrait;
 use crate::deepgram_ws::{DgMessage, DgSender};
+
+/// Lock a mutex, recovering from poison if a prior thread panicked.
+fn lock_or_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 // ── WAV encoding ─────────────────────────────────────────────────────────────
 
@@ -97,13 +102,13 @@ pub fn process_audio_frame(
         let sum_sq: f32 = data.iter().map(|s| s * s).sum();
         (sum_sq / data.len() as f32).sqrt()
     };
-    *level.lock().unwrap() = rms as f64;
+    *lock_or_recover(level) = rms as f64;
 
-    if *is_recording.lock().unwrap() {
+    if *lock_or_recover(is_recording) {
         // Batch path: buffer raw f32 samples for WAV upload fallback.
         // Cap at MAX_BUFFER_SAMPLES to prevent unbounded memory growth.
         {
-            let mut buf = buffer.lock().unwrap();
+            let mut buf = lock_or_recover(buffer);
             let remaining = MAX_BUFFER_SAMPLES.saturating_sub(buf.len());
             if remaining > 0 {
                 let take = data.len().min(remaining);
@@ -112,7 +117,7 @@ pub fn process_audio_frame(
         }
 
         // Streaming path: if a WebSocket session is active, also send i16 bytes.
-        if let Some(sender) = dg_sender.lock().unwrap().as_ref() {
+        if let Some(sender) = lock_or_recover(dg_sender).as_ref() {
             let bytes = f32_to_i16_bytes(data);
             // Non-blocking try_send — drop frames silently if channel is full or closed.
             let _ = sender.try_send(DgMessage::Pcm(bytes));

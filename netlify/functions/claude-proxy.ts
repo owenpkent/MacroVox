@@ -42,8 +42,9 @@ const MAX_BODY_SIZE = 512 * 1024 // 512 KB
 const MAX_SYSTEM_PROMPT_LENGTH = 10_000
 const MAX_MESSAGE_LENGTH = 100_000
 
-// Local dev: skip auth when running under `netlify dev` with DEV_BYPASS_AUTH=true
-const isDevBypass = process.env.DEV_BYPASS_AUTH === 'true'
+// Local dev: skip auth when running under `netlify dev` with DEV_BYPASS_AUTH=true.
+// Safety: never allow bypass in production deploys.
+const isDevBypass = process.env.DEV_BYPASS_AUTH === 'true' && process.env.CONTEXT !== 'production'
 
 export const handler: Handler = async (event) => {
   const origin = (event.headers['origin'] ?? '').toLowerCase()
@@ -141,7 +142,9 @@ export const handler: Handler = async (event) => {
       }
     }
 
-    supabase.from('api_usage').insert({ user_id: user.id, service: 'claude' }).then(() => {})
+    supabase.from('api_usage').insert({ user_id: user.id, service: 'claude' })
+      .then(() => {})
+      .catch(err => console.error('[claude-proxy] Failed to log API usage:', err))
   }
 
   // Parse request body
