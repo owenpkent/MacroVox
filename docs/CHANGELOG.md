@@ -3,12 +3,16 @@
 ## Unreleased — Launch Readiness Hardening + Voice Buffer
 
 ### New Features
-- **Voice memo buffer** — opt-in rolling buffer that saves dictation recordings as WAV files for playback and future model training. Configurable size (50–500 MB, default 100 MB). FIFO eviction deletes oldest recordings when the buffer is full. Recordings are paired with their transcripts in a JSON manifest. Playback via HTML5 audio in the settings panel. Auto-saves on batch recording stop; streaming mode saves via frontend call.
+- **Dictation history** — rolling buffer that saves dictation recordings as OGG Opus files (~10x smaller than WAV) for playback and future model training. Enabled by default. Configurable storage limit (50–500 MB, default 100 MB = ~14 hours of audio). FIFO eviction deletes oldest recordings when the limit is reached. Recordings are paired with their transcripts in a JSON manifest.
+- **Opus compression** — voice buffer uses OGG Opus encoding via the `ogg-opus` crate (vendored libopus, no cmake needed). Falls back to WAV if Opus encoding fails. HTML5 `<audio>` plays OGG Opus natively in Chrome/Firefox/Edge.
+- **Transcription history** — click any recording to expand and view its full transcript. Copy transcript to clipboard from the expanded view.
+- **Reprocess recordings** — right-click any recording and select "Reprocess" to re-run the full pipeline: decode OGG Opus → re-transcribe through Deepgram → Claude AI cleanup → update manifest. Useful after changing keyword boosts or accessibility context.
 
 ### UI
 - **Writing tab removed** — Agentic Writing tab and settings section removed from the UI for initial release. Source files kept in repo for potential re-addition later.
 - **Processing ring removed** — Removed the spinning cyan ring around the record button during transcript processing.
-- **Voice buffer settings** — New "Voice Buffer" section in settings with enable toggle, buffer size selector, usage stats, clear button, and recording history with playback controls.
+- **Dictation History settings** — new section in settings with: enable toggle (on by default), storage limit selector with visual usage bar (turns red at 90%), recording count and total duration display, "Open folder" button to reveal storage in Explorer, "Clear all" button, and scrollable recording list with play/stop/expand/delete per item and right-click context menu.
+- **Settings reordered** — Audio Input moved up (first-run priority), Subscription moved down, About and Shortcuts merged into one section.
 
 ### Stability
 - **Race condition on rapid start/stop fixed** — Added `operationInProgressRef` guard to prevent concurrent `handleStartRecording`, `handleStopRecording`, and `handleStopAndCopy` calls from overlapping when the record button is clicked rapidly.

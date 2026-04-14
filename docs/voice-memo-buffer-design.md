@@ -1,6 +1,6 @@
 # Voice Memo Buffer — Design Document
 
-**Status**: v1 implemented (WAV storage). Opus compression and model training integration are future work.
+**Status**: Implemented with OGG Opus compression, transcription history, and full reprocess pipeline. Model training integration is future work.
 
 ## Idea
 

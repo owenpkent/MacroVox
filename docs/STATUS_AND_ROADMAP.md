@@ -70,7 +70,8 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 - [x] Voice-reactive animation rings + waveform visualizer
 - [x] Single-instance lock
 - [x] Launch readiness hardening (race conditions, mutex poison recovery, fetch timeouts, streaming error handling)
-- [x] Voice memo buffer — rolling WAV buffer with playback, configurable size, FIFO eviction, manifest tracking
+- [x] Dictation history — rolling OGG Opus buffer (enabled by default), transcription history with expand/copy, reprocess through full Deepgram+Claude pipeline
+- [x] Opus compression — ~10x storage savings over WAV via vendored libopus
 
 ### Auth & Billing
 - [x] Supabase Auth integration (email/password)
