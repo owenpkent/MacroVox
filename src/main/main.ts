@@ -56,8 +56,8 @@ function createDictationWindow(autoStartRecording = false, hidden = false) {
   }
 
   dictationWindow = new BrowserWindow({
-    width: 420,
-    height: 500,
+    width: 380,
+    height: 360,
     minWidth: 380,
     minHeight: 360,
     icon: getAppIcon(),

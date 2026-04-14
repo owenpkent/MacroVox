@@ -51,6 +51,9 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
   const [autoPasteEnabled, setAutoPasteEnabled] = useState(() =>
     localStorage.getItem('dictation_auto_paste') === 'true'
   )
+  const [aiCleanupEnabled, setAiCleanupEnabled] = useState(() =>
+    localStorage.getItem('dictation_ai_cleanup') !== 'false'
+  )
   const [minimizeToTray, setMinimizeToTray] = useState(() =>
     localStorage.getItem('minimize_to_tray') === 'true'
   )
@@ -143,7 +146,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
       const keys = [
         'dictation_auto_copy', 'dictation_clear_on_new', 'dictation_auto_cutoff',
         'dictation_always_on_top', 'deepgram_dictation', 'transcription_mode',
-        'post_processing_context', 'dictation_auto_paste',
+        'post_processing_context', 'dictation_auto_paste', 'dictation_ai_cleanup',
         'deepgram_keywords', 'minimize_to_tray',
       ]
       keys.forEach(k => {
@@ -210,6 +213,11 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
   const handleAutoPasteToggle = (value: boolean) => {
     setAutoPasteEnabled(value)
     saveSetting('dictation_auto_paste', String(value))
+  }
+
+  const handleAiCleanupToggle = (value: boolean) => {
+    setAiCleanupEnabled(value)
+    saveSetting('dictation_ai_cleanup', String(value))
   }
 
   const handleKeywordBoostsChange = (value: string) => {
@@ -463,7 +471,19 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
               AI Post-Processing
             </h3>
             <div className="space-y-3">
-              <p className="text-xs text-slate-500">Claude cleans up transcripts automatically after every recording.</p>
+              <label className="flex items-center justify-between cursor-pointer">
+                <div>
+                  <span className="text-sm text-slate-200">AI cleanup</span>
+                  <p className="text-xs text-slate-500">Claude cleans up transcripts automatically after every recording</p>
+                </div>
+                <div
+                  onClick={() => handleAiCleanupToggle(!aiCleanupEnabled)}
+                  className="w-10 h-5 rounded-full transition-colors cursor-pointer"
+                  style={{ backgroundColor: aiCleanupEnabled ? 'var(--accent-primary)' : 'var(--bg-tertiary)' }}
+                >
+                  <div className={`w-4 h-4 rounded-full bg-white mt-0.5 transition-transform ${aiCleanupEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </div>
+              </label>
               <div>
                 <span className="text-sm text-slate-200">Accessibility context</span>
                 <p className="text-xs text-slate-500 mb-2">Describe your speech patterns so Claude can better correct errors</p>

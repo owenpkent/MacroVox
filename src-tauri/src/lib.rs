@@ -73,22 +73,42 @@ pub fn run() {
                             let _ = win.hide();
                         }
                     } else {
-                        // Quit the entire app when the main window is closed
+                        // Signal all windows that we're shutting down so their
+                        // prevent_close handlers step aside.
+                        state
+                            .is_quitting
+                            .store(true, std::sync::atomic::Ordering::SeqCst);
+
+                        // Destroy the settings window first so its WebView2 can
+                        // unregister its window class cleanly before the process
+                        // exits.
+                        if let Some(settings_win) = app_handle.get_webview_window("settings") {
+                            let _ = settings_win.destroy();
+                        }
+
+                        // Now quit
                         app_handle.exit(0);
                     }
                 }
             });
 
-            // Settings window: always hide on close instead of destroying,
-            // so it can be re-shown without recreating.
+            // Settings window: hide on close instead of destroying, so it can
+            // be re-shown without recreating — unless the app is quitting.
             let settings_handle = app.handle().clone();
             if let Some(settings_window) = app.get_webview_window("settings") {
                 settings_window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        api.prevent_close();
-                        if let Some(win) = settings_handle.get_webview_window("settings") {
-                            let _ = win.hide();
+                        let state = settings_handle.state::<AppState>();
+                        let quitting = state
+                            .is_quitting
+                            .load(std::sync::atomic::Ordering::SeqCst);
+                        if !quitting {
+                            api.prevent_close();
+                            if let Some(win) = settings_handle.get_webview_window("settings") {
+                                let _ = win.hide();
+                            }
                         }
+                        // If quitting, let the close proceed so WebView2 cleans up
                     }
                 });
             }

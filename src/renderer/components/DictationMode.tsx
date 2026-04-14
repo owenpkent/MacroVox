@@ -41,6 +41,9 @@ export function DictationMode() {
   const [autoPasteEnabled, setAutoPasteEnabled] = useState(() =>
     localStorage.getItem('dictation_auto_paste') === 'true'
   )
+  const [aiCleanupEnabled, setAiCleanupEnabled] = useState(() =>
+    localStorage.getItem('dictation_ai_cleanup') !== 'false'
+  )
   const streamingTranscriptRef = useRef('')
 
   const { postProcess, isPostProcessing } = usePostProcessing({
@@ -59,6 +62,7 @@ export function DictationMode() {
           case 'dictation_auto_cutoff': setAutoCutoffSeconds(value || '30'); break
           case 'transcription_mode': setTranscriptionMode(value || 'batch'); break
           case 'dictation_auto_paste': setAutoPasteEnabled(value === 'true'); break
+          case 'dictation_ai_cleanup': setAiCleanupEnabled(value !== 'false'); break
         }
       }
     })
@@ -166,10 +170,11 @@ export function DictationMode() {
 
     if (autoCutoffSeconds && autoCutoffSeconds !== 'off') {
       const durationMs = parseInt(autoCutoffSeconds, 10) * 1000
-      autoStopTimerRef.current = setTimeout(() => {
+      autoStopTimerRef.current = setTimeout(async () => {
+        // Stop recording first, then clear for next round
+        await handleStopRecording()
         setTranscript('')
         streamingTranscriptRef.current = ''
-        handleStopRecording()
       }, durationMs)
     }
   }
@@ -203,13 +208,15 @@ export function DictationMode() {
         if (autoPasteEnabled && autoCopyOnStop) ipc.autoPaste()
 
         // AI cleanup in background — update clipboard if result differs
-        postProcess(currentText).then((cleaned) => {
-          if (cleaned && cleaned !== currentText) {
-            setTranscript(cleaned)
-            streamingTranscriptRef.current = cleaned
-            if (autoCopyOnStop) ipc.copyToClipboard(cleaned)
-          }
-        })
+        if (aiCleanupEnabled) {
+          postProcess(currentText).then((cleaned) => {
+            if (cleaned && cleaned !== currentText) {
+              setTranscript(cleaned)
+              streamingTranscriptRef.current = cleaned
+              if (autoCopyOnStop) ipc.copyToClipboard(cleaned)
+            }
+          })
+        }
       }
     } else {
       setIsProcessing(true)
@@ -229,15 +236,17 @@ export function DictationMode() {
 
         if (autoPasteEnabled && autoCopyOnStop) ipc.autoPaste()
 
-        postProcess(rawSegment).then((cleaned) => {
-          if (cleaned && cleaned !== rawSegment) {
-            setTranscript(prev => {
-              const cleanedFull = prev.replace(rawSegment, cleaned)
-              if (autoCopyOnStop) ipc.copyToClipboard(cleanedFull)
-              return cleanedFull
-            })
-          }
-        })
+        if (aiCleanupEnabled) {
+          postProcess(rawSegment).then((cleaned) => {
+            if (cleaned && cleaned !== rawSegment) {
+              setTranscript(prev => {
+                const cleanedFull = prev.replace(rawSegment, cleaned)
+                if (autoCopyOnStop) ipc.copyToClipboard(cleanedFull)
+                return cleanedFull
+              })
+            }
+          })
+        }
       } else if (!result.success && result.error) {
         setError(result.error)
       }
@@ -321,15 +330,17 @@ export function DictationMode() {
 
       if (autoPasteEnabled) ipc.autoPaste()
 
-      postProcess(rawSegment).then((cleaned) => {
-        if (cleaned && cleaned !== rawSegment) {
-          setTranscript(prev => {
-            const cleanedFull = prev.replace(rawSegment, cleaned)
-            ipc.copyToClipboard(cleanedFull)
-            return cleanedFull
-          })
-        }
-      })
+      if (aiCleanupEnabled) {
+        postProcess(rawSegment).then((cleaned) => {
+          if (cleaned && cleaned !== rawSegment) {
+            setTranscript(prev => {
+              const cleanedFull = prev.replace(rawSegment, cleaned)
+              ipc.copyToClipboard(cleanedFull)
+              return cleanedFull
+            })
+          }
+        })
+      }
     } else if (!result.success && result.error) {
       setError(result.error)
     }
@@ -413,20 +424,8 @@ export function DictationMode() {
           </div>
         )}
 
-        {/* Record button with subtle voice-reactive glow */}
+        {/* Record button */}
         <div className="relative flex items-center justify-center" style={{ width: 80, height: 80 }}>
-          {isRecording && (
-            <>
-              <div
-                className="absolute inset-0 rounded-full bg-red-500/20 transition-transform duration-75"
-                style={{ transform: `scale(${1.1 + audioLevel * 0.3})`, opacity: 0.3 + audioLevel * 0.5 }}
-              />
-              <div
-                className="absolute inset-1 rounded-full bg-red-500/40 blur-md transition-opacity duration-50"
-                style={{ opacity: 0.4 + audioLevel * 0.6 }}
-              />
-            </>
-          )}
 
           {isProcessing && (
             <div className="absolute inset-1 rounded-full border-2 border-cyan-500/50 animate-spin" style={{ animationDuration: '1s' }} />
@@ -457,20 +456,26 @@ export function DictationMode() {
 
         {/* Audio level bars */}
         {isRecording && (
-          <div className="flex items-center gap-[3px] h-6">
-            {[...Array(11)].map((_, i) => {
-              const center = 5
+          <div className="flex items-center gap-[2px] h-14">
+            {[...Array(21)].map((_, i) => {
+              const center = 10
               const dist = Math.abs(i - center)
-              const amplified = Math.min(audioLevel * 4, 1)
-              const barLevel = Math.max(0.08, amplified - (dist * 0.05))
+              const amplified = Math.min(audioLevel * 6, 1)
+              const barLevel = Math.max(0.05, amplified - (dist * 0.03))
+              const hue = amplified * 25  // red → orange-ish at peak
               return (
                 <div
                   key={i}
-                  className="w-[3px] rounded-full transition-all duration-[60ms]"
+                  className="w-[3px] rounded-full transition-all duration-[40ms]"
                   style={{
-                    backgroundColor: 'var(--danger)',
-                    height: `${3 + barLevel * 22}px`,
-                    opacity: 0.3 + barLevel * 0.7
+                    backgroundColor: amplified > 0.4
+                      ? `hsl(${hue}, 92%, ${48 + barLevel * 18}%)`
+                      : 'var(--danger)',
+                    height: `${2 + barLevel * 52}px`,
+                    opacity: 0.2 + barLevel * 0.8,
+                    boxShadow: amplified > 0.3
+                      ? `0 0 ${barLevel * 10}px rgba(239, 68, 68, ${barLevel * 0.7})`
+                      : 'none',
                   }}
                 />
               )
@@ -514,7 +519,7 @@ export function DictationMode() {
             style={{ color: transcript ? '#f87171' : 'var(--text-secondary)', opacity: transcript ? 1 : 0.4 }}
             title="Clear transcript"
           >
-            <Trash2 size={20} strokeWidth={2} />
+            <Trash2 size={18} strokeWidth={2} />
           </button>
           <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
             {transcript ? `${transcript.split(/\s+/).filter(Boolean).length} words` : ''}
@@ -526,7 +531,7 @@ export function DictationMode() {
             style={{ color: transcript ? (copied ? '#34d399' : '#67e8f9') : 'var(--text-secondary)', opacity: transcript ? 1 : 0.4 }}
             title="Copy to clipboard"
           >
-            {copied ? <Check size={20} strokeWidth={2} /> : <Copy size={20} strokeWidth={2} />}
+            {copied ? <Check size={18} strokeWidth={2} /> : <Copy size={18} strokeWidth={2} />}
           </button>
         </div>
       </div>

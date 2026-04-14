@@ -1,3 +1,4 @@
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use crate::deepgram_ws::DgSender;
@@ -40,6 +41,10 @@ pub struct AppState {
 
     /// Whether closing the window hides it to tray instead of quitting.
     pub minimize_to_tray: Mutex<bool>,
+
+    /// Set to `true` during app shutdown so that windows with `prevent_close`
+    /// handlers (like settings) allow themselves to be destroyed.
+    pub is_quitting: AtomicBool,
 
     // ── Phase 3: cpal WASAPI audio ────────────────────────────────────────────
 
@@ -90,6 +95,7 @@ impl Default for AppState {
             selected_mic_device: Mutex::new(None),
             dictation_always_on_top: Mutex::new(true),
             minimize_to_tray: Mutex::new(false),
+            is_quitting: AtomicBool::new(false),
             audio_stream: Mutex::new(None),
             audio_level: Arc::new(Mutex::new(0.0)),
             recording_buffer: Arc::new(Mutex::new(Vec::new())),
