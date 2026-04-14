@@ -159,6 +159,7 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 
 ### Medium-term
 - [ ] **Multi-provider STT** — selectable dictation provider (Deepgram, OpenAI Whisper, ElevenLabs Scribe) — see [provider-selection-design.md](provider-selection-design.md)
+- [ ] **Voice memo buffer** — rolling ~100 MB buffer of recent recordings for playback and model training — see [voice-memo-buffer-design.md](voice-memo-buffer-design.md)
 - [ ] **Agentic Writing tab** — speak a request, Claude generates the content (deferred from v1 launch)
 - [ ] **macOS support** — cpal audio capture on macOS
 - [ ] **Linux support** — PulseAudio/PipeWire capture
@@ -216,6 +217,7 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 | [CHANGELOG.md](CHANGELOG.md) | Detailed release history |
 | [provider-selection-design.md](provider-selection-design.md) | Design doc for multi-provider STT selection |
 | [stt-provider-evaluation.md](stt-provider-evaluation.md) | STT provider evaluation notes |
+| [voice-memo-buffer-design.md](voice-memo-buffer-design.md) | Design doc for voice memo buffer + model training |
 
 ---
 
