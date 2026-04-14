@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings, Mic, X, RefreshCw, Sparkles, Loader2, CreditCard, MessageSquare, Pin, Palette, LogIn, User, HardDrive, Trash2 } from 'lucide-react'
+import { Settings, Mic, X, RefreshCw, Sparkles, Loader2, CreditCard, MessageSquare, Pin, Palette, LogIn, User, HardDrive, Trash2, FolderOpen } from 'lucide-react'
 import { THEMES, getStoredTheme, setStoredTheme } from '../themes'
 import { VoiceHistory } from './VoiceHistory'
 import * as ipc from '../lib/tauri-ipc'
@@ -67,6 +67,9 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
   )
   const [voiceBufferMaxSize, setVoiceBufferMaxSize] = useState(() =>
     localStorage.getItem('voice_buffer_max_size') || String(100 * 1024 * 1024)
+  )
+  const [voiceBufferAutoSave, setVoiceBufferAutoSave] = useState(() =>
+    localStorage.getItem('voice_buffer_auto_save') !== 'false'
   )
   const [voiceBufferInfo, setVoiceBufferInfo] = useState<ipc.VoiceBufferInfo | null>(null)
 
@@ -157,7 +160,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
         'dictation_always_on_top', 'deepgram_dictation', 'transcription_mode',
         'post_processing_context', 'dictation_auto_paste', 'dictation_ai_cleanup',
         'deepgram_keywords', 'minimize_to_tray',
-        'voice_buffer_enabled', 'voice_buffer_max_size',
+        'voice_buffer_enabled', 'voice_buffer_max_size', 'voice_buffer_auto_save',
       ]
       keys.forEach(k => {
         const v = localStorage.getItem(k)
@@ -239,6 +242,14 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
     setSelectedTheme(themeId)
     setStoredTheme(themeId)
     window.dispatchEvent(new CustomEvent('theme-change', { detail: themeId }))
+  }
+
+  const formatHoursMinutes = (secs: number) => {
+    if (secs < 60) return `${Math.floor(secs)}s`
+    if (secs < 3600) return `${Math.floor(secs / 60)}m`
+    const h = Math.floor(secs / 3600)
+    const m = Math.floor((secs % 3600) / 60)
+    return m > 0 ? `${h}h ${m}m` : `${h}h`
   }
 
   if (!isOpen) return null
@@ -568,7 +579,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
           <section>
             <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
               <HardDrive size={16} style={{ color: 'var(--accent-secondary)' }} />
-              Voice Buffer
+              Dictation History
             </h3>
             <div className="space-y-3">
               <label className="flex items-center justify-between cursor-pointer">
@@ -591,15 +602,34 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
 
               {voiceBufferEnabled && (
                 <>
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <div>
+                      <span className="text-sm text-slate-200">Auto-save</span>
+                      <p className="text-xs text-slate-500">Automatically save every dictation session</p>
+                    </div>
+                    <div
+                      onClick={() => {
+                        const next = !voiceBufferAutoSave
+                        setVoiceBufferAutoSave(next)
+                        saveSetting('voice_buffer_auto_save', String(next))
+                      }}
+                      className="w-10 h-5 rounded-full transition-colors cursor-pointer"
+                      style={{ backgroundColor: voiceBufferAutoSave ? 'var(--accent-primary)' : 'var(--bg-tertiary)' }}
+                    >
+                      <div className={`w-4 h-4 rounded-full bg-white mt-0.5 transition-transform ${voiceBufferAutoSave ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </div>
+                  </label>
+
                   <div>
-                    <span className="text-sm text-slate-200">Buffer size</span>
+                    <span className="text-sm text-slate-200">Storage limit</span>
+                    <p className="text-xs text-slate-500 mb-1">Oldest recordings are deleted when the limit is reached</p>
                     <select
                       value={voiceBufferMaxSize}
                       onChange={(e) => {
                         setVoiceBufferMaxSize(e.target.value)
                         saveSetting('voice_buffer_max_size', e.target.value)
                       }}
-                      className="w-full mt-1 px-3 py-1.5 rounded text-sm focus:outline-none"
+                      className="w-full px-3 py-1.5 rounded text-sm focus:outline-none"
                       style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
                     >
                       <option value={String(50 * 1024 * 1024)}>50 MB (~7 hr)</option>
@@ -609,22 +639,57 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
                     </select>
                   </div>
 
-                  {voiceBufferInfo && voiceBufferInfo.recording_count > 0 && (
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                        {voiceBufferInfo.recording_count} recording{voiceBufferInfo.recording_count !== 1 ? 's' : ''} · {(voiceBufferInfo.current_size_bytes / (1024 * 1024)).toFixed(1)} / {(voiceBufferInfo.max_size_bytes / (1024 * 1024)).toFixed(0)} MB
-                      </p>
-                      <button
-                        onClick={async () => {
-                          await ipc.voiceBufferClear()
-                          const info = await ipc.voiceBufferInfo()
-                          setVoiceBufferInfo(info)
-                        }}
-                        className="flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-red-900/40 transition-colors"
-                        style={{ color: '#f87171' }}
-                      >
-                        <Trash2 size={12} /> Clear all
-                      </button>
+                  {/* Storage usage */}
+                  {voiceBufferInfo && voiceBufferInfo.max_size_bytes > 0 && (
+                    <div className="space-y-2">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                            {voiceBufferInfo.recording_count} recording{voiceBufferInfo.recording_count !== 1 ? 's' : ''}
+                            {voiceBufferInfo.total_duration_secs > 0 && ` · ${formatHoursMinutes(voiceBufferInfo.total_duration_secs)}`}
+                          </span>
+                          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                            {(voiceBufferInfo.current_size_bytes / (1024 * 1024)).toFixed(1)} / {(voiceBufferInfo.max_size_bytes / (1024 * 1024)).toFixed(0)} MB
+                          </span>
+                        </div>
+                        {/* Progress bar */}
+                        <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)' }}>
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${Math.min(100, (voiceBufferInfo.current_size_bytes / voiceBufferInfo.max_size_bytes) * 100)}%`,
+                              backgroundColor: voiceBufferInfo.current_size_bytes / voiceBufferInfo.max_size_bytes > 0.9
+                                ? 'var(--danger, #ef4444)'
+                                : 'var(--accent-primary)',
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Actions row */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => ipc.voiceBufferOpenFolder()}
+                          className="flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-white/10 transition-colors"
+                          style={{ color: 'var(--text-muted)' }}
+                          title="Open storage folder"
+                        >
+                          <FolderOpen size={12} /> Open folder
+                        </button>
+                        {voiceBufferInfo.recording_count > 0 && (
+                          <button
+                            onClick={async () => {
+                              await ipc.voiceBufferClear()
+                              const info = await ipc.voiceBufferInfo()
+                              setVoiceBufferInfo(info)
+                            }}
+                            className="flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-red-900/40 transition-colors"
+                            style={{ color: '#f87171' }}
+                          >
+                            <Trash2 size={12} /> Clear all
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
 

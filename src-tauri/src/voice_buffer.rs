@@ -71,6 +71,7 @@ pub struct VoiceBufferInfo {
     pub current_size_bytes: u64,
     pub recording_count: usize,
     pub total_duration_secs: f64,
+    pub storage_path: String,
 }
 
 // ── Core operations ──────────────────────────────────────────────────────────
@@ -239,6 +240,7 @@ pub fn get_info(buffer_dir: &Path, enabled: bool) -> VoiceBufferInfo {
         current_size_bytes: manifest.current_size_bytes,
         recording_count: manifest.recordings.len(),
         total_duration_secs: manifest.recordings.iter().map(|r| r.duration_secs).sum(),
+        storage_path: buffer_dir.to_string_lossy().to_string(),
     }
 }
 

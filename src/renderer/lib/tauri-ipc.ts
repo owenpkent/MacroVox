@@ -190,6 +190,7 @@ export interface VoiceBufferInfo {
   current_size_bytes: number
   recording_count: number
   total_duration_secs: number
+  storage_path: string
 }
 
 export const voiceBufferList = (): Promise<VoiceRecording[]> =>
@@ -214,6 +215,9 @@ export const voiceBufferClear = (): Promise<OkResult> =>
 
 export const voiceBufferSave = (transcript: string): Promise<OkResult> =>
   invoke('voice_buffer_save', { transcript })
+
+export const voiceBufferOpenFolder = (): Promise<OkResult> =>
+  invoke('voice_buffer_open_folder')
 
 // ── Events ────────────────────────────────────────────────────────────────────
 

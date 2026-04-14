@@ -212,8 +212,10 @@ export function DictationMode() {
       await ipc.stopDeepgram()
       const currentText = streamingTranscriptRef.current
       if (currentText) {
-        // Save to voice buffer (fire-and-forget — buffer has the samples)
-        ipc.voiceBufferSave(currentText).catch(() => {})
+        // Save to voice buffer if auto-save is on (fire-and-forget)
+        if (localStorage.getItem('voice_buffer_auto_save') !== 'false') {
+          ipc.voiceBufferSave(currentText).catch(() => {})
+        }
         // Optimistic: copy raw transcript immediately, don't wait for cleanup
         if (autoCopyOnStop) {
           await ipc.copyToClipboard(currentText)

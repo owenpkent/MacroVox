@@ -372,9 +372,10 @@ pub async fn recording_stop(
         Some(alt) => {
             let transcript_text = alt["transcript"].as_str().unwrap_or("").to_string();
 
-            // Auto-save to voice buffer if enabled
+            // Auto-save to voice buffer if enabled and auto-save is on
             let vb_enabled = *lock_or_recover(&state.voice_buffer_enabled);
-            if vb_enabled && !transcript_text.is_empty() {
+            let vb_auto_save = *lock_or_recover(&state.voice_buffer_auto_save);
+            if vb_enabled && vb_auto_save && !transcript_text.is_empty() {
                 let dir = lock_or_recover(&state.voice_buffer_dir).clone();
                 let max_size = *lock_or_recover(&state.voice_buffer_max_size);
                 if !dir.as_os_str().is_empty() {
@@ -654,6 +655,9 @@ pub fn settings_broadcast(
     if let Some(val) = settings.get("voice_buffer_enabled") {
         *lock_or_recover(&state.voice_buffer_enabled) = val == "true";
     }
+    if let Some(val) = settings.get("voice_buffer_auto_save") {
+        *lock_or_recover(&state.voice_buffer_auto_save) = val != "false";
+    }
     if let Some(val) = settings.get("voice_buffer_max_size") {
         if let Ok(size) = val.parse::<u64>() {
             *lock_or_recover(&state.voice_buffer_max_size) = size;
@@ -693,6 +697,7 @@ pub fn voice_buffer_info(state: State<AppState>) -> crate::voice_buffer::VoiceBu
             current_size_bytes: 0,
             recording_count: 0,
             total_duration_secs: 0.0,
+            storage_path: String::new(),
         };
     }
     crate::voice_buffer::get_info(&dir, enabled)
@@ -774,6 +779,24 @@ pub fn voice_buffer_save(
         Ok(_filename) => OkResponse::ok(),
         Err(e) => OkResponse::err(e),
     }
+}
+
+/// Opens the voice buffer storage folder in the system file manager.
+#[tauri::command]
+pub fn voice_buffer_open_folder(state: State<AppState>) -> OkResponse {
+    let dir = lock_or_recover(&state.voice_buffer_dir).clone();
+    if dir.as_os_str().is_empty() || !dir.exists() {
+        return OkResponse::err("Voice buffer directory not found");
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("explorer").arg(&dir).spawn();
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(&dir).spawn();
+    }
+    OkResponse::ok()
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

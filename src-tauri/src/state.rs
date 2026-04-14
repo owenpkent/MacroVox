@@ -100,6 +100,9 @@ pub struct AppState {
 
     /// Maximum voice buffer size in bytes (default 100 MB).
     pub voice_buffer_max_size: Mutex<u64>,
+
+    /// Whether to auto-save every dictation to the voice buffer.
+    pub voice_buffer_auto_save: Mutex<bool>,
 }
 
 impl Default for AppState {
@@ -120,6 +123,7 @@ impl Default for AppState {
             voice_buffer_dir: Mutex::new(PathBuf::new()),
             voice_buffer_enabled: Mutex::new(false),
             voice_buffer_max_size: Mutex::new(100 * 1024 * 1024), // 100 MB
+            voice_buffer_auto_save: Mutex::new(true),
         }
     }
 }
