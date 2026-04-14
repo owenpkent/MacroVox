@@ -157,6 +157,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
         'dictation_always_on_top', 'deepgram_dictation', 'transcription_mode',
         'post_processing_context', 'dictation_auto_paste', 'dictation_ai_cleanup',
         'deepgram_keywords', 'minimize_to_tray',
+        'voice_buffer_enabled', 'voice_buffer_max_size',
       ]
       keys.forEach(k => {
         const v = localStorage.getItem(k)
@@ -536,6 +537,33 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
             </div>
           </section>
 
+          {/* Audio Input */}
+          <section>
+            <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
+              <Mic size={16} style={{ color: 'var(--accent-secondary)' }} />
+              Audio Input
+            </h3>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-slate-400">Microphone</label>
+                <button onClick={loadDevices} disabled={isLoading} className="p-1 rounded" style={{ color: 'var(--text-muted)' }} title="Refresh devices">
+                  <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
+                </button>
+              </div>
+              <select
+                value={selectedDevice || ''}
+                onChange={(e) => handleDeviceSelect(e.target.value)}
+                className="w-full px-3 py-2 rounded text-sm focus:outline-none"
+                style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
+              >
+                <option value="">Auto-detect</option>
+                {devices.map((device) => (
+                  <option key={device} value={device}>{device}</option>
+                ))}
+              </select>
+            </div>
+          </section>
+
           {/* Voice Buffer */}
           <section>
             <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
@@ -546,7 +574,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
               <label className="flex items-center justify-between cursor-pointer">
                 <div>
                   <span className="text-sm text-slate-200">Save recordings</span>
-                  <p className="text-xs text-slate-500">Keep recent audio for playback and model training</p>
+                  <p className="text-xs text-slate-500">Keep recent dictations for playback (Opus compressed)</p>
                 </div>
                 <div
                   onClick={() => {
@@ -574,10 +602,10 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
                       className="w-full mt-1 px-3 py-1.5 rounded text-sm focus:outline-none"
                       style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
                     >
-                      <option value={String(50 * 1024 * 1024)}>50 MB (~26 min)</option>
-                      <option value={String(100 * 1024 * 1024)}>100 MB (~53 min)</option>
-                      <option value={String(250 * 1024 * 1024)}>250 MB (~2.2 hr)</option>
-                      <option value={String(500 * 1024 * 1024)}>500 MB (~4.4 hr)</option>
+                      <option value={String(50 * 1024 * 1024)}>50 MB (~7 hr)</option>
+                      <option value={String(100 * 1024 * 1024)}>100 MB (~14 hr)</option>
+                      <option value={String(250 * 1024 * 1024)}>250 MB (~35 hr)</option>
+                      <option value={String(500 * 1024 * 1024)}>500 MB (~70 hr)</option>
                     </select>
                   </div>
 
@@ -610,7 +638,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
           {user && (
             <section>
               <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
-                <Sparkles size={16} style={{ color: 'var(--accent-secondary)' }} />
+                <CreditCard size={16} style={{ color: 'var(--accent-secondary)' }} />
                 Subscription
               </h3>
               {subscriptionStatus === 'loading' ? (
@@ -626,7 +654,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
                       {subscriptionStatus === 'team' ? 'Team' : 'Pro'} Plan
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 mb-3">You have access to managed API keys for Deepgram and Claude.</p>
+                  <p className="text-xs text-slate-400 mb-3">Unlimited dictation with AI cleanup, keyword boosting, and voice buffer.</p>
                   <button onClick={handleManageSubscription} className="text-xs hover:underline flex items-center gap-1" style={{ color: 'var(--accent-primary)' }}>
                     <CreditCard size={12} />
                     Manage subscription
@@ -635,61 +663,30 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
               ) : (
                 <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)' }}>
                   <p className="text-sm mb-2" style={{ color: 'var(--text-primary)' }}>No Active Subscription</p>
-                  <p className="text-xs text-slate-400 mb-3">Subscribe to unlock voice dictation and AI post-processing.</p>
+                  <p className="text-xs text-slate-400 mb-3">Subscribe for unlimited dictation with AI cleanup and all features.</p>
                   <button onClick={handleUpgrade} className="w-full py-2 text-white text-sm rounded flex items-center justify-center gap-2 font-medium tracking-wide" style={{ backgroundColor: 'var(--accent-primary)' }}>
                     <Sparkles size={14} />
-                    Subscribe — $6.99/mo
+                    Subscribe — \$6.99/mo
                   </button>
                 </div>
               )}
             </section>
           )}
 
-          {/* Audio Input */}
-          <section>
-            <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
-              <Mic size={16} style={{ color: 'var(--accent-secondary)' }} />
-              Audio Input
-            </h3>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs text-slate-400">Microphone</label>
-                <button onClick={loadDevices} disabled={isLoading} className="p-1 rounded" style={{ color: 'var(--text-muted)' }} title="Refresh devices">
-                  <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
-                </button>
-              </div>
-              <select
-                value={selectedDevice || ''}
-                onChange={(e) => handleDeviceSelect(e.target.value)}
-                className="w-full px-3 py-2 rounded text-sm focus:outline-none"
-                style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
-              >
-                <option value="">Auto-detect</option>
-                {devices.map((device) => (
-                  <option key={device} value={device}>{device}</option>
-                ))}
-              </select>
-            </div>
-          </section>
-
-          {/* About */}
+          {/* About & Shortcuts */}
           <section>
             <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>About</h3>
-            <div className="rounded p-3" style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)' }}>
-              <p className="text-sm font-semibold" style={{ color: 'var(--accent-primary)' }}>⬡ MACROVOX</p>
-              <p className="text-xs text-slate-400 mt-1">Voice Dictation for Windows</p>
-              <p className="text-xs text-slate-500 mt-2">Version 1.0.0</p>
-              <p className="text-xs text-slate-500 mt-1">© 2026 OK Studio</p>
-            </div>
-          </section>
-
-          {/* Keyboard Shortcuts */}
-          <section>
-            <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>Keyboard Shortcuts</h3>
-            <div className="space-y-2 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Toggle Dictation</span>
-                <kbd className="px-2 py-0.5 rounded font-mono" style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)', color: 'var(--accent-hover)' }}>Ctrl+Space</kbd>
+            <div className="rounded p-3 space-y-3" style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)' }}>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: 'var(--accent-primary)' }}>MacroVox</p>
+                <p className="text-xs text-slate-400 mt-0.5">Voice Dictation for Windows</p>
+                <p className="text-xs text-slate-500 mt-1">© 2026 OK Studio</p>
+              </div>
+              <div className="pt-2" style={{ borderTop: '1px solid var(--border-primary)' }}>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400">Toggle Dictation</span>
+                  <kbd className="px-2 py-0.5 rounded font-mono" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', color: 'var(--accent-hover)' }}>Ctrl+Space</kbd>
+                </div>
               </div>
             </div>
           </section>
