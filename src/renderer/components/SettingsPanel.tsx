@@ -63,13 +63,10 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
   )
   const [selectedTheme, setSelectedTheme] = useState(() => getStoredTheme())
   const [voiceBufferEnabled, setVoiceBufferEnabled] = useState(() =>
-    localStorage.getItem('voice_buffer_enabled') === 'true'
+    localStorage.getItem('voice_buffer_enabled') !== 'false'
   )
   const [voiceBufferMaxSize, setVoiceBufferMaxSize] = useState(() =>
     localStorage.getItem('voice_buffer_max_size') || String(100 * 1024 * 1024)
-  )
-  const [voiceBufferAutoSave, setVoiceBufferAutoSave] = useState(() =>
-    localStorage.getItem('voice_buffer_auto_save') !== 'false'
   )
   const [voiceBufferInfo, setVoiceBufferInfo] = useState<ipc.VoiceBufferInfo | null>(null)
 
@@ -160,7 +157,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
         'dictation_always_on_top', 'deepgram_dictation', 'transcription_mode',
         'post_processing_context', 'dictation_auto_paste', 'dictation_ai_cleanup',
         'deepgram_keywords', 'minimize_to_tray',
-        'voice_buffer_enabled', 'voice_buffer_max_size', 'voice_buffer_auto_save',
+        'voice_buffer_enabled', 'voice_buffer_max_size',
       ]
       keys.forEach(k => {
         const v = localStorage.getItem(k)
@@ -602,24 +599,6 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
 
               {voiceBufferEnabled && (
                 <>
-                  <label className="flex items-center justify-between cursor-pointer">
-                    <div>
-                      <span className="text-sm text-slate-200">Auto-save</span>
-                      <p className="text-xs text-slate-500">Automatically save every dictation session</p>
-                    </div>
-                    <div
-                      onClick={() => {
-                        const next = !voiceBufferAutoSave
-                        setVoiceBufferAutoSave(next)
-                        saveSetting('voice_buffer_auto_save', String(next))
-                      }}
-                      className="w-10 h-5 rounded-full transition-colors cursor-pointer"
-                      style={{ backgroundColor: voiceBufferAutoSave ? 'var(--accent-primary)' : 'var(--bg-tertiary)' }}
-                    >
-                      <div className={`w-4 h-4 rounded-full bg-white mt-0.5 transition-transform ${voiceBufferAutoSave ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                    </div>
-                  </label>
-
                   <div>
                     <span className="text-sm text-slate-200">Storage limit</span>
                     <p className="text-xs text-slate-500 mb-1">Oldest recordings are deleted when the limit is reached</p>

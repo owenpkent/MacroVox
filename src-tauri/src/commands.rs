@@ -372,10 +372,9 @@ pub async fn recording_stop(
         Some(alt) => {
             let transcript_text = alt["transcript"].as_str().unwrap_or("").to_string();
 
-            // Auto-save to voice buffer if enabled and auto-save is on
+            // Auto-save to voice buffer if enabled
             let vb_enabled = *lock_or_recover(&state.voice_buffer_enabled);
-            let vb_auto_save = *lock_or_recover(&state.voice_buffer_auto_save);
-            if vb_enabled && vb_auto_save && !transcript_text.is_empty() {
+            if vb_enabled && !transcript_text.is_empty() {
                 let dir = lock_or_recover(&state.voice_buffer_dir).clone();
                 let max_size = *lock_or_recover(&state.voice_buffer_max_size);
                 if !dir.as_os_str().is_empty() {
@@ -654,9 +653,6 @@ pub fn settings_broadcast(
 
     if let Some(val) = settings.get("voice_buffer_enabled") {
         *lock_or_recover(&state.voice_buffer_enabled) = val == "true";
-    }
-    if let Some(val) = settings.get("voice_buffer_auto_save") {
-        *lock_or_recover(&state.voice_buffer_auto_save) = val != "false";
     }
     if let Some(val) = settings.get("voice_buffer_max_size") {
         if let Ok(size) = val.parse::<u64>() {
