@@ -296,6 +296,23 @@ pub fn clear_all(buffer_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Updates the transcript for a recording in the manifest.
+pub fn update_transcript(buffer_dir: &Path, filename: &str, transcript: &str) -> Result<(), String> {
+    if filename.contains('/') || filename.contains('\\') || filename.contains("..") {
+        return Err("Invalid filename".to_string());
+    }
+    let mut manifest = load_manifest(buffer_dir);
+    let recording = manifest
+        .recordings
+        .iter_mut()
+        .find(|r| r.file == filename)
+        .ok_or_else(|| "Recording not found".to_string())?;
+    recording.transcript = transcript.to_string();
+    save_manifest(buffer_dir, &manifest)?;
+    debug!("[voice_buffer] Updated transcript for {}", filename);
+    Ok(())
+}
+
 /// Updates the max buffer size in the manifest and evicts if needed.
 pub fn set_max_size(buffer_dir: &Path, max_size_bytes: u64) -> Result<(), String> {
     let mut manifest = load_manifest(buffer_dir);

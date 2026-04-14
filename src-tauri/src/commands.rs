@@ -781,6 +781,20 @@ pub fn voice_buffer_save(
     }
 }
 
+/// Updates the transcript for a recording in the voice buffer.
+#[tauri::command]
+pub fn voice_buffer_update_transcript(
+    filename: String,
+    transcript: String,
+    state: State<AppState>,
+) -> OkResponse {
+    let dir = lock_or_recover(&state.voice_buffer_dir).clone();
+    match crate::voice_buffer::update_transcript(&dir, &filename, &transcript) {
+        Ok(()) => OkResponse::ok(),
+        Err(e) => OkResponse::err(e),
+    }
+}
+
 /// Opens the voice buffer storage folder in the system file manager.
 #[tauri::command]
 pub fn voice_buffer_open_folder(state: State<AppState>) -> OkResponse {

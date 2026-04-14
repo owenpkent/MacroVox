@@ -216,6 +216,9 @@ export const voiceBufferClear = (): Promise<OkResult> =>
 export const voiceBufferSave = (transcript: string): Promise<OkResult> =>
   invoke('voice_buffer_save', { transcript })
 
+export const voiceBufferUpdateTranscript = (filename: string, transcript: string): Promise<OkResult> =>
+  invoke('voice_buffer_update_transcript', { filename, transcript })
+
 export const voiceBufferOpenFolder = (): Promise<OkResult> =>
   invoke('voice_buffer_open_folder')
 

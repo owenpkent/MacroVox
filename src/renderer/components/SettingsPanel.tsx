@@ -693,7 +693,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
                     </div>
                   )}
 
-                  <VoiceHistory />
+                  <VoiceHistory user={user ? { id: user.id } : null} />
                 </>
               )}
             </div>
