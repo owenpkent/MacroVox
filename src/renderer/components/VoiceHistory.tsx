@@ -4,7 +4,7 @@
  *
  * Renders inside the settings panel when voice buffer is enabled.
  * Audio playback uses HTML5 <audio> with base64-encoded data URIs.
- * Right-click opens a context menu with "Reprocess with AI" and "Delete".
+ * Right-click opens a context menu with "Reprocess" and "Delete".
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -15,9 +15,10 @@ import type { VoiceRecording } from '../lib/tauri-ipc'
 
 interface VoiceHistoryProps {
   user?: { id: string } | null
+  apiKey?: string | null
 }
 
-export function VoiceHistory({ user }: VoiceHistoryProps) {
+export function VoiceHistory({ user, apiKey }: VoiceHistoryProps) {
   const [recordings, setRecordings] = useState<VoiceRecording[]>([])
   const [loading, setLoading] = useState(true)
   const [playingFile, setPlayingFile] = useState<string | null>(null)
@@ -97,18 +98,31 @@ export function VoiceHistory({ user }: VoiceHistoryProps) {
 
   const handleReprocess = async (file: string) => {
     setContextMenu(null)
-    const rec = recordings.find(r => r.file === file)
-    if (!rec || !rec.transcript) return
+    if (!apiKey) return
 
     setReprocessingFile(file)
     try {
-      const cleaned = await postProcess(rec.transcript)
-      if (cleaned && cleaned !== rec.transcript) {
-        await ipc.voiceBufferUpdateTranscript(file, cleaned)
-        setRecordings(prev =>
-          prev.map(r => r.file === file ? { ...r, transcript: cleaned } : r)
-        )
+      // Step 1: Re-transcribe through Deepgram
+      const result = await ipc.voiceBufferReprocess(file, apiKey)
+      if (!result.success || !result.transcript) {
+        console.warn('[VoiceHistory] Re-transcription failed:', result.error)
+        return
       }
+
+      let finalTranscript = result.transcript
+
+      // Step 2: Run Claude AI cleanup if enabled
+      const aiCleanup = localStorage.getItem('dictation_ai_cleanup') !== 'false'
+      if (aiCleanup) {
+        const cleaned = await postProcess(finalTranscript)
+        if (cleaned) finalTranscript = cleaned
+      }
+
+      // Step 3: Update manifest with new transcript
+      await ipc.voiceBufferUpdateTranscript(file, finalTranscript)
+      setRecordings(prev =>
+        prev.map(r => r.file === file ? { ...r, transcript: finalTranscript } : r)
+      )
     } catch {
       console.warn('[VoiceHistory] Reprocess failed for', file)
     } finally {
@@ -253,7 +267,7 @@ export function VoiceHistory({ user }: VoiceHistoryProps) {
                       style={{ color: 'var(--accent-primary)' }}
                     >
                       <Sparkles size={10} />
-                      Reprocess with AI
+                      Reprocess
                     </button>
                   )}
                   <button
@@ -297,7 +311,7 @@ export function VoiceHistory({ user }: VoiceHistoryProps) {
               className="w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 flex items-center gap-2 transition-colors disabled:opacity-50"
               style={{ color: 'var(--accent-primary)' }}
             >
-              <Sparkles size={12} /> Reprocess with AI
+              <Sparkles size={12} /> Reprocess
             </button>
           )}
           <div className="my-1" style={{ borderTop: '1px solid var(--border-primary)' }} />

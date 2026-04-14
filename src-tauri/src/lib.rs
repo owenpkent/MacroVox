@@ -159,6 +159,7 @@ pub fn run() {
             voice_buffer_clear,
             voice_buffer_save,
             voice_buffer_update_transcript,
+            voice_buffer_reprocess,
             voice_buffer_open_folder,
         ])
         .run(tauri::generate_context!())

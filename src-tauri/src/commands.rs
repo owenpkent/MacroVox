@@ -791,6 +791,120 @@ pub fn voice_buffer_update_transcript(
     }
 }
 
+/// Re-transcribes a voice buffer recording through Deepgram.
+///
+/// Decodes the OGG Opus file back to PCM, encodes as WAV, sends to Deepgram
+/// batch API, and returns the fresh transcript. The frontend is responsible
+/// for running Claude cleanup and calling `voice_buffer_update_transcript`.
+#[tauri::command]
+pub async fn voice_buffer_reprocess(
+    filename: String,
+    api_key: String,
+    state: State<'_, AppState>,
+) -> Result<RecordingStopResponse, String> {
+    let dir = lock_or_recover(&state.voice_buffer_dir).clone();
+    let raw_bytes = crate::voice_buffer::get_audio(&dir, &filename)?;
+
+    // Decode OGG Opus → i16 PCM (or read WAV directly)
+    let (samples_i16, sample_rate) = if filename.ends_with(".ogg") {
+        let cursor = std::io::Cursor::new(raw_bytes);
+        let (samples, _) = ogg_opus::decode::<_, 16000>(cursor)
+            .map_err(|e| format!("Failed to decode OGG Opus: {e}"))?;
+        (samples, 16_000u32)
+    } else {
+        // WAV — parse header and extract i16 samples
+        if raw_bytes.len() < 44 {
+            return Err("WAV file too small".to_string());
+        }
+        let sample_rate = u32::from_le_bytes(raw_bytes[24..28].try_into().unwrap());
+        let samples: Vec<i16> = raw_bytes[44..]
+            .chunks_exact(2)
+            .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
+            .collect();
+        (samples, sample_rate)
+    };
+
+    if samples_i16.is_empty() {
+        return Ok(RecordingStopResponse {
+            success: false, transcript: None, confidence: None,
+            duration: None, error: Some("No audio in recording".to_string()),
+        });
+    }
+
+    // Convert i16 → f32 for WAV encoding
+    let samples_f32: Vec<f32> = samples_i16.iter()
+        .map(|&s| s as f32 / i16::MAX as f32)
+        .collect();
+    let duration = samples_f32.len() as f64 / sample_rate as f64;
+    let wav = crate::audio::pcm_to_wav(&samples_f32, sample_rate, 1);
+
+    // Send to Deepgram
+    let keywords = lock_or_recover(&state.deepgram_keywords).clone();
+    let mut url =
+        "https://api.deepgram.com/v1/listen?model=nova-3&punctuate=true&smart_format=true".to_string();
+    for kw in &keywords {
+        url.push_str(&format!("&keywords={}", urlencoding::encode(kw)));
+    }
+
+    let client = reqwest::Client::new();
+    let resp = match client
+        .post(&url)
+        .header("Authorization", format!("Token {api_key}"))
+        .header("Content-Type", "audio/wav")
+        .body(wav)
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return Ok(RecordingStopResponse {
+                success: false, transcript: None, confidence: None,
+                duration: Some(duration), error: Some(format!("Deepgram request failed: {e}")),
+            })
+        }
+    };
+
+    let status = resp.status();
+    if !status.is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        warn!("[reprocess] Deepgram returned {}: {}", status, &text[..text.len().min(200)]);
+        return Ok(RecordingStopResponse {
+            success: false, transcript: None, confidence: None,
+            duration: Some(duration), error: Some(format!("Deepgram error ({})", status)),
+        });
+    }
+
+    let json: serde_json::Value = match resp.json().await {
+        Ok(j) => j,
+        Err(e) => {
+            return Ok(RecordingStopResponse {
+                success: false, transcript: None, confidence: None,
+                duration: Some(duration), error: Some(format!("Invalid Deepgram response: {e}")),
+            });
+        }
+    };
+
+    let alt = json.get("results")
+        .and_then(|r| r.get("channels"))
+        .and_then(|ch| ch.get(0))
+        .and_then(|c| c.get("alternatives"))
+        .and_then(|a| a.get(0));
+
+    match alt {
+        Some(alt) => Ok(RecordingStopResponse {
+            success: true,
+            transcript: Some(alt["transcript"].as_str().unwrap_or("").to_string()),
+            confidence: alt["confidence"].as_f64(),
+            duration: Some(duration),
+            error: None,
+        }),
+        None => Ok(RecordingStopResponse {
+            success: false, transcript: None, confidence: None,
+            duration: Some(duration), error: Some("Unexpected Deepgram response structure".to_string()),
+        }),
+    }
+}
+
 /// Opens the voice buffer storage folder in the system file manager.
 #[tauri::command]
 pub fn voice_buffer_open_folder(state: State<AppState>) -> OkResponse {

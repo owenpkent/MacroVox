@@ -69,11 +69,20 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
     localStorage.getItem('voice_buffer_max_size') || String(100 * 1024 * 1024)
   )
   const [voiceBufferInfo, setVoiceBufferInfo] = useState<ipc.VoiceBufferInfo | null>(null)
+  const [deepgramKey, setDeepgramKey] = useState<string | null>(null)
 
-  // Load voice buffer info
+  // Load voice buffer info and API key for reprocessing
   useEffect(() => {
     ipc.voiceBufferInfo().then(setVoiceBufferInfo).catch(() => {})
   }, [voiceBufferEnabled])
+
+  useEffect(() => {
+    if (user) {
+      auth.getManagedKeys().then(result => {
+        if (result.success && result.deepgramKey) setDeepgramKey(result.deepgramKey)
+      }).catch(() => {})
+    }
+  }, [user])
 
   const handleEmailAuth = async () => {
     if (!authEmail || !authPassword) return
@@ -672,7 +681,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
                     </div>
                   )}
 
-                  <VoiceHistory user={user ? { id: user.id } : null} />
+                  <VoiceHistory user={user ? { id: user.id } : null} apiKey={deepgramKey} />
                 </>
               )}
             </div>
