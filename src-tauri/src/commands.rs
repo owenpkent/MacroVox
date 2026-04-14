@@ -372,17 +372,22 @@ pub async fn recording_stop(
         Some(alt) => {
             let transcript_text = alt["transcript"].as_str().unwrap_or("").to_string();
 
-            // Auto-save to voice buffer if enabled
+            // Auto-save to voice buffer in background — don't block the
+            // transcript response. Opus encoding + disk write can take 50-200ms
+            // and the user shouldn't wait for it.
             let vb_enabled = *lock_or_recover(&state.voice_buffer_enabled);
             if vb_enabled && !transcript_text.is_empty() {
                 let dir = lock_or_recover(&state.voice_buffer_dir).clone();
                 let max_size = *lock_or_recover(&state.voice_buffer_max_size);
+                let transcript_clone = transcript_text.clone();
                 if !dir.as_os_str().is_empty() {
-                    if let Err(e) = crate::voice_buffer::save_recording(
-                        &dir, &samples, sample_rate, channels, &transcript_text, Some(max_size),
-                    ) {
-                        warn!("[voice_buffer] Auto-save failed: {e}");
-                    }
+                    std::thread::spawn(move || {
+                        if let Err(e) = crate::voice_buffer::save_recording(
+                            &dir, &samples, sample_rate, channels, &transcript_clone, Some(max_size),
+                        ) {
+                            warn!("[voice_buffer] Auto-save failed: {e}");
+                        }
+                    });
                 }
             }
 
