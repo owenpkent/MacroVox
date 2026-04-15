@@ -50,6 +50,10 @@ chrono = "0.4"
 base64 = "0.22"
 ogg-opus = "0.1"
 
+# Auto-updater + process relaunch
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+
 # Debug logging (activate with RUST_LOG=debug)
 log = "0.4"
 env_logger = "0.11"

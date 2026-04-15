@@ -41,6 +41,14 @@
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://hlioqbizljywisvnbtat.supabase.co https://macrovox.netlify.app https://api.deepgram.com wss://api.deepgram.com; img-src 'self' data:; font-src 'self' data:"
     }
   },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/okstudio1/MacroVox/releases/latest/download/latest.json"
+      ],
+      "pubkey": ""
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
@@ -51,6 +59,17 @@
       "icons/icon.ico",
       "icons/icon.png"
     ],
-    "resources": []
+    "resources": [],
+    "windows": {
+      "nsis": {
+        "headerImage": "installer/installer-header.bmp",
+        "sidebarImage": "installer/installer-sidebar.bmp",
+        "installerIcon": "icons/icon.ico",
+        "installMode": "perMachine",
+        "displayLanguageSelector": false,
+        "startMenuFolder": "MacroVox",
+        "installerHooks": "installer/installer-hooks.nsh"
+      }
+    }
   }
 }
