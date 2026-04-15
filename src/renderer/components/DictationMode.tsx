@@ -180,10 +180,7 @@ export function DictationMode() {
     if (autoCutoffSeconds && autoCutoffSeconds !== 'off') {
       const durationMs = parseInt(autoCutoffSeconds, 10) * 1000
       autoStopTimerRef.current = setTimeout(async () => {
-        // Stop recording first, then clear for next round
         await handleStopRecording()
-        setTranscript('')
-        streamingTranscriptRef.current = ''
       }, durationMs)
     }
     } finally {
