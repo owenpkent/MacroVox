@@ -137,12 +137,11 @@ The EV certificate USB token makes full CI/CD impossible (requires physical hard
 - CI calls a signing API endpoint on that machine
 - More complex to maintain
 
-### Option C: Tauri Updater (auto-updates)
-- Tauri has a built-in updater plugin (`tauri-plugin-updater`)
-- Serves update manifests from a URL (GitHub Releases or custom endpoint)
-- App checks for updates on launch and can self-update
-- Requires signing updates with a separate key pair (not the EV cert)
-- Best UX — users never manually download again after first install
+### Option C: Tauri Updater (auto-updates) — IMPLEMENTED
+- `tauri-plugin-updater` is installed and configured
+- Checks `https://github.com/okstudio1/MacroVox/releases/latest/download/latest.json` on launch
+- Downloads, installs, and relaunches automatically
+- **Remaining step**: generate signing keypair with `npx tauri signer generate` and set the pubkey in `tauri.conf.json`
 
 ### Recommended CI pipeline (future)
 
@@ -180,13 +179,15 @@ Tauri's updater plugin checks a JSON endpoint for new versions:
 }
 ```
 
-**Setup**:
-1. Add `tauri-plugin-updater` to Cargo.toml
-2. Generate update signing keys: `cargo tauri signer generate -w ~/.tauri/macrovox.key`
-3. Configure updater endpoint in `tauri.conf.json`
-4. Host the JSON manifest (GitHub Gist, or a file in the website repo)
-5. Sign update bundles with the private key during build
-6. App checks the endpoint on launch and prompts user to update
+**Current status**: Plugin installed, endpoint configured, `useUpdater` hook checks on launch. Dormant until pubkey is set.
+
+**Remaining setup**:
+1. Generate update signing keys: `npx tauri signer generate -w ~/.tauri/macrovox.key`
+2. Paste the public key into `tauri.conf.json` → `plugins.updater.pubkey`
+3. Set `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` env vars during build
+4. Build with `npx tauri build` — this produces `latest.json` alongside the installer
+5. Upload both the installer and `latest.json` to GitHub Releases
+6. Existing installs auto-detect and self-update on next launch
 
 This is the highest-impact distribution improvement — eliminates manual download for every update after the first install.
 

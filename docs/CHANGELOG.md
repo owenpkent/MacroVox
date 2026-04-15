@@ -7,12 +7,17 @@
 - **Opus compression** — voice buffer uses OGG Opus encoding via the `ogg-opus` crate (vendored libopus, no cmake needed). Falls back to WAV if Opus encoding fails. HTML5 `<audio>` plays OGG Opus natively in Chrome/Firefox/Edge.
 - **Transcription history** — click any recording to expand and view its full transcript. Copy transcript to clipboard from the expanded view.
 - **Reprocess recordings** — right-click any recording and select "Reprocess" to re-run the full pipeline: decode OGG Opus → re-transcribe through Deepgram → Claude AI cleanup → update manifest. Useful after changing keyword boosts or accessibility context.
+- **Auto-updater** — checks for updates on launch via `tauri-plugin-updater`. When a new version is available, downloads the installer, applies it, and relaunches automatically. Endpoint: GitHub Releases `latest.json`. Requires update signing keypair to be generated before first use.
+- **Branded NSIS installer** — custom header and sidebar images with MacroVox waveform branding. NSIS hooks handle process kill on upgrade, old version migration from different install directories, and shortcut creation. Per-machine install to Program Files with Start Menu folder.
 
 ### UI
 - **Writing tab removed** — Agentic Writing tab and settings section removed from the UI for initial release. Source files kept in repo for potential re-addition later.
 - **Processing ring removed** — Removed the spinning cyan ring around the record button during transcript processing.
 - **Dictation History settings** — new section in settings with: enable toggle (on by default), storage limit selector with visual usage bar (turns red at 90%), recording count and total duration display, "Open folder" button to reveal storage in Explorer, "Clear all" button, and scrollable recording list with play/stop/expand/delete per item and right-click context menu.
 - **Settings reordered** — Audio Input moved up (first-run priority), Subscription moved down, About and Shortcuts merged into one section.
+
+### Bug Fixes
+- **Auto-cutoff transcript disappearing** — the auto-cutoff timer was calling `setTranscript('')` immediately after `handleStopRecording()`, wiping the transcript from the UI before the user could see it. Clipboard had the text because copy runs inside `handleStopRecording`. Removed the errant clear.
 
 ### Stability
 - **Race condition on rapid start/stop fixed** — Added `operationInProgressRef` guard to prevent concurrent `handleStartRecording`, `handleStopRecording`, and `handleStopAndCopy` calls from overlapping when the record button is clicked rapidly.

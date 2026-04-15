@@ -49,6 +49,8 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 - [x] Session persistence via Supabase JS SDK localStorage (replaced Electron safeStorage)
 - [x] Subscription + managed_api_keys tables in Supabase (with RLS)
 - [x] EV code-signed NSIS installer + portable executable
+- [x] Branded NSIS installer with custom header/sidebar images and install hooks
+- [x] Auto-updater via tauri-plugin-updater (checks GitHub Releases on launch)
 - [x] Security audit + hardening — CORS, CSP, payload limits, input validation, capabilities lockdown
 
 ### App Features
