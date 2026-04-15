@@ -21,6 +21,7 @@ export function DictationMode() {
   const autoStopTimerRef = useRef<NodeJS.Timeout | null>(null)
   const audioLevelIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const operationInProgressRef = useRef(false)
+  const autoCutoffFiredRef = useRef(false)
 
   // Quick Dictation settings from localStorage
   const [autoCopyOnStop, setAutoCopyOnStop] = useState(() =>
@@ -180,7 +181,9 @@ export function DictationMode() {
     if (autoCutoffSeconds && autoCutoffSeconds !== 'off') {
       const durationMs = parseInt(autoCutoffSeconds, 10) * 1000
       autoStopTimerRef.current = setTimeout(async () => {
+        autoCutoffFiredRef.current = true
         await handleStopRecording()
+        autoCutoffFiredRef.current = false
       }, durationMs)
     }
     } finally {
@@ -237,7 +240,7 @@ export function DictationMode() {
       setIsProcessing(false)
       if (result.success && result.transcript) {
         const rawSegment = result.transcript
-        const prevText = transcript
+        const prevText = autoCutoffFiredRef.current ? '' : transcript
         const rawText = prevText ? prevText + ' ' + rawSegment : rawSegment
         setTranscript(rawText)
 
