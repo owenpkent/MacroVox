@@ -77,11 +77,24 @@ pub struct VoiceBufferInfo {
 // ── Core operations ──────────────────────────────────────────────────────────
 
 /// Loads the manifest from disk, or returns a default if it doesn't exist.
+///
+/// If the file exists but fails to parse (truncated write, disk corruption),
+/// the broken file is renamed to `manifest.json.bad-{timestamp}` so it's
+/// recoverable for debugging instead of being silently overwritten.
 pub fn load_manifest(buffer_dir: &Path) -> VoiceBufferManifest {
     let path = buffer_dir.join("manifest.json");
-    match fs::read_to_string(&path) {
-        Ok(data) => serde_json::from_str(&data).unwrap_or_default(),
-        Err(_) => VoiceBufferManifest::default(),
+    let Ok(data) = fs::read_to_string(&path) else {
+        return VoiceBufferManifest::default();
+    };
+    match serde_json::from_str(&data) {
+        Ok(m) => m,
+        Err(e) => {
+            warn!("[voice_buffer] manifest.json parse failed ({e}) — backing up and starting fresh");
+            let ts = chrono::Local::now().format("%Y%m%dT%H%M%S");
+            let backup = buffer_dir.join(format!("manifest.json.bad-{ts}"));
+            let _ = fs::rename(&path, &backup);
+            VoiceBufferManifest::default()
+        }
     }
 }
 
@@ -246,22 +259,38 @@ pub fn get_info(buffer_dir: &Path, enabled: bool) -> VoiceBufferInfo {
     }
 }
 
-/// Reads a WAV file from the buffer and returns its bytes.
-pub fn get_audio(buffer_dir: &Path, filename: &str) -> Result<Vec<u8>, String> {
-    // Prevent path traversal
-    if filename.contains('/') || filename.contains('\\') || filename.contains("..") {
+/// Validates that `filename` is a plain filename (no separators, no traversal,
+/// no absolute path). This is called by every function that takes a user-supplied
+/// filename so the substring check + Path::file_name comparison can't be bypassed
+/// by URL-encoded / backslash-encoded inputs the user might construct.
+fn validate_filename(filename: &str) -> Result<(), String> {
+    if filename.is_empty()
+        || filename.contains('/')
+        || filename.contains('\\')
+        || filename.contains("..")
+        || filename.contains('\0')
+    {
         return Err("Invalid filename".to_string());
     }
+    // Belt-and-braces: Path::file_name(filename) must equal filename verbatim.
+    // This catches anything that Rust's Path treats as a separator on the
+    // current OS but our string check missed.
+    if Path::new(filename).file_name().and_then(|n| n.to_str()) != Some(filename) {
+        return Err("Invalid filename".to_string());
+    }
+    Ok(())
+}
+
+/// Reads a WAV file from the buffer and returns its bytes.
+pub fn get_audio(buffer_dir: &Path, filename: &str) -> Result<Vec<u8>, String> {
+    validate_filename(filename)?;
     let path = buffer_dir.join(filename);
     fs::read(&path).map_err(|e| format!("Failed to read audio file: {e}"))
 }
 
 /// Deletes a single recording from the buffer.
 pub fn delete_recording(buffer_dir: &Path, filename: &str) -> Result<(), String> {
-    // Prevent path traversal
-    if filename.contains('/') || filename.contains('\\') || filename.contains("..") {
-        return Err("Invalid filename".to_string());
-    }
+    validate_filename(filename)?;
 
     let mut manifest = load_manifest(buffer_dir);
     let idx = manifest
@@ -300,9 +329,7 @@ pub fn clear_all(buffer_dir: &Path) -> Result<(), String> {
 
 /// Updates the transcript for a recording in the manifest.
 pub fn update_transcript(buffer_dir: &Path, filename: &str, transcript: &str) -> Result<(), String> {
-    if filename.contains('/') || filename.contains('\\') || filename.contains("..") {
-        return Err("Invalid filename".to_string());
-    }
+    validate_filename(filename)?;
     let mut manifest = load_manifest(buffer_dir);
     let recording = manifest
         .recordings

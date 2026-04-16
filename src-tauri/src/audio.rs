@@ -7,13 +7,20 @@
 /// - `build_input_stream`  — open a cpal capture stream, dispatching on sample format
 
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use cpal::traits::DeviceTrait;
+use log::warn;
 use crate::deepgram_ws::{DgMessage, DgSender};
 
 /// Lock a mutex, recovering from poison if a prior thread panicked.
 fn lock_or_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
+
+/// Counter for frames dropped due to channel backpressure. Surfaced via a
+/// rate-limited `warn!` so sustained drops are visible in logs without
+/// flooding (one line per 100 drops).
+static DROPPED_FRAMES: AtomicUsize = AtomicUsize::new(0);
 
 // ── WAV encoding ─────────────────────────────────────────────────────────────
 
@@ -119,8 +126,20 @@ pub fn process_audio_frame(
         // Streaming path: if a WebSocket session is active, also send i16 bytes.
         if let Some(sender) = lock_or_recover(dg_sender).as_ref() {
             let bytes = f32_to_i16_bytes(data);
-            // Non-blocking try_send — drop frames silently if channel is full or closed.
-            let _ = sender.try_send(DgMessage::Pcm(bytes));
+            // Non-blocking try_send — drop frames if the channel is full
+            // (WebSocket falling behind) or closed (session ending).
+            // Surface backpressure via a rate-limited warning log so users
+            // notice sustained network slowdowns instead of getting silent
+            // gaps in their transcripts.
+            if let Err(e) = sender.try_send(DgMessage::Pcm(bytes)) {
+                use tokio::sync::mpsc::error::TrySendError;
+                if matches!(e, TrySendError::Full(_)) {
+                    let n = DROPPED_FRAMES.fetch_add(1, Ordering::Relaxed) + 1;
+                    if n % 100 == 1 {
+                        warn!("[audio] Deepgram channel full — dropped {n} frames so far");
+                    }
+                }
+            }
         }
     }
 }

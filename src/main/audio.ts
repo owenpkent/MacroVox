@@ -1,4 +1,4 @@
-import { spawn, ChildProcess, execSync } from 'child_process'
+import { spawn, spawnSync, ChildProcess, execSync } from 'child_process'
 import { PassThrough } from 'stream'
 import * as path from 'path'
 import * as os from 'os'
@@ -68,35 +68,24 @@ function findFfmpeg(): string | null {
   return null
 }
 
-// List Windows audio devices using ffmpeg
+// List Windows audio devices using ffmpeg.
+// Uses spawnSync (not execSync) with the path as a separate argv entry so a
+// path containing spaces / quotes / shell metacharacters can never be reparsed
+// by /bin/sh or cmd.exe.
 function listWindowsAudioDevices(ffmpegPath: string): string[] {
-  try {
-    const result = execSync(`"${ffmpegPath}" -list_devices true -f dshow -i dummy 2>&1`, { 
-      encoding: 'utf8',
-      windowsHide: true 
-    })
-    const devices: string[] = []
-    const lines = result.split('\n')
-    for (const line of lines) {
-      const match = line.match(/"([^"]+)" \(audio\)/)
-      if (match) {
-        devices.push(match[1])
-      }
-    }
-    return devices
-  } catch (err: any) {
-    // ffmpeg exits with error but still outputs device list
-    const output = err.stdout || err.stderr || ''
-    const devices: string[] = []
-    const lines = output.split('\n')
-    for (const line of lines) {
-      const match = line.match(/"([^"]+)" \(audio\)/)
-      if (match) {
-        devices.push(match[1])
-      }
-    }
-    return devices
+  const result = spawnSync(
+    ffmpegPath,
+    ['-list_devices', 'true', '-f', 'dshow', '-i', 'dummy'],
+    { encoding: 'utf8', windowsHide: true, shell: false },
+  )
+  // ffmpeg exits non-zero but still writes the device list to stderr.
+  const output = `${result.stdout || ''}${result.stderr || ''}`
+  const devices: string[] = []
+  for (const line of output.split('\n')) {
+    const match = line.match(/"([^"]+)" \(audio\)/)
+    if (match) devices.push(match[1])
   }
+  return devices
 }
 
 export class AudioCapture {

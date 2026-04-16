@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    const token = authHeader.replace('Bearer ', '')
+    const token = authHeader.replace(/^Bearer\s+/i, '')
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
     if (authError || !user) {
       return new Response(JSON.stringify({ error: 'Invalid token' }), {

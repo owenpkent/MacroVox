@@ -42,9 +42,27 @@ const MAX_BODY_SIZE = 512 * 1024 // 512 KB
 const MAX_SYSTEM_PROMPT_LENGTH = 10_000
 const MAX_MESSAGE_LENGTH = 100_000
 
-// Local dev: skip auth when running under `netlify dev` with DEV_BYPASS_AUTH=true.
-// Safety: never allow bypass in production deploys.
-const isDevBypass = process.env.DEV_BYPASS_AUTH === 'true' && process.env.CONTEXT !== 'production'
+// Local dev: skip auth when running under `netlify dev`.
+// Triple-gate the bypass so a single mis-set env var can't disable auth in
+// prod: (1) NETLIFY_DEV is set only by the local runtime, never by deployed
+// functions; (2) the operator still has to opt in with DEV_BYPASS_AUTH=true;
+// (3) CONTEXT must not be 'production'.
+const isDevBypass =
+  process.env.NETLIFY_DEV === 'true' &&
+  process.env.DEV_BYPASS_AUTH === 'true' &&
+  process.env.CONTEXT !== 'production'
+
+function buildCorsHeaders(corsOrigin: string | null): Record<string, string> {
+  const base: Record<string, string> = {
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  }
+  // Omit the ACAO header entirely for disallowed origins — an empty string is
+  // non-portable and some middleboxes treat it as "echo the request origin."
+  if (corsOrigin) base['Access-Control-Allow-Origin'] = corsOrigin
+  return base
+}
 
 export const handler: Handler = async (event) => {
   const origin = (event.headers['origin'] ?? '').toLowerCase()
@@ -52,12 +70,7 @@ export const handler: Handler = async (event) => {
   if (isDevBypass) allowedOrigins.push('http://localhost:8888', 'http://localhost:5173')
   const corsOrigin = allowedOrigins.includes(origin) ? origin : null
 
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': corsOrigin || '',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Vary': 'Origin',
-  }
+  const corsHeaders = buildCorsHeaders(corsOrigin)
 
   // Reject requests from unknown origins
   if (!corsOrigin) {
@@ -212,7 +225,17 @@ export const handler: Handler = async (event) => {
     }
   }
 
-  const safeModel = ALLOWED_MODELS.includes(model ?? '') ? model! : 'claude-sonnet-4-20250514'
+  // Reject unknown models instead of silently substituting — silent
+  // substitution lets a caller request one model and get billed for another,
+  // and obscures bugs where the renderer is sending the wrong model name.
+  if (model !== undefined && !ALLOWED_MODELS.includes(model)) {
+    return {
+      statusCode: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Unknown model', allowed: ALLOWED_MODELS }),
+    }
+  }
+  const safeModel = model ?? 'claude-sonnet-4-20250514'
   const safeMaxTokens = Math.min(Math.max(max_tokens ?? 2048, 1), MAX_TOKENS_LIMIT)
 
   try {

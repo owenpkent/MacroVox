@@ -55,8 +55,10 @@ pub enum DgMessage {
 }
 
 /// Sender half of the channel connecting the audio callback to the WS task.
-/// Bounded to 500 messages (~5 seconds of audio at 10 ms frames) to prevent
-/// unbounded memory growth if the WebSocket is slower than the audio callback.
+/// Bounded to 1000 messages (~10 seconds of audio at 10 ms frames) to absorb
+/// routine network jitter without dropping frames. If the WebSocket is slower
+/// than that for a sustained period, frames are dropped (see
+/// `audio::process_audio_frame` for drop-counter / log-rate-limit behavior).
 pub type DgSender = mpsc::Sender<DgMessage>;
 
 // ── Session start ─────────────────────────────────────────────────────────────
@@ -102,6 +104,8 @@ pub async fn start_session(
     let mut request = url
         .into_client_request()
         .map_err(|e| format!("Invalid Deepgram URL: {e}"))?;
+    // NOTE: error path here intentionally does not include `api_key` in the
+    // returned message — a malformed key would otherwise leak into logs.
     request.headers_mut().insert(
         AUTHORIZATION,
         HeaderValue::from_str(&format!("Token {api_key}"))
@@ -114,9 +118,10 @@ pub async fn start_session(
         .map_err(|e| format!("Deepgram WebSocket connect failed: {e}"))?;
 
     let (mut ws_sink, mut ws_rx) = ws_stream.split();
-    // Bounded channel: 500 messages ≈ 5 s of 10 ms audio frames.
-    // If the WebSocket can't keep up, old frames are dropped silently.
-    let (tx, mut rx) = mpsc::channel::<DgMessage>(500);
+    // Bounded channel: 1000 messages ≈ 10 s of 10 ms audio frames.
+    // If the WebSocket falls behind for longer than that, audio.rs drops the
+    // overflow frames and rate-limits a warn! line so the user gets a signal.
+    let (tx, mut rx) = mpsc::channel::<DgMessage>(1000);
 
     // Spawn the background task that forwards PCM → WebSocket and
     // WebSocket transcript events → Tauri events.

@@ -99,6 +99,23 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     ? session.subscription
     : session.subscription?.id
 
+  // Defensive check: if this Stripe customer is already bound to a different
+  // user in our DB, refuse to re-bind. The create-checkout function already
+  // enforces user.id === metadata.userId at session-creation time, but this
+  // belt-and-braces guard means a future regression in create-checkout can't
+  // be exploited to provision keys to a different account.
+  if (customerId) {
+    const { data: existing } = await supabase
+      .from('subscriptions')
+      .select('user_id')
+      .eq('stripe_customer_id', customerId)
+      .maybeSingle()
+    if (existing && existing.user_id !== userId) {
+      console.error('[stripe-webhook] checkout customerId already bound to another user — refusing to upsert')
+      return
+    }
+  }
+
   // Upsert subscription row
   const { error: subError } = await supabase
     .from('subscriptions')

@@ -103,18 +103,21 @@ fn parse_key_code(s: &str) -> Result<Code, String> {
         "7" => Ok(Code::Digit7),
         "8" => Ok(Code::Digit8),
         "9" => Ok(Code::Digit9),
-        s if s.len() == 1 && s.chars().next().unwrap().is_ascii_alphabetic() => {
-            match s.to_uppercase().as_str() {
-                "A" => Ok(Code::KeyA), "B" => Ok(Code::KeyB), "C" => Ok(Code::KeyC),
-                "D" => Ok(Code::KeyD), "E" => Ok(Code::KeyE), "F" => Ok(Code::KeyF),
-                "G" => Ok(Code::KeyG), "H" => Ok(Code::KeyH), "I" => Ok(Code::KeyI),
-                "J" => Ok(Code::KeyJ), "K" => Ok(Code::KeyK), "L" => Ok(Code::KeyL),
-                "M" => Ok(Code::KeyM), "N" => Ok(Code::KeyN), "O" => Ok(Code::KeyO),
-                "P" => Ok(Code::KeyP), "Q" => Ok(Code::KeyQ), "R" => Ok(Code::KeyR),
-                "S" => Ok(Code::KeyS), "T" => Ok(Code::KeyT), "U" => Ok(Code::KeyU),
-                "V" => Ok(Code::KeyV), "W" => Ok(Code::KeyW), "X" => Ok(Code::KeyX),
-                "Y" => Ok(Code::KeyY), "Z" => Ok(Code::KeyZ),
-                _ => unreachable!(),
+        s if s.chars().count() == 1 => {
+            // chars().count() == 1 guarantees next() is Some without panic on
+            // multi-byte codepoints (where len() == 1 would not).
+            let ch = s.chars().next().expect("count is 1").to_ascii_uppercase();
+            match ch {
+                'A' => Ok(Code::KeyA), 'B' => Ok(Code::KeyB), 'C' => Ok(Code::KeyC),
+                'D' => Ok(Code::KeyD), 'E' => Ok(Code::KeyE), 'F' => Ok(Code::KeyF),
+                'G' => Ok(Code::KeyG), 'H' => Ok(Code::KeyH), 'I' => Ok(Code::KeyI),
+                'J' => Ok(Code::KeyJ), 'K' => Ok(Code::KeyK), 'L' => Ok(Code::KeyL),
+                'M' => Ok(Code::KeyM), 'N' => Ok(Code::KeyN), 'O' => Ok(Code::KeyO),
+                'P' => Ok(Code::KeyP), 'Q' => Ok(Code::KeyQ), 'R' => Ok(Code::KeyR),
+                'S' => Ok(Code::KeyS), 'T' => Ok(Code::KeyT), 'U' => Ok(Code::KeyU),
+                'V' => Ok(Code::KeyV), 'W' => Ok(Code::KeyW), 'X' => Ok(Code::KeyX),
+                'Y' => Ok(Code::KeyY), 'Z' => Ok(Code::KeyZ),
+                _ => Err(format!("Unknown key: {s}")),
             }
         }
         other => Err(format!("Unknown key: {other}")),
@@ -325,7 +328,12 @@ pub async fn deepgram_start(
     match crate::deepgram_ws::start_session(&api_key, sample_rate, channels, &keywords, &number_format, &language, app).await {
         Ok(sender) => {
             debug!("[deepgram] WebSocket session established");
-            *lock_or_recover(&state.dg_sender) = Some(sender);
+            // Replace any existing sender first — on a double-start the previous
+            // background task is signaled to close so it can drop its WebSocket
+            // and stop counting against quota. Without this it would orphan.
+            if let Some(old) = lock_or_recover(&state.dg_sender).replace(sender) {
+                let _ = old.try_send(crate::deepgram_ws::DgMessage::Stop);
+            }
             lock_or_recover(&state.recording_buffer).clear();
             *lock_or_recover(&state.is_recording) = true;
             Ok(OkResponse::ok())
@@ -411,8 +419,12 @@ pub async fn recording_stop(
     let number_format = lock_or_recover(&state.number_format).clone();
     let language = lock_or_recover(&state.transcription_language).clone();
 
-    let duration = samples.len() as f64 / (sample_rate as f64 * channels as f64);
-    let wav = crate::audio::pcm_to_wav(&samples, sample_rate, channels);
+    // Guard against zero values from a corrupted device profile — produces a
+    // finite duration instead of NaN/inf that would JSON-stringify to null.
+    let safe_sample_rate = sample_rate.max(1);
+    let safe_channels = channels.max(1);
+    let duration = samples.len() as f64 / (safe_sample_rate as f64 * safe_channels as f64);
+    let wav = crate::audio::pcm_to_wav(&samples, safe_sample_rate, safe_channels);
 
     // --- Upload to Deepgram pre-recorded API ---
     let mut url = format!(
@@ -486,6 +498,10 @@ pub async fn recording_stop(
             // Auto-save to voice buffer in background — don't block the
             // transcript response. Opus encoding + disk write can take 50-200ms
             // and the user shouldn't wait for it.
+            //
+            // All state is captured into owned locals here so a concurrent
+            // settings_broadcast can't change voice_buffer_dir/max_size between
+            // this point and when the background thread actually writes.
             let vb_enabled = *lock_or_recover(&state.voice_buffer_enabled);
             if vb_enabled && !transcript_text.is_empty() {
                 let dir = lock_or_recover(&state.voice_buffer_dir).clone();
@@ -494,7 +510,7 @@ pub async fn recording_stop(
                 if !dir.as_os_str().is_empty() {
                     std::thread::spawn(move || {
                         if let Err(e) = crate::voice_buffer::save_recording(
-                            &dir, &samples, sample_rate, channels, &transcript_clone, Some(max_size),
+                            &dir, &samples, safe_sample_rate, safe_channels, &transcript_clone, Some(max_size),
                         ) {
                             warn!("[voice_buffer] Auto-save failed: {e}");
                         }
@@ -968,22 +984,30 @@ pub async fn voice_buffer_reprocess(
     let raw_bytes = crate::voice_buffer::get_audio(&dir, &filename)?;
 
     // Decode OGG Opus → i16 PCM (or read WAV directly)
-    let (samples_i16, sample_rate) = if filename.ends_with(".ogg") {
+    let (samples_i16, sample_rate, source_channels) = if filename.ends_with(".ogg") {
         let cursor = std::io::Cursor::new(raw_bytes);
         let (samples, _) = ogg_opus::decode::<_, 16000>(cursor)
             .map_err(|e| format!("Failed to decode OGG Opus: {e}"))?;
-        (samples, 16_000u32)
+        (samples, 16_000u32, 1u16)
     } else {
-        // WAV — parse header and extract i16 samples
+        // WAV — parse header and extract i16 samples. Use try_into-or-error
+        // (no unwrap) so a malformed file fails cleanly instead of panicking.
         if raw_bytes.len() < 44 {
             return Err("WAV file too small".to_string());
         }
-        let sample_rate = u32::from_le_bytes(raw_bytes[24..28].try_into().unwrap());
+        let channels_bytes: [u8; 2] = raw_bytes[22..24]
+            .try_into()
+            .map_err(|_| "WAV header truncated (channels)".to_string())?;
+        let rate_bytes: [u8; 4] = raw_bytes[24..28]
+            .try_into()
+            .map_err(|_| "WAV header truncated (sample rate)".to_string())?;
+        let channels = u16::from_le_bytes(channels_bytes).max(1);
+        let sample_rate = u32::from_le_bytes(rate_bytes).max(1);
         let samples: Vec<i16> = raw_bytes[44..]
             .chunks_exact(2)
             .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
             .collect();
-        (samples, sample_rate)
+        (samples, sample_rate, channels)
     };
 
     if samples_i16.is_empty() {
@@ -997,8 +1021,8 @@ pub async fn voice_buffer_reprocess(
     let samples_f32: Vec<f32> = samples_i16.iter()
         .map(|&s| s as f32 / i16::MAX as f32)
         .collect();
-    let duration = samples_f32.len() as f64 / sample_rate as f64;
-    let wav = crate::audio::pcm_to_wav(&samples_f32, sample_rate, 1);
+    let duration = samples_f32.len() as f64 / (sample_rate as f64 * source_channels as f64);
+    let wav = crate::audio::pcm_to_wav(&samples_f32, sample_rate, source_channels);
 
     // Send to Deepgram
     let keywords = lock_or_recover(&state.deepgram_keywords).clone();

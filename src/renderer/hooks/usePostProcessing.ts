@@ -18,8 +18,12 @@ export function usePostProcessing({ useProxy = false, userId }: UsePostProcessin
 
     const isDev = import.meta.env.DEV && import.meta.env.VITE_DEV_MODE === 'true'
     const { data: { session } } = await supabase.auth.getSession()
-    if (!isDev && !session?.access_token) return null
-    const token = session?.access_token || 'dev-bypass'
+    // Fail closed: in production, no session means no proxy call. The
+    // `dev-bypass` literal is only sent when running under `netlify dev`
+    // locally, where the proxy itself enforces NETLIFY_DEV+DEV_BYPASS_AUTH.
+    if (!session?.access_token && !isDev) return null
+    const token = session?.access_token ?? (isDev ? 'dev-bypass' : '')
+    if (!token) return null
 
     setIsPostProcessing(true)
 
@@ -27,7 +31,12 @@ export function usePostProcessing({ useProxy = false, userId }: UsePostProcessin
     const timeoutId = setTimeout(() => controller.abort(), 15_000)
 
     try {
-      const safeContext = context.slice(0, 1000)
+      // Escape any closing-tag-like sequence so a user can't break out of the
+      // <user_speech_context> delimiter and inject system-level instructions
+      // into the model. Tightened the cap from 1000→800 chars.
+      const safeContext = context
+        .slice(0, 800)
+        .replace(/<\/?user_speech_context\b/gi, '<user_speech_context_quoted')
       const numberFormat = localStorage.getItem('number_format') || 'smart'
       const language = localStorage.getItem('transcription_language') || 'en'
       const numberInstruction = numberFormat === 'digits'

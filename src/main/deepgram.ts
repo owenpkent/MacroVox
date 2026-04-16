@@ -210,38 +210,31 @@ export class DeepgramStreamer {
         transcribeOptions as Parameters<typeof this.client.listen.prerecorded.transcribeFile>[1]
       )
 
-      // Debug: Log the entire response object structure
-      console.log('[Deepgram] Response type:', typeof response)
-      console.log('[Deepgram] Response keys:', Object.keys(response || {}))
-      console.log('[Deepgram] Full response:', JSON.stringify(response, null, 2).substring(0, 1500))
-      
-      // Try different ways to access the result
+      // Avoid JSON.stringify(response) — the SDK includes the request object
+      // on errors, which carries the Authorization header. Logging only the
+      // shape keeps debugging useful without leaking the API key into stdout.
       const result = (response as any)?.result || response
-      console.log('[Deepgram] Result type:', typeof result)
-      console.log('[Deepgram] Result keys:', Object.keys(result || {}))
-      
-      // Check for error in response
+
       if ((response as any)?.error || (result as any)?.error) {
-        console.error('[Deepgram] API returned error:', (response as any)?.error || (result as any)?.error)
+        const e = (response as any)?.error || (result as any)?.error
+        console.error('[Deepgram] API returned error:', typeof e === 'string' ? e : (e?.message ?? 'unknown'))
       }
-      
+
       const transcript = (result as any)?.results?.channels?.[0]?.alternatives?.[0]?.transcript || ''
       const confidence = (result as any)?.results?.channels?.[0]?.alternatives?.[0]?.confidence || 0
       const duration = (result as any)?.metadata?.duration || 0
 
-      console.log(`[Deepgram] Batch transcription complete: "${transcript}" (confidence: ${confidence}, duration: ${duration}s)`)
-      
+      console.log(`[Deepgram] Batch transcription complete (${transcript.length} chars, conf=${confidence.toFixed(2)}, ${duration}s)`)
+
       return {
         transcript,
         confidence,
         duration
       }
     } catch (err: any) {
-      console.error('[Deepgram] Batch transcription failed!')
-      console.error('[Deepgram] Error message:', err?.message)
-      console.error('[Deepgram] Error name:', err?.name)
-      console.error('[Deepgram] Error stack:', err?.stack)
-      console.error('[Deepgram] Full error:', JSON.stringify(err, Object.getOwnPropertyNames(err), 2))
+      // Log only the message; never JSON.stringify the error (it includes the
+      // request object, which has the Authorization header).
+      console.error('[Deepgram] Batch transcription failed:', err?.message ?? 'unknown')
       throw err
     }
   }

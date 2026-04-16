@@ -242,7 +242,40 @@ export const onThemeChange = (
   callback: (themeId: string) => void,
 ): () => void => makeListener('theme-changed', callback)
 
+// Keys we accept from a settings-changed broadcast. Anything else gets dropped
+// before being forwarded to the React callback (which writes straight to
+// localStorage). Some of these values feed into Claude system prompts, so a
+// broadcast that includes an unexpected key is a prompt-injection vector.
+const ALLOWED_SETTINGS_KEYS = new Set([
+  'deepgram_keywords',
+  'minimize_to_tray',
+  'theme',
+  'dictation_auto_copy',
+  'dictation_clear_on_new',
+  'dictation_auto_cutoff',
+  'dictation_auto_paste',
+  'dictation_ai_cleanup',
+  'transcription_mode',
+  'transcription_language',
+  'number_format',
+  'voice_buffer_enabled',
+  'voice_buffer_max_size',
+  'post_processing_context',
+  'writing_style_profile',
+  'global_hotkey',
+])
+
 export const onSettingsChanged = (
   callback: (settings: Record<string, string>) => void,
-): () => void => makeListener('settings-changed', callback)
+): () => void => makeListener('settings-changed', (raw: Record<string, string>) => {
+  const filtered: Record<string, string> = {}
+  for (const [key, value] of Object.entries(raw ?? {})) {
+    if (ALLOWED_SETTINGS_KEYS.has(key) && typeof value === 'string') {
+      filtered[key] = value
+    } else {
+      console.warn('[settings] dropped unknown key from broadcast:', key)
+    }
+  }
+  callback(filtered)
+})
 

@@ -61,7 +61,9 @@ pub fn run() {
             // main window and hide instead of destroying if the setting is on.
             let main_window = app
                 .get_webview_window("main")
-                .expect("main window not found");
+                .ok_or_else(|| Box::<dyn std::error::Error>::from(
+                    "main window failed to initialize — check tauri.conf.json windows[] config",
+                ))?;
             let _ = main_window.show();
             let _ = main_window.set_focus();
 

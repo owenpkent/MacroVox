@@ -223,20 +223,33 @@ export class AuthManager {
       refresh_token: session.refresh_token,
     })
 
+    let encryptedSaved = false
     try {
       if (safeStorage.isEncryptionAvailable()) {
         const encrypted = safeStorage.encryptString(json)
         await fs.promises.writeFile(SESSION_FILE, encrypted)
+        encryptedSaved = true
       }
     } catch (err) {
       console.error('[Auth] Failed to save encrypted session:', err)
     }
 
-    try {
-      const backup = { s: Buffer.from(json).toString('base64'), ts: new Date().toISOString() }
-      await fs.promises.writeFile(SESSION_BACKUP, JSON.stringify(backup))
-    } catch (err) {
-      console.error('[Auth] Failed to save session backup:', err)
+    // Plaintext (base64) backup is only written when (a) safeStorage is
+    // unavailable AND (b) the operator explicitly opts in via env var.
+    // Otherwise refresh tokens land on disk in trivially decodable form,
+    // which is worse than losing the cached session on restart.
+    const allowPlaintext =
+      process.env.MACROVOX_ALLOW_PLAINTEXT_SESSION_BACKUP === '1' && !encryptedSaved
+    if (allowPlaintext) {
+      try {
+        const backup = { s: Buffer.from(json).toString('base64'), ts: new Date().toISOString() }
+        await fs.promises.writeFile(SESSION_BACKUP, JSON.stringify(backup))
+      } catch (err) {
+        console.error('[Auth] Failed to save session backup:', err)
+      }
+    } else {
+      // Make sure no stale plaintext backup from a previous build survives.
+      try { if (fs.existsSync(SESSION_BACKUP)) await fs.promises.unlink(SESSION_BACKUP) } catch {}
     }
   }
 
@@ -270,8 +283,11 @@ export class AuthManager {
   }
 
   private async clearStoredSession(): Promise<void> {
-    try { if (fs.existsSync(SESSION_FILE)) await fs.promises.unlink(SESSION_FILE) } catch {}
+    // Clear the plaintext backup first — if the encrypted-file delete then
+    // fails (transient FS error), we at least don't leave the easier-to-read
+    // file on disk. A retry on next signOut will mop up.
     try { if (fs.existsSync(SESSION_BACKUP)) await fs.promises.unlink(SESSION_BACKUP) } catch {}
+    try { if (fs.existsSync(SESSION_FILE)) await fs.promises.unlink(SESSION_FILE) } catch {}
   }
 
   private guessMethod(session: Session): AuthMethod {

@@ -73,7 +73,15 @@ export function VoiceHistory({ user, apiKey }: VoiceHistoryProps) {
     setLoadingAudio(file)
     try {
       const { base64, mime } = await ipc.voiceBufferGetAudio(file)
-      const audio = new Audio(`data:${mime};base64,${base64}`)
+      // Whitelist the MIME so the data URI can never carry a non-audio type
+      // even if the backend ever returns one. The Audio element won't play
+      // text/html anyway, but this stops anything weird from being decoded.
+      const safeMime = mime === 'audio/wav' || mime === 'audio/ogg' ? mime : null
+      if (!safeMime) {
+        console.warn('[VoiceHistory] Refusing unknown audio MIME:', mime)
+        return
+      }
+      const audio = new Audio(`data:${safeMime};base64,${base64}`)
       audio.onended = () => setPlayingFile(null)
       audioRef.current = audio
       await audio.play()

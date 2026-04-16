@@ -179,12 +179,15 @@ export function DictationMode() {
     }, 50)
 
     if (autoCutoffSeconds && autoCutoffSeconds !== 'off') {
-      const durationMs = parseInt(autoCutoffSeconds, 10) * 1000
+      const parsed = parseInt(autoCutoffSeconds, 10)
+      // Clamp to [5, 300] seconds — anything outside this is either typo'd
+      // settings or intentionally bogus input that would overflow setTimeout.
+      const seconds = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 5), 300) : 30
       autoStopTimerRef.current = setTimeout(async () => {
         autoCutoffFiredRef.current = true
         await handleStopRecording()
         autoCutoffFiredRef.current = false
-      }, durationMs)
+      }, seconds * 1000)
     }
     } finally {
       operationInProgressRef.current = false
@@ -223,15 +226,19 @@ export function DictationMode() {
 
         if (autoPasteEnabled && autoCopyOnStop) ipc.autoPaste()
 
-        // AI cleanup in background — update clipboard if result differs
+        // AI cleanup in background — update clipboard if result differs.
+        // Catch rejection so a failed proxy call doesn't leave isPostProcessing
+        // stuck and doesn't surface as an unhandled rejection.
         if (aiCleanupEnabled) {
-          postProcess(currentText).then((cleaned) => {
-            if (cleaned && cleaned !== currentText) {
-              setTranscript(cleaned)
-              streamingTranscriptRef.current = cleaned
-              if (autoCopyOnStop) ipc.copyToClipboard(cleaned)
-            }
-          })
+          postProcess(currentText)
+            .then((cleaned) => {
+              if (cleaned && cleaned !== currentText) {
+                setTranscript(cleaned)
+                streamingTranscriptRef.current = cleaned
+                if (autoCopyOnStop) ipc.copyToClipboard(cleaned)
+              }
+            })
+            .catch(() => { setError('AI cleanup failed') })
         }
       }
     } else {
@@ -253,15 +260,17 @@ export function DictationMode() {
         if (autoPasteEnabled && autoCopyOnStop) ipc.autoPaste()
 
         if (aiCleanupEnabled) {
-          postProcess(rawSegment).then((cleaned) => {
-            if (cleaned && cleaned !== rawSegment) {
-              setTranscript(prev => {
-                const cleanedFull = prev.replace(rawSegment, cleaned)
-                if (autoCopyOnStop) ipc.copyToClipboard(cleanedFull)
-                return cleanedFull
-              })
-            }
-          })
+          postProcess(rawSegment)
+            .then((cleaned) => {
+              if (cleaned && cleaned !== rawSegment) {
+                setTranscript(prev => {
+                  const cleanedFull = prev.replace(rawSegment, cleaned)
+                  if (autoCopyOnStop) ipc.copyToClipboard(cleanedFull)
+                  return cleanedFull
+                })
+              }
+            })
+            .catch(() => { setError('AI cleanup failed') })
         }
       } else if (!result.success && result.error) {
         setError(result.error)
@@ -352,15 +361,17 @@ export function DictationMode() {
       if (autoPasteEnabled) ipc.autoPaste()
 
       if (aiCleanupEnabled) {
-        postProcess(rawSegment).then((cleaned) => {
-          if (cleaned && cleaned !== rawSegment) {
-            setTranscript(prev => {
-              const cleanedFull = prev.replace(rawSegment, cleaned)
-              ipc.copyToClipboard(cleanedFull)
-              return cleanedFull
-            })
-          }
-        })
+        postProcess(rawSegment)
+          .then((cleaned) => {
+            if (cleaned && cleaned !== rawSegment) {
+              setTranscript(prev => {
+                const cleanedFull = prev.replace(rawSegment, cleaned)
+                ipc.copyToClipboard(cleanedFull)
+                return cleanedFull
+              })
+            }
+          })
+          .catch(() => { setError('AI cleanup failed') })
       }
     } else if (!result.success && result.error) {
       setError(result.error)

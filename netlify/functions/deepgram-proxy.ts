@@ -31,9 +31,25 @@ const ALLOWED_MODELS = ['nova-3', 'nova-2', 'nova-2-general', 'nova', 'enhanced'
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000 // 1 hour
 const RATE_LIMIT_MAX_CALLS = 300 // per user per hour (higher than claude — audio is lighter)
 
-// Local dev: skip auth when running under `netlify dev` with DEV_BYPASS_AUTH=true.
-// Safety: never allow bypass in production deploys.
-const isDevBypass = process.env.DEV_BYPASS_AUTH === 'true' && process.env.CONTEXT !== 'production'
+// Local dev: skip auth when running under `netlify dev`.
+// Triple-gated — see claude-proxy for rationale.
+const isDevBypass =
+  process.env.NETLIFY_DEV === 'true' &&
+  process.env.DEV_BYPASS_AUTH === 'true' &&
+  process.env.CONTEXT !== 'production'
+
+const MAX_KEYWORDS = 50
+const MAX_KEYWORD_LENGTH = 100
+
+function buildCorsHeaders(corsOrigin: string | null): Record<string, string> {
+  const base: Record<string, string> = {
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  }
+  if (corsOrigin) base['Access-Control-Allow-Origin'] = corsOrigin
+  return base
+}
 
 export const handler: Handler = async (event) => {
   const origin = (event.headers['origin'] ?? '').toLowerCase()
@@ -41,12 +57,7 @@ export const handler: Handler = async (event) => {
   if (isDevBypass) allowedOrigins.push('http://localhost:8888', 'http://localhost:5173')
   const corsOrigin = allowedOrigins.includes(origin) ? origin : null
 
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': corsOrigin || '',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Vary': 'Origin',
-  }
+  const corsHeaders = buildCorsHeaders(corsOrigin)
 
   // Reject requests from unknown origins
   if (!corsOrigin) {
@@ -71,9 +82,12 @@ export const handler: Handler = async (event) => {
     }
   }
 
-  // Validate Content-Type
-  const contentType = (event.headers['content-type'] ?? 'audio/wav').toLowerCase()
-  if (!ALLOWED_AUDIO_TYPES.some(t => contentType.startsWith(t))) {
+  // Validate Content-Type — use exact match so ambiguous values like
+  // `audio/wav+png` can't slip through a permissive startsWith() check. We
+  // split on ';' first so `audio/ogg; codecs=opus` still matches `audio/ogg`.
+  const rawContentType = (event.headers['content-type'] ?? 'audio/wav').toLowerCase()
+  const contentType = rawContentType.split(';')[0].trim()
+  if (!ALLOWED_AUDIO_TYPES.includes(contentType)) {
     return {
       statusCode: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -153,6 +167,7 @@ export const handler: Handler = async (event) => {
 
   // Build Deepgram URL — whitelist allowed params
   const params = event.queryStringParameters ?? {}
+  const rawMultiValue = event.multiValueQueryStringParameters ?? {}
   const model = ALLOWED_MODELS.includes(params.model ?? '') ? params.model! : 'nova-3'
   const language = ALLOWED_LANGUAGES.includes(params.language ?? '') ? params.language! : 'en'
   const qs = new URLSearchParams({
@@ -160,9 +175,21 @@ export const handler: Handler = async (event) => {
     punctuate: params.punctuate === 'false' ? 'false' : 'true',
     language,
     smart_format: params.smart_format === 'false' ? 'false' : 'true',
-  }).toString()
+  })
+  if (params.numerals === 'true') qs.set('numerals', 'true')
 
-  const deepgramUrl = `https://api.deepgram.com/v1/listen?${qs}`
+  // Keyword boost — matches the per-keyword shape Deepgram accepts. Capped at
+  // MAX_KEYWORDS entries and MAX_KEYWORD_LENGTH characters each so a caller
+  // can't smuggle additional query parameters by stuffing huge strings.
+  const rawKeywords = rawMultiValue.keywords
+    ?? (params.keywords ? [params.keywords] : [])
+  for (const kw of rawKeywords.slice(0, MAX_KEYWORDS)) {
+    if (typeof kw === 'string' && kw.length > 0 && kw.length <= MAX_KEYWORD_LENGTH) {
+      qs.append('keywords', kw)
+    }
+  }
+
+  const deepgramUrl = `https://api.deepgram.com/v1/listen?${qs.toString()}`
 
   const body = event.isBase64Encoded
     ? Buffer.from(event.body || '', 'base64')

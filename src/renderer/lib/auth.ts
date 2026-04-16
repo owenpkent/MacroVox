@@ -190,9 +190,19 @@ export async function getSubscription(): Promise<GetSubscriptionResult> {
 /**
  * Fetches managed API keys (Deepgram, Anthropic) from the Supabase
  * `managed_api_keys` table.  Only provisioned for Pro/Team subscribers.
+ *
+ * The Anthropic key is intentionally never returned to the renderer — Claude
+ * calls go through the Netlify claude-proxy which holds the key server-side.
+ * Only the Deepgram key is exposed (the Rust backend uses it directly for
+ * low-latency streaming; routing it through the proxy is a planned change).
  */
 export async function getManagedKeys(): Promise<ManagedKeysResult> {
   if (DEV_MODE) {
+    // Dev-only: let the renderer bypass Supabase sign-in with the keys pulled
+    // from `.env`. `import.meta.env.DEV` is false in production builds, so
+    // Vite dead-code-eliminates this branch — the keys are NOT bundled into
+    // release artifacts. Still, treat the VITE_* values as compromised and
+    // rotate before any real deploy (see SECURITY_AUDIT C2).
     const dk = import.meta.env.VITE_DEEPGRAM_KEY || null
     const ak = import.meta.env.VITE_ANTHROPIC_KEY || null
     return { success: true, deepgramKey: dk, anthropicKey: ak, hasManagedKeys: !!(dk || ak) }
@@ -202,7 +212,7 @@ export async function getManagedKeys(): Promise<ManagedKeysResult> {
 
   const { data, error } = await supabase
     .from('managed_api_keys')
-    .select('deepgram_key, anthropic_key')
+    .select('deepgram_key')
     .eq('user_id', session.user.id)
     .single()
 
@@ -213,8 +223,8 @@ export async function getManagedKeys(): Promise<ManagedKeysResult> {
   return {
     success: true,
     deepgramKey: data.deepgram_key || null,
-    anthropicKey: data.anthropic_key || null,
-    hasManagedKeys: !!(data.deepgram_key || data.anthropic_key),
+    anthropicKey: null, // Claude is proxy-only — renderer never sees the key.
+    hasManagedKeys: !!data.deepgram_key,
   }
 }
 

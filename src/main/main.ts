@@ -39,6 +39,49 @@ let audioPreWarmed = false
 let deepgramKeywords: string[] = []
 let selectedMicDevice: string | null = null
 
+// Allowed externally-opened hosts. shell.openExternal will invoke the system
+// browser/protocol handler with whatever URL it's given, so anything that
+// comes from a network response gets run through this filter first.
+const EXTERNAL_URL_ALLOWLIST = new Set([
+  'checkout.stripe.com',
+  'billing.stripe.com',
+  'stripe.com',
+])
+
+function openExternalSafely(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl)
+    if (parsed.protocol !== 'https:') return false
+    if (!EXTERNAL_URL_ALLOWLIST.has(parsed.hostname)) return false
+    shell.openExternal(rawUrl)
+    return true
+  } catch {
+    return false
+  }
+}
+
+// Keys the renderer is allowed to receive via settings:broadcast. Any other
+// keys the caller includes are dropped before we forward them — stops a
+// future IPC caller from poisoning arbitrary localStorage entries in the
+// renderer (e.g. post_processing_context used in Claude system prompts).
+const BROADCASTABLE_SETTINGS = new Set([
+  'deepgram_keywords',
+  'minimize_to_tray',
+  'theme',
+  'dictation_auto_copy',
+  'dictation_clear_on_new',
+  'dictation_auto_cutoff',
+  'dictation_auto_paste',
+  'dictation_ai_cleanup',
+  'transcription_mode',
+  'transcription_language',
+  'number_format',
+  'voice_buffer_enabled',
+  'voice_buffer_max_size',
+  'post_processing_context',
+  'writing_style_profile',
+])
+
 // ============================================================================
 // Window creation
 // ============================================================================
@@ -65,6 +108,7 @@ function createDictationWindow(autoStartRecording = false, hidden = false) {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
       backgroundThrottling: true,
     },
     titleBarStyle: 'hiddenInset',
@@ -141,6 +185,7 @@ function createSettingsWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
     backgroundColor: '#0a0f14',
     title: 'Settings',
@@ -219,7 +264,9 @@ app.whenReady().then(() => {
   // Restore Supabase session in the background (makes a network round-trip).
   authManager.restoreSession().then(user => {
     if (user) console.log(`[MacroVox] Session restored for ${user.email}`)
-  }).catch(() => {})
+  }).catch((err) => {
+    console.warn('[MacroVox] Session restore failed:', err?.message ?? 'unknown')
+  })
 })
 
 app.on('window-all-closed', () => {
@@ -290,29 +337,32 @@ ipcMain.handle('auth:getManagedKeys', async () => {
   const user = authManager.getUser()
   if (!user) return { success: false, error: 'Not logged in' }
   const keys = await getManagedApiKeys(user.id)
-  return { success: true, ...keys, hasManagedKeys: !!(keys.deepgramKey || keys.anthropicKey) }
+  // Don't return the Anthropic key to the renderer — Claude calls go through
+  // the Netlify proxy which holds the key server-side. The Deepgram key still
+  // needs to reach the renderer for the latency-sensitive direct-streaming path.
+  // Future: route Deepgram through the proxy too and stop returning either key.
+  return {
+    success: true,
+    deepgramKey: keys.deepgramKey ?? null,
+    anthropicKey: null,
+    hasManagedKeys: !!keys.deepgramKey,
+  }
 })
 
 ipcMain.handle('auth:checkout', async (_event, plan: 'pro' | 'team') => {
   const user = authManager.getUser()
   if (!user) return { success: false, error: 'Not logged in' }
   const url = await createCheckoutSession(user.id, plan)
-  if (url) {
-    shell.openExternal(url)
-    return { success: true }
-  }
-  return { success: false, error: 'Failed to create checkout session' }
+  if (url && openExternalSafely(url)) return { success: true }
+  return { success: false, error: url ? 'Refusing to open untrusted checkout URL' : 'Failed to create checkout session' }
 })
 
 ipcMain.handle('auth:billingPortal', async () => {
   const user = authManager.getUser()
   if (!user) return { success: false, error: 'Not logged in' }
   const url = await createBillingPortalSession(user.id)
-  if (url) {
-    shell.openExternal(url)
-    return { success: true }
-  }
-  return { success: false, error: 'Failed to open billing portal' }
+  if (url && openExternalSafely(url)) return { success: true }
+  return { success: false, error: url ? 'Refusing to open untrusted billing URL' : 'Failed to open billing portal' }
 })
 
 // ============================================================================
@@ -511,9 +561,20 @@ ipcMain.handle('dictation:autoPaste', async () => {
     ], { windowsHide: true })
 
     await new Promise<void>((resolve) => {
-      ps.on('close', () => resolve())
-      ps.on('error', () => resolve())
-      setTimeout(resolve, 2000)
+      let done = false
+      const finish = () => {
+        if (done) return
+        done = true
+        resolve()
+      }
+      ps.on('close', finish)
+      ps.on('error', finish)
+      // If PowerShell hangs (rare but observed under AV interference), kill
+      // it instead of leaking a zombie process every 2 seconds.
+      setTimeout(() => {
+        if (!done && !ps.killed) ps.kill('SIGKILL')
+        finish()
+      }, 2000)
     })
 
     return { success: true }
@@ -555,19 +616,29 @@ ipcMain.handle('theme:broadcast', (_event, themeId: string) => {
   return { success: true }
 })
 
-// Settings sync
+// Settings sync — only broadcast keys we know about. Unknown keys get dropped
+// so a future caller can't poison arbitrary localStorage entries in the
+// renderer (some of which feed into Claude system prompts).
 ipcMain.handle('settings:broadcast', (_event, settings: Record<string, string>) => {
-  if ('deepgram_keywords' in settings) {
-    const raw = settings['deepgram_keywords'] || ''
-    deepgramKeywords = raw.split('\n').map((s: string) => s.trim()).filter(Boolean)
+  const filtered: Record<string, string> = {}
+  for (const [key, value] of Object.entries(settings)) {
+    if (BROADCASTABLE_SETTINGS.has(key) && typeof value === 'string') {
+      filtered[key] = value
+    }
   }
-  if ('minimize_to_tray' in settings) {
-    minimizeToTray = settings['minimize_to_tray'] === 'true'
+
+  if ('deepgram_keywords' in filtered) {
+    const raw = filtered['deepgram_keywords'] || ''
+    deepgramKeywords = raw.split('\n').map((s: string) => s.trim()).filter(Boolean).slice(0, 50)
   }
+  if ('minimize_to_tray' in filtered) {
+    minimizeToTray = filtered['minimize_to_tray'] === 'true'
+  }
+
   const windows = [dictationWindow, settingsWindow]
   windows.forEach(win => {
     if (win && !win.isDestroyed()) {
-      win.webContents.send('settings-changed', settings)
+      win.webContents.send('settings-changed', filtered)
     }
   })
   return { success: true }
