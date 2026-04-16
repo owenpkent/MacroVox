@@ -7,7 +7,7 @@ mod voice_buffer;
 use commands::*;
 use state::AppState;
 use tauri::{Emitter, Manager};
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use log::debug;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -21,23 +21,18 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(
-            // Ctrl+Space — show/toggle the dictation window
+            // Global hotkey — show/toggle the dictation window.
+            // The handler fires for ANY registered shortcut; since we only ever
+            // register one at a time, we just act on every press.
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, shortcut, event| {
+                .with_handler(|app, _shortcut, event| {
                     if event.state() != ShortcutState::Pressed {
-                        return;
-                    }
-                    let ctrl_space =
-                        Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
-                    if shortcut != &ctrl_space {
                         return;
                     }
                     if let Some(window) = app.get_webview_window("main") {
                         if window.is_visible().unwrap_or(false) {
-                            // Window is visible — toggle recording
                             let _ = window.emit("quick-dictation-toggle", ());
                         } else {
-                            // Window is hidden — show it, then start recording
                             let _ = window.show();
                             let _ = window.set_focus();
                             let _ = window.emit("quick-dictation-toggle", ());
@@ -48,9 +43,11 @@ pub fn run() {
         )
         .manage(AppState::default())
         .setup(|app| {
-            // Register Ctrl+Space global shortcut
-            app.global_shortcut()
-                .register(Shortcut::new(Some(Modifiers::CONTROL), Code::Space))?;
+            // Register global hotkey (default: Ctrl+Space)
+            let default_hotkey = app.state::<AppState>().global_hotkey.lock().unwrap().clone();
+            if let Ok(shortcut) = commands::parse_shortcut(&default_hotkey) {
+                app.global_shortcut().register(shortcut)?;
+            }
 
             // Initialize voice buffer directory
             if let Some(app_data) = app.path().app_local_data_dir().ok() {
@@ -150,9 +147,10 @@ pub fn run() {
             dictation_set_always_on_top,
             settings_open_window,
             app_set_minimize_to_tray,
-            // Theme & settings broadcast
+            // Theme, settings, hotkey
             theme_broadcast,
             settings_broadcast,
+            update_global_hotkey,
             // Voice buffer
             voice_buffer_list,
             voice_buffer_info,

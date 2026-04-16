@@ -61,6 +61,17 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
   const [keywordBoosts, setKeywordBoosts] = useState(() =>
     localStorage.getItem('deepgram_keywords') || ''
   )
+  const [numberFormat, setNumberFormat] = useState(() =>
+    localStorage.getItem('number_format') || 'smart'
+  )
+  const [globalHotkey, setGlobalHotkey] = useState(() =>
+    localStorage.getItem('global_hotkey') || 'Ctrl+Space'
+  )
+  const [isCapturingHotkey, setIsCapturingHotkey] = useState(false)
+  const [hotkeyError, setHotkeyError] = useState<string | null>(null)
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState(() =>
+    localStorage.getItem('transcription_language') || 'en'
+  )
   const [selectedTheme, setSelectedTheme] = useState(() => getStoredTheme())
   const [voiceBufferEnabled, setVoiceBufferEnabled] = useState(() =>
     localStorage.getItem('voice_buffer_enabled') !== 'false'
@@ -165,7 +176,8 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
         'dictation_auto_copy', 'dictation_clear_on_new', 'dictation_auto_cutoff',
         'dictation_always_on_top', 'deepgram_dictation', 'transcription_mode',
         'post_processing_context', 'dictation_auto_paste', 'dictation_ai_cleanup',
-        'deepgram_keywords', 'minimize_to_tray',
+        'deepgram_keywords', 'number_format', 'transcription_language',
+        'global_hotkey', 'minimize_to_tray',
         'voice_buffer_enabled', 'voice_buffer_max_size',
       ]
       keys.forEach(k => {
@@ -477,6 +489,45 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
               </label>
 
               <div>
+                <span className="text-sm text-slate-200">Language</span>
+                <p className="text-xs text-slate-500 mb-2">Speech recognition language</p>
+                <select
+                  value={transcriptionLanguage}
+                  onChange={(e) => {
+                    setTranscriptionLanguage(e.target.value)
+                    saveSetting('transcription_language', e.target.value)
+                  }}
+                  className="w-full px-3 py-2 rounded text-sm focus:outline-none"
+                  style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
+                >
+                  {[
+                    { code: 'en', label: 'English' },
+                    { code: 'es', label: 'Spanish' },
+                    { code: 'fr', label: 'French' },
+                    { code: 'de', label: 'German' },
+                    { code: 'pt', label: 'Portuguese' },
+                    { code: 'it', label: 'Italian' },
+                    { code: 'nl', label: 'Dutch' },
+                    { code: 'ja', label: 'Japanese' },
+                    { code: 'ko', label: 'Korean' },
+                    { code: 'zh', label: 'Chinese (Mandarin)' },
+                    { code: 'hi', label: 'Hindi' },
+                    { code: 'ru', label: 'Russian' },
+                    { code: 'sv', label: 'Swedish' },
+                    { code: 'da', label: 'Danish' },
+                    { code: 'no', label: 'Norwegian' },
+                    { code: 'fi', label: 'Finnish' },
+                    { code: 'pl', label: 'Polish' },
+                    { code: 'uk', label: 'Ukrainian' },
+                    { code: 'tr', label: 'Turkish' },
+                    { code: 'ar', label: 'Arabic' },
+                  ].map(({ code, label }) => (
+                    <option key={code} value={code}>{label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <span className="text-sm text-slate-200">Keyword boosting</span>
                 <p className="text-xs text-slate-500 mb-2">Words or phrases to boost recognition accuracy — one per line</p>
                 <textarea
@@ -511,6 +562,38 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
                   <div className={`w-4 h-4 rounded-full bg-white mt-0.5 transition-transform ${aiCleanupEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
                 </div>
               </label>
+              <div>
+                <span className="text-sm text-slate-200">Number formatting</span>
+                <p className="text-xs text-slate-500 mb-2">How numbers appear in transcripts</p>
+                <div className="flex gap-2">
+                  {([
+                    { value: 'smart', label: 'Smart' },
+                    { value: 'digits', label: 'Always digits' },
+                    { value: 'words', label: 'Always words' },
+                  ] as const).map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => {
+                        setNumberFormat(opt.value)
+                        saveSetting('number_format', opt.value)
+                      }}
+                      className="px-3 py-1.5 rounded text-xs font-medium transition-colors"
+                      style={{
+                        backgroundColor: numberFormat === opt.value ? 'var(--accent-primary)' : 'var(--bg-primary)',
+                        color: numberFormat === opt.value ? 'white' : 'var(--text-secondary)',
+                        border: `1px solid ${numberFormat === opt.value ? 'var(--accent-primary)' : 'var(--border-primary)'}`,
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-600 mt-1.5">
+                  {numberFormat === 'smart' && 'Deepgram decides — e.g. "5 dollars" but "twenty-one"'}
+                  {numberFormat === 'digits' && 'All numbers as digits — e.g. "42", "3", "1000"'}
+                  {numberFormat === 'words' && 'All numbers spelled out — e.g. "forty-two", "three"'}
+                </p>
+              </div>
               <div>
                 <span className="text-sm text-slate-200">Accessibility context</span>
                 <p className="text-xs text-slate-500 mb-2">Describe your speech patterns so Claude can better correct errors</p>
@@ -551,6 +634,81 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
                   </div>
                 </label>
               ))}
+
+              {/* Global hotkey */}
+              <div>
+                <span className="text-sm text-slate-200">Global hotkey</span>
+                <p className="text-xs text-slate-500 mb-2">Keyboard shortcut to toggle dictation from any app</p>
+                <div className="flex items-center gap-2">
+                  {isCapturingHotkey ? (
+                    <div
+                      tabIndex={0}
+                      autoFocus
+                      onKeyDown={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        // Ignore bare modifier presses
+                        if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return
+
+                        const parts: string[] = []
+                        if (e.ctrlKey) parts.push('Ctrl')
+                        if (e.altKey) parts.push('Alt')
+                        if (e.shiftKey) parts.push('Shift')
+                        if (e.metaKey) parts.push('Super')
+
+                        // Map key name
+                        let keyName = e.key
+                        if (keyName === ' ') keyName = 'Space'
+                        else if (keyName.length === 1) keyName = keyName.toUpperCase()
+                        parts.push(keyName)
+
+                        const combo = parts.join('+')
+                        setIsCapturingHotkey(false)
+                        setHotkeyError(null)
+
+                        // Try to register the new hotkey
+                        ipc.updateGlobalHotkey(combo).then((res) => {
+                          if (res.success) {
+                            setGlobalHotkey(combo)
+                            saveSetting('global_hotkey', combo)
+                          } else {
+                            setHotkeyError(res.error || 'Failed to register hotkey')
+                          }
+                        })
+                      }}
+                      onBlur={() => setIsCapturingHotkey(false)}
+                      className="flex-1 px-3 py-2 rounded text-sm text-center animate-pulse"
+                      style={{
+                        backgroundColor: 'var(--bg-primary)',
+                        border: '2px solid var(--accent-primary)',
+                        color: 'var(--accent-primary)',
+                        outline: 'none',
+                      }}
+                    >
+                      Press a key combination...
+                    </div>
+                  ) : (
+                    <>
+                      <span
+                        className="flex-1 px-3 py-2 rounded text-sm font-mono"
+                        style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
+                      >
+                        {globalHotkey}
+                      </span>
+                      <button
+                        onClick={() => { setIsCapturingHotkey(true); setHotkeyError(null) }}
+                        className="px-3 py-2 rounded text-xs font-medium transition-colors"
+                        style={{ backgroundColor: 'var(--accent-primary)', color: 'white' }}
+                      >
+                        Change
+                      </button>
+                    </>
+                  )}
+                </div>
+                {hotkeyError && (
+                  <p className="text-xs mt-1" style={{ color: '#f87171' }}>{hotkeyError}</p>
+                )}
+              </div>
             </div>
           </section>
 
@@ -738,7 +896,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
               <div className="pt-2" style={{ borderTop: '1px solid var(--border-primary)' }}>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-400">Toggle Dictation</span>
-                  <kbd className="px-2 py-0.5 rounded font-mono" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', color: 'var(--accent-hover)' }}>Ctrl+Space</kbd>
+                  <kbd className="px-2 py-0.5 rounded font-mono" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', color: 'var(--accent-hover)' }}>{globalHotkey}</kbd>
                 </div>
               </div>
             </div>

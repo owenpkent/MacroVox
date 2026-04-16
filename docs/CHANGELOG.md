@@ -1,5 +1,22 @@
 # MacroVox Changelog
 
+## Unreleased — Settings, Language, Hotkey, Cleanup
+
+### New Features
+- **Custom global hotkey** — configurable keyboard shortcut to toggle dictation (default Ctrl+Space). Change it in Settings → Dictation Window. The app dynamically registers/unregisters shortcuts at runtime.
+- **Language selection** — 20 languages supported via Deepgram Nova-3 (English, Spanish, French, German, Portuguese, Japanese, Korean, Chinese, and more). Change in Settings → Voice Recognition. Claude cleanup prompt is language-aware.
+- **Number formatting** — choose how numbers appear in transcripts: Smart (Deepgram decides), Always digits, or Always words. Applies to both Deepgram output and Claude cleanup.
+- **History sort toggle** — sort voice buffer recordings by newest-first or oldest-first. Backend now sorts by timestamp explicitly instead of relying on insertion order.
+- **7-day free trial** — website updated with free trial messaging, pricing, and CTAs. Implementation guide in `docs/FREE_TRIAL_IMPLEMENTATION.md`.
+
+### Cleanup
+- **Removed legacy Electron artifacts** — deleted `build/` directory (old Electron builder configs and PyInstaller outputs). Removed `electron` and `electron-builder` from devDependencies. Removed stale npm scripts (`start`, `package`, `package:win`, `package:dev`).
+- **Removed stale design docs** — deleted 5 pre-implementation design documents for features already shipped.
+- **Moved LLM_ONBOARDING.md** to `docs/` directory.
+- **Updated README.md** — refreshed feature list, fixed model name (nova-2 → Nova-3), updated project structure, added new features.
+
+---
+
 ## Unreleased — Launch Readiness Hardening + Voice Buffer
 
 ### New Features

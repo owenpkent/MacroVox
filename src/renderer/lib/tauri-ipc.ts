@@ -174,6 +174,11 @@ export const broadcastSettings = (
   settings: Record<string, string>,
 ): Promise<OkResult> => invoke('settings_broadcast', { settings })
 
+// ── Global hotkey ────────────────────────────────────────────────────────────
+
+export const updateGlobalHotkey = (shortcut: string): Promise<OkResult> =>
+  invoke('update_global_hotkey', { shortcut })
+
 // ── Voice buffer ─────────────────────────────────────────────────────────────
 
 export interface VoiceRecording {

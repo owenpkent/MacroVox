@@ -79,6 +79,17 @@ pub struct AppState {
     /// Parsed from the `deepgram_keywords` settings key (newline-separated).
     pub deepgram_keywords: Mutex<Vec<String>>,
 
+    /// Number formatting preference for transcripts.
+    /// "digits" = always use numerals, "words" = always spell out, "smart" = Deepgram default.
+    pub number_format: Mutex<String>,
+
+    /// Global hotkey string, e.g. "Ctrl+Space". Stored so settings_broadcast can
+    /// read/display it and update_global_hotkey can unregister the old one.
+    pub global_hotkey: Mutex<String>,
+
+    /// Transcription language code for Deepgram (e.g. "en", "es", "fr").
+    pub transcription_language: Mutex<String>,
+
     // ── Phase 4: Deepgram WebSocket streaming ─────────────────────────────────
 
     /// Sender half of the channel used to push PCM bytes (and control messages)
@@ -116,6 +127,9 @@ impl Default for AppState {
             audio_sample_rate: Mutex::new(16_000),
             audio_channels: Mutex::new(1),
             deepgram_keywords: Mutex::new(Vec::new()),
+            number_format: Mutex::new("smart".to_string()),
+            global_hotkey: Mutex::new("Ctrl+Space".to_string()),
+            transcription_language: Mutex::new("en".to_string()),
             dg_sender: Arc::new(Mutex::new(None)),
             voice_buffer_dir: Mutex::new(PathBuf::new()),
             voice_buffer_enabled: Mutex::new(false),

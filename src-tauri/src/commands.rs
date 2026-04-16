@@ -16,7 +16,110 @@ use log::{debug, warn};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+
 use crate::state::AppState;
+
+// ── Shortcut parsing ─────────────────────────────────────────────────────────
+
+/// Parses a human-readable shortcut string like "Ctrl+Shift+D" into a Tauri `Shortcut`.
+pub fn parse_shortcut(s: &str) -> Result<Shortcut, String> {
+    let parts: Vec<&str> = s.split('+').map(|p| p.trim()).collect();
+    if parts.is_empty() {
+        return Err("Empty shortcut".to_string());
+    }
+
+    let mut mods = Modifiers::empty();
+    let mut key_part: Option<&str> = None;
+
+    for part in &parts {
+        match part.to_lowercase().as_str() {
+            "ctrl" | "control" => mods |= Modifiers::CONTROL,
+            "alt" => mods |= Modifiers::ALT,
+            "shift" => mods |= Modifiers::SHIFT,
+            "super" | "meta" | "win" => mods |= Modifiers::SUPER,
+            _ => {
+                if key_part.is_some() {
+                    return Err(format!("Multiple keys in shortcut: {s}"));
+                }
+                key_part = Some(part);
+            }
+        }
+    }
+
+    let key_str = key_part.ok_or_else(|| format!("No key in shortcut: {s}"))?;
+    let code = parse_key_code(key_str)?;
+    let mods_opt = if mods.is_empty() { None } else { Some(mods) };
+    Ok(Shortcut::new(mods_opt, code))
+}
+
+fn parse_key_code(s: &str) -> Result<Code, String> {
+    match s.to_lowercase().as_str() {
+        "space" => Ok(Code::Space),
+        "enter" | "return" => Ok(Code::Enter),
+        "tab" => Ok(Code::Tab),
+        "escape" | "esc" => Ok(Code::Escape),
+        "backspace" => Ok(Code::Backspace),
+        "delete" | "del" => Ok(Code::Delete),
+        "insert" => Ok(Code::Insert),
+        "home" => Ok(Code::Home),
+        "end" => Ok(Code::End),
+        "pageup" => Ok(Code::PageUp),
+        "pagedown" => Ok(Code::PageDown),
+        "up" => Ok(Code::ArrowUp),
+        "down" => Ok(Code::ArrowDown),
+        "left" => Ok(Code::ArrowLeft),
+        "right" => Ok(Code::ArrowRight),
+        "f1" => Ok(Code::F1),
+        "f2" => Ok(Code::F2),
+        "f3" => Ok(Code::F3),
+        "f4" => Ok(Code::F4),
+        "f5" => Ok(Code::F5),
+        "f6" => Ok(Code::F6),
+        "f7" => Ok(Code::F7),
+        "f8" => Ok(Code::F8),
+        "f9" => Ok(Code::F9),
+        "f10" => Ok(Code::F10),
+        "f11" => Ok(Code::F11),
+        "f12" => Ok(Code::F12),
+        ";" | "semicolon" => Ok(Code::Semicolon),
+        "=" | "equal" => Ok(Code::Equal),
+        "," | "comma" => Ok(Code::Comma),
+        "-" | "minus" => Ok(Code::Minus),
+        "." | "period" => Ok(Code::Period),
+        "/" | "slash" => Ok(Code::Slash),
+        "`" | "backquote" => Ok(Code::Backquote),
+        "[" | "bracketleft" => Ok(Code::BracketLeft),
+        "]" | "bracketright" => Ok(Code::BracketRight),
+        "\\" | "backslash" => Ok(Code::Backslash),
+        "'" | "quote" => Ok(Code::Quote),
+        "0" => Ok(Code::Digit0),
+        "1" => Ok(Code::Digit1),
+        "2" => Ok(Code::Digit2),
+        "3" => Ok(Code::Digit3),
+        "4" => Ok(Code::Digit4),
+        "5" => Ok(Code::Digit5),
+        "6" => Ok(Code::Digit6),
+        "7" => Ok(Code::Digit7),
+        "8" => Ok(Code::Digit8),
+        "9" => Ok(Code::Digit9),
+        s if s.len() == 1 && s.chars().next().unwrap().is_ascii_alphabetic() => {
+            match s.to_uppercase().as_str() {
+                "A" => Ok(Code::KeyA), "B" => Ok(Code::KeyB), "C" => Ok(Code::KeyC),
+                "D" => Ok(Code::KeyD), "E" => Ok(Code::KeyE), "F" => Ok(Code::KeyF),
+                "G" => Ok(Code::KeyG), "H" => Ok(Code::KeyH), "I" => Ok(Code::KeyI),
+                "J" => Ok(Code::KeyJ), "K" => Ok(Code::KeyK), "L" => Ok(Code::KeyL),
+                "M" => Ok(Code::KeyM), "N" => Ok(Code::KeyN), "O" => Ok(Code::KeyO),
+                "P" => Ok(Code::KeyP), "Q" => Ok(Code::KeyQ), "R" => Ok(Code::KeyR),
+                "S" => Ok(Code::KeyS), "T" => Ok(Code::KeyT), "U" => Ok(Code::KeyU),
+                "V" => Ok(Code::KeyV), "W" => Ok(Code::KeyW), "X" => Ok(Code::KeyX),
+                "Y" => Ok(Code::KeyY), "Z" => Ok(Code::KeyZ),
+                _ => unreachable!(),
+            }
+        }
+        other => Err(format!("Unknown key: {other}")),
+    }
+}
 
 /// Lock a mutex, recovering from poison if a prior thread panicked.
 fn lock_or_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -214,10 +317,12 @@ pub async fn deepgram_start(
     let sample_rate = *lock_or_recover(&state.audio_sample_rate);
     let channels = *lock_or_recover(&state.audio_channels);
     let keywords = lock_or_recover(&state.deepgram_keywords).clone();
-    debug!("[deepgram] Starting session: {}Hz, {}ch, {} keywords",
-           sample_rate, channels, keywords.len());
+    let number_format = lock_or_recover(&state.number_format).clone();
+    let language = lock_or_recover(&state.transcription_language).clone();
+    debug!("[deepgram] Starting session: {}Hz, {}ch, {} keywords, numbers={}, lang={}",
+           sample_rate, channels, keywords.len(), number_format, language);
 
-    match crate::deepgram_ws::start_session(&api_key, sample_rate, channels, &keywords, app).await {
+    match crate::deepgram_ws::start_session(&api_key, sample_rate, channels, &keywords, &number_format, &language, app).await {
         Ok(sender) => {
             debug!("[deepgram] WebSocket session established");
             *lock_or_recover(&state.dg_sender) = Some(sender);
@@ -303,13 +408,19 @@ pub async fn recording_stop(
     }
 
     let keywords = lock_or_recover(&state.deepgram_keywords).clone();
+    let number_format = lock_or_recover(&state.number_format).clone();
+    let language = lock_or_recover(&state.transcription_language).clone();
 
     let duration = samples.len() as f64 / (sample_rate as f64 * channels as f64);
     let wav = crate::audio::pcm_to_wav(&samples, sample_rate, channels);
 
     // --- Upload to Deepgram pre-recorded API ---
-    let mut url =
-        "https://api.deepgram.com/v1/listen?model=nova-3&punctuate=true&smart_format=true".to_string();
+    let mut url = format!(
+        "https://api.deepgram.com/v1/listen?model=nova-3&punctuate=true&smart_format=true&language={language}"
+    );
+    if number_format == "digits" {
+        url.push_str("&numerals=true");
+    }
     for kw in &keywords {
         url.push_str(&format!("&keywords={}", urlencoding::encode(kw)));
     }
@@ -656,6 +767,19 @@ pub fn settings_broadcast(
         *lock_or_recover(&state.minimize_to_tray) = val == "true";
     }
 
+    if let Some(val) = settings.get("number_format") {
+        let fmt = match val.as_str() {
+            "digits" | "words" => val.clone(),
+            _ => "smart".to_string(),
+        };
+        *lock_or_recover(&state.number_format) = fmt;
+    }
+    if let Some(val) = settings.get("transcription_language") {
+        let lang = val.clone();
+        if !lang.is_empty() && lang.len() <= 5 {
+            *lock_or_recover(&state.transcription_language) = lang;
+        }
+    }
     if let Some(val) = settings.get("voice_buffer_enabled") {
         *lock_or_recover(&state.voice_buffer_enabled) = val == "true";
     }
@@ -672,6 +796,39 @@ pub fn settings_broadcast(
     app.emit("settings-changed", &settings)
         .map(|_| OkResponse::ok())
         .unwrap_or_else(|e| OkResponse::err(e.to_string()))
+}
+
+// ── Global hotkey ────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn update_global_hotkey(
+    shortcut: String,
+    state: State<AppState>,
+    app: AppHandle,
+) -> OkResponse {
+    let new_shortcut = match parse_shortcut(&shortcut) {
+        Ok(s) => s,
+        Err(e) => return OkResponse::err(format!("Invalid shortcut: {e}")),
+    };
+
+    // Unregister the current hotkey
+    let old_str = lock_or_recover(&state.global_hotkey).clone();
+    if let Ok(old_shortcut) = parse_shortcut(&old_str) {
+        let _ = app.global_shortcut().unregister(old_shortcut);
+    }
+
+    // Register the new one
+    if let Err(e) = app.global_shortcut().register(new_shortcut) {
+        // Try to re-register the old one as fallback
+        if let Ok(old_shortcut) = parse_shortcut(&old_str) {
+            let _ = app.global_shortcut().register(old_shortcut);
+        }
+        return OkResponse::err(format!("Failed to register shortcut: {e}"));
+    }
+
+    *lock_or_recover(&state.global_hotkey) = shortcut;
+    debug!("[hotkey] Updated global hotkey to: {}", lock_or_recover(&state.global_hotkey));
+    OkResponse::ok()
 }
 
 // ── Voice buffer ─────────────────────────────────────────────────────────────
@@ -845,8 +1002,14 @@ pub async fn voice_buffer_reprocess(
 
     // Send to Deepgram
     let keywords = lock_or_recover(&state.deepgram_keywords).clone();
-    let mut url =
-        "https://api.deepgram.com/v1/listen?model=nova-3&punctuate=true&smart_format=true".to_string();
+    let number_format = lock_or_recover(&state.number_format).clone();
+    let language = lock_or_recover(&state.transcription_language).clone();
+    let mut url = format!(
+        "https://api.deepgram.com/v1/listen?model=nova-3&punctuate=true&smart_format=true&language={language}"
+    );
+    if number_format == "digits" {
+        url.push_str("&numerals=true");
+    }
     for kw in &keywords {
         url.push_str(&format!("&keywords={}", urlencoding::encode(kw)));
     }

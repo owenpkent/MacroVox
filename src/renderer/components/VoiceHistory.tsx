@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Play, Square, Trash2, Loader2, Sparkles, Copy, Check } from 'lucide-react'
+import { Play, Square, Trash2, Loader2, Sparkles, Copy, Check, ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react'
 import { usePostProcessing } from '../hooks/usePostProcessing'
 import * as ipc from '../lib/tauri-ipc'
 import type { VoiceRecording } from '../lib/tauri-ipc'
@@ -27,6 +27,7 @@ export function VoiceHistory({ user, apiKey }: VoiceHistoryProps) {
   const [reprocessingFile, setReprocessingFile] = useState<string | null>(null)
   const [copiedFile, setCopiedFile] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: string } | null>(null)
+  const [sortNewestFirst, setSortNewestFirst] = useState(true)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
 
@@ -189,10 +190,30 @@ export function VoiceHistory({ user, apiKey }: VoiceHistoryProps) {
     )
   }
 
+  const sortedRecordings = sortNewestFirst
+    ? recordings
+    : [...recordings].reverse()
+
   return (
     <>
+      {/* Sort toggle */}
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+          {recordings.length} recording{recordings.length !== 1 ? 's' : ''}
+        </span>
+        <button
+          onClick={() => setSortNewestFirst(prev => !prev)}
+          className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded hover:bg-white/10 transition-colors"
+          style={{ color: 'var(--text-secondary)' }}
+          title={sortNewestFirst ? 'Showing newest first' : 'Showing oldest first'}
+        >
+          {sortNewestFirst ? <ArrowDownWideNarrow size={12} /> : <ArrowUpNarrowWide size={12} />}
+          {sortNewestFirst ? 'Newest first' : 'Oldest first'}
+        </button>
+      </div>
+
       <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1">
-        {recordings.map((rec) => (
+        {sortedRecordings.map((rec) => (
           <div
             key={rec.file}
             onContextMenu={(e) => handleContextMenu(e, rec.file)}

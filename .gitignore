@@ -21,8 +21,8 @@ sox-*/
 *.pfx
 *.cert
 
-# Old PyInstaller artifacts (from MacroVox v0.1)
-build/MacroVox/
+# Legacy build artifacts (PyInstaller v0.1, Electron builder)
+build/
 *.pyc
 __pycache__/
 *.spec

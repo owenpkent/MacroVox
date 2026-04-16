@@ -6,23 +6,24 @@ A managed voice dictation app for Windows powered by [Deepgram](https://deepgram
 
 ## Status
 
-Active — Tauri 2 migration complete. Stripe/Netlify backend deployment in progress.
+Active — Tauri 2 production app. Stripe billing, free trial, auto-updater deployed.
 
 ---
 
 ## Features
 
-- **Voice-to-text dictation** — Deepgram nova-2, real-time streaming (default) or batch mode
-- **Agentic writing** — speak a request ("write an email to Mike rescheduling Thursday") and Claude produces the finished content
-- **Writing style profile** — describe your voice once; every generated piece matches your style
-- **Global hotkey** — `Ctrl+Space` to toggle recording from any app
+- **Voice-to-text dictation** — Deepgram Nova-3, real-time streaming or batch mode
+- **20 languages** — English, Spanish, French, German, Portuguese, Japanese, Korean, Chinese, and more
+- **Custom global hotkey** — configurable shortcut to toggle recording from any app (default Ctrl+Space)
 - **AI post-processing** — Claude Haiku cleans up every transcript automatically, non-blocking (Pro)
+- **Number formatting** — choose digits, words, or smart mode for how numbers appear
 - **Auto-copy & auto-paste** — transcript goes straight to clipboard and active app instantly (native Windows input via enigo); AI cleanup updates in background
 - **Keyword boosting** — improve recognition of custom terms
+- **Dictation history** — rolling voice buffer saves recordings as OGG Opus for playback and reprocessing
 - **6 themed UI skins** — MCRN, Mars, Belter, Earth, Protomolecule, Laconia
 - **System tray** — runs in background, toggles with tray icon
 - **Email/password login** — Supabase Auth (Google & Facebook OAuth planned)
-- **Stripe billing** — subscribe to Pro for managed Deepgram + Claude access
+- **Stripe billing** — subscribe to Pro for managed Deepgram + Claude access, 7-day free trial
 
 ---
 
@@ -59,7 +60,7 @@ VITE_SUPABASE_KEY=your-anon-key
 
 ## Documentation
 
-- **[LLM Onboarding](LLM_ONBOARDING.md)** — Quick reference for AI assistants
+- **[LLM Onboarding](docs/LLM_ONBOARDING.md)** — Quick reference for AI assistants
 - **[Status & Roadmap](docs/STATUS_AND_ROADMAP.md)** — Current status and next steps
 - **[Setup Guide](docs/SETUP.md)** — Backend infrastructure (Supabase + Netlify + Stripe)
 - **[Changelog](docs/CHANGELOG.md)** — Release history
@@ -77,7 +78,9 @@ MacroVox/
 │   └── src/
 │       ├── lib.rs                # App setup, tray, global shortcut, close handler
 │       ├── commands.rs           # All IPC commands (audio, Deepgram, clipboard, windows)
-│       └── state.rs              # Shared AppState (Mutex-wrapped)
+│       ├── state.rs              # Shared AppState (Mutex-wrapped)
+│       ├── deepgram_ws.rs        # Deepgram WebSocket streaming
+│       └── voice_buffer.rs       # Dictation history (OGG Opus buffer + manifest)
 ├── src/renderer/                 # React UI (Vite + Tailwind)
 │   ├── dictation.html/tsx        # Main dictation window entry
 │   ├── settings.html/tsx         # Settings window entry

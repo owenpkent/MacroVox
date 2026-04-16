@@ -74,6 +74,8 @@ pub async fn start_session(
     sample_rate: u32,
     channels: u16,
     keywords: &[String],
+    number_format: &str,
+    language: &str,
     app: tauri::AppHandle,
 ) -> Result<DgSender, String> {
     let mut url = format!(
@@ -84,8 +86,13 @@ pub async fn start_session(
          &encoding=linear16\
          &sample_rate={sample_rate}\
          &channels={channels}\
-         &interim_results=true"
+         &interim_results=true\
+         &language={language}"
     );
+
+    if number_format == "digits" {
+        url.push_str("&numerals=true");
+    }
 
     for kw in keywords {
         url.push_str(&format!("&keywords={}", urlencoding::encode(kw)));

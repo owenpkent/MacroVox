@@ -227,7 +227,9 @@ pub fn save_recording(
 /// Lists all recordings in the buffer, newest first.
 pub fn list_recordings(buffer_dir: &Path) -> Vec<VoiceRecording> {
     let mut manifest = load_manifest(buffer_dir);
-    manifest.recordings.reverse(); // newest first for UI
+    // Sort by timestamp descending so newest recordings always appear first,
+    // regardless of manifest insertion order.
+    manifest.recordings.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
     manifest.recordings
 }
 
