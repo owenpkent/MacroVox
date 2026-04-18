@@ -1,6 +1,7 @@
 mod audio;
 mod commands;
 mod deepgram_ws;
+mod platform;
 mod state;
 mod voice_buffer;
 

@@ -62,13 +62,13 @@
     "resources": [],
     "windows": {
       "nsis": {
-        "headerImage": "installer/installer-header.bmp",
-        "sidebarImage": "installer/installer-sidebar.bmp",
+        "headerImage": "installer/windows/installer-header.bmp",
+        "sidebarImage": "installer/windows/installer-sidebar.bmp",
         "installerIcon": "icons/icon.ico",
         "installMode": "perMachine",
         "displayLanguageSelector": false,
         "startMenuFolder": "MacroVox",
-        "installerHooks": "installer/installer-hooks.nsh"
+        "installerHooks": "installer/windows/installer-hooks.nsh"
       }
     }
   }

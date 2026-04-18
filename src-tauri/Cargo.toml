@@ -2,7 +2,7 @@
 name = "macrovox"
 version = "1.0.6"
 edition = "2021"
-description = "MacroVox — Voice Dictation for Windows"
+description = "MacroVox — Real-time voice dictation with AI cleanup"
 authors = ["OK Studio"]
 license = "MIT"
 

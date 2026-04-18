@@ -1104,14 +1104,7 @@ pub fn voice_buffer_open_folder(state: State<AppState>) -> OkResponse {
     if dir.as_os_str().is_empty() || !dir.exists() {
         return OkResponse::err("Voice buffer directory not found");
     }
-    #[cfg(target_os = "windows")]
-    {
-        let _ = std::process::Command::new("explorer").arg(&dir).spawn();
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = std::process::Command::new("xdg-open").arg(&dir).spawn();
-    }
+    crate::platform::open_in_file_manager(&dir);
     OkResponse::ok()
 }
 

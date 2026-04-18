@@ -1,7 +1,7 @@
 {
   "name": "macrovox",
   "version": "1.0.6",
-  "description": "MacroVox — Voice Dictation for Windows",
+  "description": "MacroVox — Real-time voice dictation with AI cleanup",
   "main": "dist/main/main.js",
   "author": "OK Studio",
   "license": "MIT",
@@ -16,7 +16,9 @@
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
     "test:coverage": "vitest run --config vitest.config.ts --coverage",
-    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml"
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "release:linux": "mkdir -p release/linux && cp -v src-tauri/target/release/bundle/deb/*.deb src-tauri/target/release/bundle/rpm/*.rpm release/linux/ 2>/dev/null; cp -v src-tauri/target/release/bundle/appimage/*.AppImage release/linux/ 2>/dev/null; ls -lh release/linux/",
+    "release:windows": "node -e \"const fs=require('fs'),path=require('path');fs.mkdirSync('release/windows',{recursive:true});const src='src-tauri/target/release/bundle';['nsis','msi'].forEach(d=>{const dir=path.join(src,d);if(fs.existsSync(dir))for(const f of fs.readdirSync(dir))if(/\\.(exe|msi)$/.test(f))fs.copyFileSync(path.join(dir,f),path.join('release/windows',f))});console.log(fs.readdirSync('release/windows'))\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.51.0",
