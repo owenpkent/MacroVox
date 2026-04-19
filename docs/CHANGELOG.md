@@ -1,5 +1,28 @@
 # MacroVox Changelog
 
+## Unreleased — Linux release readiness
+
+### New Features
+- **Linux bundle metadata** — `bundle.linux` block in `tauri.conf.json` now sets `.deb` section/priority/depends (`libwebkit2gtk-4.1-0`, `libgtk-3-0`, `libasound2`, `libpulse0`) and `recommends` (`libayatana-appindicator3-1`), `.rpm` depends (`webkit2gtk4.1`, `gtk3`, `alsa-lib`, `pulseaudio-libs`), a shared desktop-file Handlebars template at `installer/linux/macrovox.desktop`, and app-wide `category`/`shortDescription`/`longDescription`/`copyright` that feed every bundle target.
+- **Wayland detection + UI guard** — new `platform_info` IPC command and `platform::is_wayland` helper. On Wayland, `dictation_auto_paste` short-circuits (clipboard still succeeds so users can paste manually) and the Settings → Quick Dictation panel renders the "Auto-paste on stop" toggle disabled with an inline explanation. Both X11 sessions and Windows keep the previous behavior untouched.
+- **Updater manifest generator** — `scripts/generate-latest.mjs` (wired as `npm run release:manifest`) scans `release/windows/` and `release/linux/` for `-setup.nsis.zip` / `*.AppImage.tar.gz` updater artifacts, reads their `.sig` sidecars, and emits a `latest.json` with both `windows-x86_64` and `linux-x86_64` platform keys. `release:linux`/`release:windows` npm scripts now also copy the updater artifacts and `.sig` files into `release/`.
+- **Release documentation** — new `docs/RELEASE.md` covers version bump, per-platform bundle build, `latest.json` generation, updater-artifact requirements, and known Wayland limits. Linked from README.
+
+### Bug Fixes
+- **Settings window no longer pinned on top (Linux)** — removed `alwaysOnTop: true` from the settings window in `tauri.conf.json`. The main dictation HUD still defaults to always-on-top (it's the floating mic), and now reapplies the user's saved toggle on startup via `DictationMode` mount, so the preference survives app restart instead of snapping back to the config default.
+- **Microphone selection now persists across restarts** — previously the selected mic lived only in the Rust `AppState` mutex (in-memory), so restarting the app reverted to "Auto-detect". `SettingsPanel` now writes `selected_mic_device` to `localStorage`, restores it on `loadDevices`, and `DictationMode` re-pushes it to the backend on window mount.
+- **Linux microphone dropdown no longer lists ALSA noise** — cpal's ALSA host enumerates dozens of virtual aliases (`hw:`, `plughw:`, `dmix:`, `dsnoop:`, `surround21:`–`surround71:`, `iec958:`, `hdmi:`, `sysdefault:`, monitor taps, etc.). New `filter_device_list` in `commands.rs` drops those on Linux only; Windows/macOS device lists are unchanged.
+- **Dropdown contrast on Linux** — WebKitGTK was rendering `<select>` elements with the native GTK widget, which ignored our inline `color`/`background-color` and produced dark-on-dark text for "Auto-detect" and the storage-limit selector. Added global `select { appearance: none }` in `index.css` with a themed chevron and explicit `option` colors so closed-state text and the open menu both honor theme variables.
+
+### Docs
+- README title updated to "Voice Dictation for Windows & Linux"; added a **Linux notes** section covering runtime dependencies, display-server caveats (X11 full parity / Wayland limits), and the mic-picker filter.
+- `docs/STATUS_AND_ROADMAP.md` — Linux App row moved from 🔜 Planned to 🧪 Beta; macOS split into its own row.
+
+### Security
+- **Delta audit, 2026-04-19** — focused review of all code changes in this batch via the `/security-review` workflow. No vulnerabilities introduced (0 Critical / 0 High / 0 Medium / 0 Low). Details: [SECURITY_AUDIT_2026-04-19.md](SECURITY_AUDIT_2026-04-19.md). The pre-existing empty `plugins.updater.pubkey` remains an owner-action item from the prior audit.
+
+---
+
 ## Unreleased — Settings, Language, Hotkey, Cleanup
 
 ### New Features

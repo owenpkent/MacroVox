@@ -150,6 +150,7 @@ pub fn run() {
             dictation_set_always_on_top,
             settings_open_window,
             app_set_minimize_to_tray,
+            platform_info,
             // Theme, settings, hotkey
             theme_broadcast,
             settings_broadcast,

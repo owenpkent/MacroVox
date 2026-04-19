@@ -67,6 +67,14 @@ export function DictationMode() {
     return cleanup
   }, [])
 
+  // Apply persisted window/audio preferences on startup
+  useEffect(() => {
+    const alwaysOnTop = localStorage.getItem('dictation_always_on_top') !== 'false'
+    ipc.setDictationAlwaysOnTop(alwaysOnTop).catch(() => {})
+    const savedMic = localStorage.getItem('selected_mic_device')
+    if (savedMic) ipc.setAudioDevice(savedMic).catch(() => {})
+  }, [])
+
   // Cleanup timers on unmount
   useEffect(() => {
     return () => {

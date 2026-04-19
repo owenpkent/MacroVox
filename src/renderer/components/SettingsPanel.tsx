@@ -23,10 +23,13 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
   const [authError, setAuthError] = useState<string | null>(null)
   const [authSuccess, setAuthSuccess] = useState<string | null>(null)
   const [devices, setDevices] = useState<string[]>([])
-  const [selectedDevice, setSelectedDevice] = useState<string | null>(null)
+  const [selectedDevice, setSelectedDevice] = useState<string | null>(() =>
+    localStorage.getItem('selected_mic_device')
+  )
   const [isLoading, setIsLoading] = useState(false)
 
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>('loading')
+  const [platformInfo, setPlatformInfo] = useState<ipc.PlatformInfo | null>(null)
 
   const [autoCopyOnStop, setAutoCopyOnStop] = useState(() =>
     localStorage.getItem('dictation_auto_copy') !== 'false'
@@ -86,6 +89,12 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
   useEffect(() => {
     ipc.voiceBufferInfo().then(setVoiceBufferInfo).catch(() => {})
   }, [voiceBufferEnabled])
+
+  // One-time platform probe so the UI can reflect runtime limits (e.g.,
+  // auto-paste isn't available on Wayland — enigo can't inject keys there).
+  useEffect(() => {
+    ipc.getPlatformInfo().then(setPlatformInfo).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (user) {
@@ -158,7 +167,17 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
       const result = await ipc.listAudioDevices()
       if (result.success) {
         setDevices(result.devices)
-        setSelectedDevice(result.selected)
+        const stored = localStorage.getItem('selected_mic_device')
+        // Prefer the stored choice if it's still in the device list; if the
+        // backend hasn't been told yet (fresh process), re-send it.
+        if (stored && result.devices.includes(stored)) {
+          setSelectedDevice(stored)
+          if (result.selected !== stored) {
+            ipc.setAudioDevice(stored).catch(() => {})
+          }
+        } else {
+          setSelectedDevice(result.selected)
+        }
       }
     } catch (error) {
       console.warn('[Settings] Failed to load devices')
@@ -191,7 +210,12 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
   const handleDeviceSelect = async (device: string) => {
     try {
       await ipc.setAudioDevice(device)
-      setSelectedDevice(device)
+      setSelectedDevice(device || null)
+      if (device) {
+        localStorage.setItem('selected_mic_device', device)
+      } else {
+        localStorage.removeItem('selected_mic_device')
+      }
     } catch (error) {
       console.warn('[Settings] Failed to set device')
     }
@@ -408,18 +432,29 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
             </h3>
             <div className="space-y-3">
               {[
-                { label: 'Auto-copy on stop', desc: 'Instantly copy transcript to clipboard when you stop recording', value: autoCopyOnStop, onChange: handleAutoCopyToggle },
-                { label: 'Auto-paste on stop', desc: 'Paste into the app you were typing in — text lands where your cursor was', value: autoPasteEnabled, onChange: handleAutoPasteToggle },
-                { label: 'Clear on new recording', desc: 'Delete previous transcript when starting a new one', value: clearOnNewRecording, onChange: handleClearOnNewToggle },
-              ].map(({ label, desc, value, onChange }) => (
-                <label key={label} className="flex items-center justify-between cursor-pointer">
+                { label: 'Auto-copy on stop', desc: 'Instantly copy transcript to clipboard when you stop recording', value: autoCopyOnStop, onChange: handleAutoCopyToggle, disabled: false },
+                {
+                  label: 'Auto-paste on stop',
+                  desc: platformInfo?.is_wayland
+                    ? 'Unavailable on Wayland — key injection is blocked. The transcript still copies to your clipboard; paste it with Ctrl+V.'
+                    : 'Paste into the app you were typing in — text lands where your cursor was',
+                  value: platformInfo?.is_wayland ? false : autoPasteEnabled,
+                  onChange: handleAutoPasteToggle,
+                  disabled: !!platformInfo?.is_wayland,
+                },
+                { label: 'Clear on new recording', desc: 'Delete previous transcript when starting a new one', value: clearOnNewRecording, onChange: handleClearOnNewToggle, disabled: false },
+              ].map(({ label, desc, value, onChange, disabled }) => (
+                <label
+                  key={label}
+                  className={`flex items-center justify-between ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                >
                   <div>
                     <span className="text-sm text-slate-200">{label}</span>
                     <p className="text-xs text-slate-500">{desc}</p>
                   </div>
                   <div
-                    onClick={() => onChange(!value)}
-                    className="w-10 h-5 rounded-full transition-colors cursor-pointer"
+                    onClick={() => { if (!disabled) onChange(!value) }}
+                    className={`w-10 h-5 rounded-full transition-colors ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                     style={{ backgroundColor: value ? 'var(--accent-primary)' : 'var(--bg-tertiary)' }}
                   >
                     <div className={`w-4 h-4 rounded-full bg-white mt-0.5 transition-transform ${value ? 'translate-x-5' : 'translate-x-0.5'}`} />

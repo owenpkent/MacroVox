@@ -55,6 +55,12 @@ Tauri converts snake_case command names to camelCase automatically.
 |---|---|---|
 | `audio_list_devices` | `listAudioDevices()` | `AudioDevicesResponse` |
 | `audio_set_device(device_name)` | `setAudioDevice(name)` | `OkResponse` |
+
+On Linux, `audio_list_devices` runs the raw cpal/ALSA enumeration through
+`filter_device_list`, which strips virtual aliases (`hw:`, `plughw:`, `dmix:`,
+`dsnoop:`, `surround*:`, `iec958:`, `hdmi:`, `sysdefault:`, monitor taps) so
+the picker only shows user-meaningful devices (`default`, `pulse`, friendly
+names). No-op on Windows/macOS.
 | `audio_start` | `startAudio()` | `OkResponse` |
 | `audio_stop` | `stopAudio()` | `OkResponse` |
 | `audio_get_level` | `getAudioLevel()` | `f64` |
@@ -99,6 +105,13 @@ Returns `{ success: false, error: "local-stt feature not enabled" }` in default 
 | `dictation_set_always_on_top(value)` | `setDictationAlwaysOnTop(v)` | `OkResponse` |
 | `settings_open_window` | `openSettingsWindow()` | `OkResponse` |
 | `app_set_minimize_to_tray(value)` | `setMinimizeToTray(v)` | `OkResponse` |
+| `platform_info` | `getPlatformInfo()` | `PlatformInfo { os, is_wayland }` |
+
+`dictation_auto_paste` short-circuits with an error on Wayland — `enigo`
+lacks a reliable key-injection path there. The clipboard copy done upstream
+still succeeds, so the user can paste manually. The renderer reads
+`platform_info` on Settings mount and disables the "Auto-paste on stop"
+toggle with an inline explanation when `is_wayland` is true.
 
 ### Theme & settings broadcast
 
@@ -125,8 +138,8 @@ See the **Auth subsystem** section below for details.
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `selected_mic_device` | `Mutex<Option<String>>` | `None` | Name of the selected input device |
-| `dictation_always_on_top` | `Mutex<bool>` | `true` | Window always-on-top setting |
+| `selected_mic_device` | `Mutex<Option<String>>` | `None` | Name of the selected input device. In-memory only; the renderer persists the user's pick in `localStorage["selected_mic_device"]` and re-pushes it via `audio_set_device` on `DictationMode` mount. |
+| `dictation_always_on_top` | `Mutex<bool>` | `true` | Window always-on-top setting. The renderer persists the toggle in `localStorage["dictation_always_on_top"]` and reapplies it via `dictation_set_always_on_top` on `DictationMode` mount so user preference survives restart. |
 | `minimize_to_tray` | `Mutex<bool>` | `false` | Close-to-tray setting |
 | `audio_stream` | `Mutex<Option<cpal::Stream>>` | `None` | Live capture stream; dropping stops it |
 | `audio_level` | `Arc<Mutex<f64>>` | `0.0` | RMS level updated by cpal callback |

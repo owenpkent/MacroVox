@@ -165,6 +165,14 @@ export const openSettingsWindow = (): Promise<OkResult> =>
 export const setMinimizeToTray = (value: boolean): Promise<OkResult> =>
   invoke('app_set_minimize_to_tray', { value })
 
+export interface PlatformInfo {
+  os: string
+  is_wayland: boolean
+}
+
+export const getPlatformInfo = (): Promise<PlatformInfo> =>
+  invoke('platform_info')
+
 // ── Theme & settings broadcast ────────────────────────────────────────────────
 
 export const broadcastThemeChange = (themeId: string): Promise<OkResult> =>

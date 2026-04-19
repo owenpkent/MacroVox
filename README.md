@@ -1,6 +1,6 @@
-# MacroVox — Voice Dictation for Windows
+# MacroVox — Voice Dictation for Windows & Linux
 
-A managed voice dictation app for Windows powered by [Deepgram](https://deepgram.com) and [Claude](https://anthropic.com). Speak into your microphone, get text. Sign in, subscribe, and start dictating — all API keys are managed server-side.
+A managed voice dictation app powered by [Deepgram](https://deepgram.com) and [Claude](https://anthropic.com). Speak into your microphone, get text. Sign in, subscribe, and start dictating — all API keys are managed server-side. Windows is the primary release target; Linux (`.deb`, `.rpm`, AppImage) is supported in beta — see [Linux notes](#linux-notes) below.
 
 > **Managed service** — MacroVox handles all API keys (Deepgram, Claude) for Pro subscribers. No setup friction. See [docs/SETUP.md](docs/SETUP.md) for backend infrastructure guide.
 
@@ -17,7 +17,7 @@ Active — Tauri 2 production app. Stripe billing, free trial, auto-updater depl
 - **Custom global hotkey** — configurable shortcut to toggle recording from any app (default Ctrl+Space)
 - **AI post-processing** — Claude Haiku cleans up every transcript automatically, non-blocking (Pro)
 - **Number formatting** — choose digits, words, or smart mode for how numbers appear
-- **Auto-copy & auto-paste** — transcript goes straight to clipboard and active app instantly (native Windows input via enigo); AI cleanup updates in background
+- **Auto-copy & auto-paste** — transcript goes straight to clipboard and active app instantly (native key-injection via `enigo`); AI cleanup updates in background. Works on Windows and X11-based Linux; auto-paste is disabled on Wayland (see [Linux notes](#linux-notes))
 - **Keyword boosting** — improve recognition of custom terms
 - **Dictation history** — rolling voice buffer saves recordings as OGG Opus for playback and reprocessing
 - **6 themed UI skins** — MCRN, Mars, Belter, Earth, Protomolecule, Laconia
@@ -58,11 +58,29 @@ VITE_SUPABASE_KEY=your-anon-key
 
 ---
 
+## Linux notes
+
+MacroVox builds `.deb`, `.rpm`, and AppImage bundles on Linux. Install the bundle that matches your distro (produced by `npx tauri build` into `src-tauri/target/release/bundle/`; copy-aggregated by `npm run release:linux` into `release/linux/`).
+
+**Runtime dependencies** (Debian/Ubuntu names; see your distro for equivalents):
+- `libwebkit2gtk-4.1-0` — Tauri WebView
+- `libasound2` + `libpulse0` — audio capture (cpal via ALSA/PulseAudio; PipeWire works through its PulseAudio shim)
+- `libayatana-appindicator3-1` — tray icon support (when enabled)
+
+**Display-server caveats:**
+- **X11** — fully supported: global hotkey, auto-paste (`enigo`), clipboard all work as on Windows.
+- **Wayland** — partial support. Global hotkeys depend on the compositor's XDG portal; on some compositors `Ctrl+Space` may not register. Auto-paste via `enigo` is not reliable on Wayland and is disabled automatically — copy your transcript and paste manually, or launch the app from an X11 session for full parity. MacroVox detects the session type at startup (via `XDG_SESSION_TYPE` / `WAYLAND_DISPLAY`) and surfaces the restriction in Settings.
+
+**Microphone picker** — on Linux the settings dropdown filters out ALSA's virtual aliases (`hw:`, `plughw:`, `dmix:`, `surround*:`, `iec958:`, `hdmi:`, monitor taps) so you see only user-meaningful devices (`default`, `pulse`, and named inputs). Your selection is persisted across restarts.
+
+---
+
 ## Documentation
 
 - **[LLM Onboarding](docs/LLM_ONBOARDING.md)** — Quick reference for AI assistants
 - **[Status & Roadmap](docs/STATUS_AND_ROADMAP.md)** — Current status and next steps
 - **[Setup Guide](docs/SETUP.md)** — Backend infrastructure (Supabase + Netlify + Stripe)
+- **[Release Process](docs/RELEASE.md)** — How to cut a release, build bundles, and generate `latest.json`
 - **[Changelog](docs/CHANGELOG.md)** — Release history
 
 ---

@@ -179,9 +179,47 @@ pub fn audio_list_devices(state: State<AppState>) -> AudioDevicesResponse {
         .input_devices()
         .map(|iter| iter.filter_map(|d| d.name().ok()).collect())
         .unwrap_or_default();
+    let devices = filter_device_list(devices);
     let selected = lock_or_recover(&state.selected_mic_device).clone();
     debug!("[audio] devices found: {:?}, selected: {:?}", devices, selected);
     AudioDevicesResponse { success: true, devices, selected, error: None }
+}
+
+/// On Linux, cpal's ALSA host enumerates dozens of virtual/alias devices
+/// (`hw:`, `plughw:`, `dmix:`, `surround51:CARD=…`, monitor taps, etc.) that
+/// are noise for a user-facing picker. Keep only the PulseAudio route and
+/// plain capture device names; fall through unchanged on other platforms.
+fn filter_device_list(devices: Vec<String>) -> Vec<String> {
+    #[cfg(target_os = "linux")]
+    {
+        const NOISE_PREFIXES: &[&str] = &[
+            "sysdefault:", "front:", "rear:", "center_lfe:", "side:",
+            "surround21:", "surround40:", "surround41:", "surround50:",
+            "surround51:", "surround71:",
+            "iec958:", "spdif:", "hdmi:",
+            "dmix:", "dsnoop:", "hw:", "plughw:",
+            "modem:", "phoneline:", "upmix", "vdownmix",
+            "samplerate", "speexrate", "null", "jack", "oss",
+            "usbstream:",
+        ];
+        let mut out: Vec<String> = devices
+            .into_iter()
+            .filter(|name| {
+                let lower = name.to_ascii_lowercase();
+                if lower.contains("monitor of ") || lower.ends_with(".monitor") {
+                    return false;
+                }
+                !NOISE_PREFIXES.iter().any(|p| name.starts_with(p))
+            })
+            .collect();
+        out.sort();
+        out.dedup();
+        return out;
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        devices
+    }
 }
 
 #[tauri::command]
@@ -700,9 +738,20 @@ pub fn clipboard_write(app: AppHandle, text: String) -> OkResponse {
 /// Uses `enigo` for native `SendInput` key injection — no subprocess, no JIT
 /// assembly load.  A 50 ms delay gives the OS time to re-focus the target window
 /// after we hide ours; that is all the latency budget this path needs.
+///
+/// On Wayland, `enigo` has no reliable key-injection path, so we skip the
+/// simulated keystroke and return an explanatory error. The clipboard copy
+/// done upstream still succeeds, so the user can paste manually.
 #[tauri::command]
 pub fn dictation_auto_paste(app: AppHandle) -> OkResponse {
     use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+
+    if crate::platform::is_wayland() {
+        return OkResponse::err(
+            "Auto-paste is not supported on Wayland — the transcript is on your \
+             clipboard; press Ctrl+V manually.",
+        );
+    }
 
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.hide();
@@ -719,6 +768,23 @@ pub fn dictation_auto_paste(app: AppHandle) -> OkResponse {
     });
 
     OkResponse::ok()
+}
+
+/// Reports runtime platform facts the renderer needs to adjust its UI —
+/// today just whether the user is on Wayland so Settings can disable
+/// auto-paste and explain why.
+#[tauri::command]
+pub fn platform_info() -> PlatformInfo {
+    PlatformInfo {
+        os: std::env::consts::OS.to_string(),
+        is_wayland: crate::platform::is_wayland(),
+    }
+}
+
+#[derive(serde::Serialize)]
+pub struct PlatformInfo {
+    pub os: String,
+    pub is_wayland: bool,
 }
 
 // ── Window settings ✅ Phase 2 ────────────────────────────────────────────────

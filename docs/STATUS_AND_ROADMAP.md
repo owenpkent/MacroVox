@@ -30,12 +30,13 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 | Category | Status |
 |----------|--------|
 | **Windows App** | ✅ Released — v1.0.6 (EV code signed) |
+| **Linux App** | 🧪 Beta — `.deb` / `.rpm` / AppImage bundles build cleanly; X11 full-parity, Wayland has auto-paste + global-hotkey limitations (see [README Linux notes](../README.md#linux-notes)) |
+| **macOS App** | 🔜 Planned |
 | **Auth (Supabase)** | ✅ Complete — email/password |
 | **Stripe Billing** | 🔧 In Progress — functions written, pending deployment |
 | **Managed API Keys** | ✅ Complete — Deepgram + Claude both required, provisioned for Pro users |
 | **Netlify Functions** | ✅ Complete — claude-proxy + deepgram-proxy written |
 | **Supabase Edge Functions** | ✅ Complete — create-checkout, billing-portal, stripe-webhook written |
-| **macOS / Linux** | 🔜 Planned |
 
 ---
 
@@ -166,7 +167,7 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 - [x] **Voice memo buffer** — rolling WAV buffer with playback and manifest (v1 uses WAV, Opus compression planned) — see [voice-memo-buffer-design.md](voice-memo-buffer-design.md)
 - [ ] **Agentic Writing tab** — speak a request, Claude generates the content (deferred from v1 launch)
 - [ ] **macOS support** — cpal audio capture on macOS
-- [ ] **Linux support** — PulseAudio/PipeWire capture
+- [x] **Linux support (beta)** — ALSA/PulseAudio capture via cpal, `.deb` / `.rpm` / AppImage bundles, ALSA device-list filter, persisted mic pick. Remaining: full Wayland parity (auto-paste + global hotkey), signed `.deb`, Linux keys in updater manifest.
 - [ ] **Team tier** — shared billing for organizations
 - [ ] **Custom vocabulary training** — domain-specific term recognition
 - [ ] **Voice profile adaptation** — improve accuracy for non-standard speech patterns

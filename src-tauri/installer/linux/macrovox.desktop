@@ -1,12 +1,14 @@
 [Desktop Entry]
 Type=Application
-Name=MacroVox
+Name={{name}}
 GenericName=Voice Dictation
-Comment=Real-time voice dictation with AI cleanup
-Exec=macrovox
-Icon=macrovox
+{{#if comment}}
+Comment={{comment}}
+{{/if}}
+Exec={{exec}}
+Icon={{icon}}
 Terminal=false
-Categories=Office;Utility;AudioVideo;
+Categories={{categories}}
 Keywords=dictation;voice;speech;transcription;
 StartupWMClass=MacroVox
 StartupNotify=true

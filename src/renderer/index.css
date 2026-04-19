@@ -52,6 +52,27 @@ body {
   background: var(--text-secondary);
 }
 
+/* Selects: WebKitGTK on Linux otherwise falls back to native GTK rendering
+   which ignores our inline `color`/`background-color`, producing low-contrast
+   dark-on-dark text in the closed state. Force a consistent look across
+   platforms and supply a themed chevron to replace the removed native one. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  padding-right: 1.75rem;
+}
+
+select option {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
 /* Utility classes for theme colors */
 .bg-theme-primary { background-color: var(--bg-primary); }
 .bg-theme-secondary { background-color: var(--bg-secondary); }
