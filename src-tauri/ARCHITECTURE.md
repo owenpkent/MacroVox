@@ -38,7 +38,7 @@ src-tauri/
     ├── state.rs        # AppState (Mutex-wrapped fields shared across commands)
     ├── audio.rs        # cpal stream, WAV encoder, PCM→WS streaming
     ├── deepgram_ws.rs  # Deepgram WebSocket session + event emitter
-    ├── voice_buffer.rs # Dictation history — OGG Opus buffer, manifest, eviction
+    ├── voice_buffer.rs # Dictation history — OGG Opus buffer (downmix + resample to 16 kHz), manifest, eviction, startup repair pass
     ├── platform.rs     # Platform detection (OS, Wayland)
     └── commands.rs     # IPC command implementations + unit tests
 ```
@@ -138,6 +138,23 @@ Push events: `"theme-changed"` (string), `"settings-changed"` (object)
 | `voice_buffer_update_transcript(id, text)` | `voiceBufferUpdateTranscript(...)` | `OkResponse` |
 | `voice_buffer_reprocess(id, api_key)` | `voiceBufferReprocess(...)` | Reprocessed transcript |
 | `voice_buffer_open_folder` | `voiceBufferOpenFolder()` | `OkResponse` |
+
+**Encoder rate normalization.** `encode_opus` always emits 16 kHz mono OGG Opus
+regardless of the capture device's native rate. Input samples are downmixed to
+mono (channel-averaged) and linearly resampled from `sample_rate` → 16 kHz
+before being handed to `ogg_opus::encode::<16000, 1>`. Without this step the
+const generic would mislabel the embedded data and HTML5 playback would run at
+the wrong speed (e.g. ~1/3 real-time for a 48 kHz capture). `manifest.duration_secs`
+is computed from the original sample count and rate, so it remains the
+ground-truth duration regardless of the encoder's target rate.
+
+**Startup repair pass.** `lib.rs` spawns
+`voice_buffer::repair_stretched_recordings` on a background thread once per
+launch. It walks the manifest, decodes each `.ogg` at 16 kHz, and compares the
+decoded length to `manifest.duration_secs`. Files within 50 ms of their
+expected duration are left alone; files that drift further (legacy recordings
+saved before the encoder fix) are resampled to the correct length and
+re-encoded in place. Idempotent — re-running is a no-op once everything matches.
 
 ### Auth (Phase 6 — removed; renderer calls Supabase JS SDK directly)
 

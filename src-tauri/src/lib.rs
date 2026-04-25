@@ -55,7 +55,14 @@ pub fn run() {
                 let voice_dir = app_data.join("voice-buffer");
                 debug!("[setup] Voice buffer directory: {:?}", voice_dir);
                 let state = app.state::<AppState>();
-                *state.voice_buffer_dir.lock().unwrap() = voice_dir;
+                *state.voice_buffer_dir.lock().unwrap() = voice_dir.clone();
+
+                // One-shot migration: re-encode any recordings stretched by the
+                // pre-fix encoder. Idempotent — files within 50ms of their
+                // expected duration are skipped.
+                std::thread::spawn(move || {
+                    voice_buffer::repair_stretched_recordings(&voice_dir);
+                });
             }
 
             // Minimize-to-tray close handler: intercept the close event on the

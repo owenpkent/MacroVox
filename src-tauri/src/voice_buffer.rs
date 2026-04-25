@@ -140,13 +140,63 @@ fn f32_to_i16_samples(samples: &[f32]) -> Vec<i16> {
         .collect()
 }
 
-/// Encodes f32 PCM samples as OGG Opus.
+/// Downmixes interleaved multi-channel f32 samples to mono by averaging.
+fn downmix_to_mono(samples: &[f32], channels: u16) -> Vec<f32> {
+    if channels <= 1 {
+        return samples.to_vec();
+    }
+    let ch = channels as usize;
+    let inv = 1.0 / ch as f32;
+    samples
+        .chunks_exact(ch)
+        .map(|frame| frame.iter().sum::<f32>() * inv)
+        .collect()
+}
+
+/// Linear-interpolation resample of mono f32 samples from `src_rate` to `dst_rate`.
+fn resample_linear(samples: &[f32], src_rate: u32, dst_rate: u32) -> Vec<f32> {
+    if src_rate == dst_rate || samples.is_empty() {
+        return samples.to_vec();
+    }
+    let ratio = dst_rate as f64 / src_rate as f64;
+    let out_len = ((samples.len() as f64) * ratio).round() as usize;
+    resample_to_length(samples, out_len)
+}
+
+/// Resamples mono f32 samples to a specified output length via linear interpolation.
+fn resample_to_length(samples: &[f32], out_len: usize) -> Vec<f32> {
+    if samples.is_empty() || out_len == 0 {
+        return Vec::new();
+    }
+    if samples.len() == out_len {
+        return samples.to_vec();
+    }
+    let mut out = Vec::with_capacity(out_len);
+    let step = samples.len() as f64 / out_len as f64;
+    let last = samples.len() - 1;
+    for i in 0..out_len {
+        let pos = i as f64 * step;
+        let i0 = pos.floor() as usize;
+        if i0 >= last {
+            out.push(samples[last]);
+        } else {
+            let frac = (pos - i0 as f64) as f32;
+            out.push(samples[i0] * (1.0 - frac) + samples[i0 + 1] * frac);
+        }
+    }
+    out
+}
+
+/// Encodes f32 PCM samples as OGG Opus at 16 kHz mono.
 ///
-/// Uses the `ogg-opus` crate which handles both Opus encoding and OGG
-/// container in one step. Input must be 16kHz mono (the MacroVox default).
-/// Falls back to WAV if Opus encoding fails.
-fn encode_opus(samples: &[f32]) -> Result<Vec<u8>, String> {
-    let i16_samples = f32_to_i16_samples(samples);
+/// Downmixes to mono and resamples to 16 kHz so the Opus container's declared
+/// rate matches the actual sample data — without this, recordings captured at
+/// the device's native rate (e.g. 48 kHz on Windows) play back at the wrong
+/// speed.
+fn encode_opus(samples: &[f32], sample_rate: u32, channels: u16) -> Result<Vec<u8>, String> {
+    let mono = downmix_to_mono(samples, channels);
+    let resampled = resample_linear(&mono, sample_rate, 16_000);
+    let i16_samples = f32_to_i16_samples(&resampled);
     ogg_opus::encode::<16000, 1>(&i16_samples)
         .map_err(|e| format!("Opus encoding failed: {e}"))
 }
@@ -175,7 +225,7 @@ pub fn save_recording(
         .map_err(|e| format!("Failed to create voice buffer directory: {e}"))?;
 
     // Encode as OGG Opus (falls back to WAV if encoding fails)
-    let (encoded_bytes, extension) = match encode_opus(samples) {
+    let (encoded_bytes, extension) = match encode_opus(samples, sample_rate, channels) {
         Ok(opus_bytes) => {
             debug!("[voice_buffer] Opus encoded: {} samples → {} bytes ({:.0}x compression)",
                 samples.len() * 2, // WAV would be 2 bytes per sample + 44 header
@@ -235,6 +285,98 @@ pub fn save_recording(
     );
 
     Ok(filename)
+}
+
+/// One-shot migration: re-encodes any recordings saved before the sample-rate
+/// fix so they play at real-time speed.
+///
+/// Pre-fix `encode_opus` hardcoded a 16 kHz input rate, so 48 kHz captures
+/// became 3-second files claiming to be 1 second. The manifest's `duration_secs`
+/// was always computed from the true rate, so it's the ground truth: if the
+/// decoded length at 16 kHz doesn't match it, the file is stretched and we
+/// resample to the correct length and re-encode.
+pub fn repair_stretched_recordings(buffer_dir: &Path) {
+    if !buffer_dir.exists() {
+        return;
+    }
+    let mut manifest = load_manifest(buffer_dir);
+    if manifest.recordings.is_empty() {
+        return;
+    }
+
+    let mut repaired = 0usize;
+    let mut new_total: u64 = 0;
+
+    for entry in manifest.recordings.iter_mut() {
+        if !entry.file.ends_with(".ogg") {
+            new_total = new_total.saturating_add(entry.size_bytes);
+            continue;
+        }
+        let path = buffer_dir.join(&entry.file);
+        let bytes = match fs::read(&path) {
+            Ok(b) => b,
+            Err(_) => {
+                new_total = new_total.saturating_add(entry.size_bytes);
+                continue;
+            }
+        };
+
+        let cursor = std::io::Cursor::new(&bytes);
+        let samples_i16 = match ogg_opus::decode::<_, 16_000>(cursor) {
+            Ok((s, _)) => s,
+            Err(e) => {
+                warn!("[voice_buffer] Skipping repair for {}: decode failed: {e}", entry.file);
+                new_total = new_total.saturating_add(entry.size_bytes);
+                continue;
+            }
+        };
+
+        let decoded_duration = samples_i16.len() as f64 / 16_000.0;
+        // Within 50ms — not stretched, leave it alone.
+        if (decoded_duration - entry.duration_secs).abs() < 0.05 {
+            new_total = new_total.saturating_add(entry.size_bytes);
+            continue;
+        }
+
+        let samples_f32: Vec<f32> = samples_i16
+            .iter()
+            .map(|&s| s as f32 / i16::MAX as f32)
+            .collect();
+        let target_len = (entry.duration_secs * 16_000.0).round() as usize;
+        let resampled = resample_to_length(&samples_f32, target_len);
+
+        let new_bytes = match encode_opus(&resampled, 16_000, 1) {
+            Ok(b) => b,
+            Err(e) => {
+                warn!("[voice_buffer] Skipping repair for {}: re-encode failed: {e}", entry.file);
+                new_total = new_total.saturating_add(entry.size_bytes);
+                continue;
+            }
+        };
+
+        if let Err(e) = fs::write(&path, &new_bytes) {
+            warn!("[voice_buffer] Skipping repair for {}: write failed: {e}", entry.file);
+            new_total = new_total.saturating_add(entry.size_bytes);
+            continue;
+        }
+
+        debug!(
+            "[voice_buffer] Repaired {}: {:.1}s → {:.1}s ({} → {} bytes)",
+            entry.file, decoded_duration, entry.duration_secs, entry.size_bytes, new_bytes.len()
+        );
+        entry.size_bytes = new_bytes.len() as u64;
+        new_total = new_total.saturating_add(entry.size_bytes);
+        repaired += 1;
+    }
+
+    if repaired > 0 {
+        manifest.current_size_bytes = new_total;
+        if let Err(e) = save_manifest(buffer_dir, &manifest) {
+            warn!("[voice_buffer] Repaired {repaired} files but manifest save failed: {e}");
+        } else {
+            debug!("[voice_buffer] Repaired {repaired} stretched recording(s)");
+        }
+    }
 }
 
 /// Lists all recordings in the buffer, newest first.
@@ -486,12 +628,113 @@ mod tests {
     }
 
     #[test]
+    fn resample_linear_preserves_duration() {
+        // 1 second at 48 kHz → should produce ~16000 samples at 16 kHz
+        let input = vec![0.5f32; 48_000];
+        let out = resample_linear(&input, 48_000, 16_000);
+        assert!((out.len() as i32 - 16_000).abs() <= 1, "got {}", out.len());
+    }
+
+    #[test]
+    fn downmix_stereo_to_mono_averages_channels() {
+        // Stereo: L=1.0, R=0.0 interleaved → mono should be 0.5
+        let input = vec![1.0f32, 0.0, 1.0, 0.0];
+        let mono = downmix_to_mono(&input, 2);
+        assert_eq!(mono, vec![0.5, 0.5]);
+    }
+
+    #[test]
+    fn save_recording_at_48khz_stores_correct_duration() {
+        // Regression: a 1-second 48 kHz capture must be saved so playback
+        // is real-time, not 3x slower. Decode the resulting OGG and check
+        // it produces ~16000 samples at 16 kHz.
+        let dir = temp_dir();
+        let samples = vec![0.0f32; 48_000]; // 1 second at 48 kHz mono
+        let filename = save_recording(&dir, &samples, 48_000, 1, "48k test", None).unwrap();
+
+        let bytes = std::fs::read(dir.join(&filename)).unwrap();
+        let cursor = std::io::Cursor::new(bytes);
+        let (decoded, _header) = ogg_opus::decode::<_, 16_000>(cursor).unwrap();
+
+        // Should decode to ~1 second of audio at 16 kHz (16000 samples).
+        // Opus has a small encoder delay, so allow some tolerance.
+        let len = decoded.len() as i32;
+        assert!((len - 16_000).abs() < 1000,
+            "expected ~16000 samples after decode, got {len}");
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn repair_fixes_stretched_recording_and_skips_correct_one() {
+        let dir = temp_dir();
+
+        // Simulate a pre-fix stretched recording: feed 48000 samples (1s @ 48kHz)
+        // straight to the 16 kHz encoder, mimicking the old bug.
+        let stretched_samples = vec![0.1f32; 48_000];
+        let i16_stretched: Vec<i16> = stretched_samples
+            .iter()
+            .map(|&s| (s.clamp(-1.0, 1.0) * i16::MAX as f32) as i16)
+            .collect();
+        let stretched_bytes = ogg_opus::encode::<16_000, 1>(&i16_stretched).unwrap();
+        let stretched_name = "stretched.ogg";
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(stretched_name), &stretched_bytes).unwrap();
+
+        // Save a correctly-encoded file alongside it.
+        let good_samples = vec![0.1f32; 16_000];
+        let good_name = save_recording(&dir, &good_samples, 16_000, 1, "good", None).unwrap();
+
+        // Hand-craft the manifest as it would have looked before the fix:
+        // both entries claim 1.0s duration_secs.
+        let mut manifest = load_manifest(&dir);
+        manifest.recordings.clear();
+        manifest.recordings.push(VoiceRecording {
+            file: stretched_name.to_string(),
+            timestamp: "2026-04-25T12:00:00+00:00".to_string(),
+            duration_secs: 1.0,
+            size_bytes: stretched_bytes.len() as u64,
+            transcript: "stretched".to_string(),
+        });
+        let good_bytes_len = std::fs::metadata(dir.join(&good_name)).unwrap().len();
+        manifest.recordings.push(VoiceRecording {
+            file: good_name.clone(),
+            timestamp: "2026-04-25T12:00:01+00:00".to_string(),
+            duration_secs: 1.0,
+            size_bytes: good_bytes_len,
+            transcript: "good".to_string(),
+        });
+        manifest.current_size_bytes = stretched_bytes.len() as u64 + good_bytes_len;
+        save_manifest(&dir, &manifest).unwrap();
+
+        // Run the migration.
+        repair_stretched_recordings(&dir);
+
+        // Stretched file should now decode to ~16000 samples (1s at 16 kHz).
+        let bytes = std::fs::read(dir.join(stretched_name)).unwrap();
+        let (decoded, _) = ogg_opus::decode::<_, 16_000>(std::io::Cursor::new(bytes)).unwrap();
+        let len = decoded.len() as i32;
+        assert!((len - 16_000).abs() < 1000, "after repair, expected ~16000 samples, got {len}");
+
+        // Manifest size for the stretched entry should reflect the new file size.
+        let after = load_manifest(&dir);
+        let stretched_entry = after.recordings.iter().find(|r| r.file == stretched_name).unwrap();
+        let on_disk = std::fs::metadata(dir.join(stretched_name)).unwrap().len();
+        assert_eq!(stretched_entry.size_bytes, on_disk);
+
+        // The already-correct file should be unchanged.
+        let good_after = std::fs::metadata(dir.join(&good_name)).unwrap().len();
+        assert_eq!(good_after, good_bytes_len, "good file should not have been re-encoded");
+
+        cleanup(&dir);
+    }
+
+    #[test]
     fn opus_encoding_compresses_significantly() {
         // 5 seconds of audio at 16kHz mono
         let samples: Vec<f32> = (0..80_000)
             .map(|i| (i as f32 * 0.01).sin() * 0.5)
             .collect();
-        let opus_bytes = encode_opus(&samples).unwrap();
+        let opus_bytes = encode_opus(&samples, 16_000, 1).unwrap();
         let wav_size = samples.len() * 2 + 44; // i16 samples + WAV header
         let ratio = wav_size as f64 / opus_bytes.len() as f64;
         assert!(ratio > 5.0, "Expected >5x compression, got {ratio:.1}x (WAV={wav_size}, Opus={})", opus_bytes.len());

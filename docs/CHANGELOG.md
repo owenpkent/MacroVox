@@ -1,5 +1,13 @@
 # MacroVox Changelog
 
+## Unreleased — Voice buffer playback fix
+
+### Bug Fixes
+- **Saved recordings no longer play back slowed down** — `encode_opus` in `voice_buffer.rs` was hardcoded to claim its input was 16 kHz mono via the `ogg_opus::encode::<16000, 1>` const generic, but cpal's `default_input_config()` is typically 48 kHz on Windows. The OGG file ended up with ~3× the audio duration claimed in its header, so HTML5 `<audio>` playback ran at roughly one-third speed. Fixed by downmixing to mono and linearly resampling to 16 kHz before handing samples to the Opus encoder, so the data inside the file matches its declared rate.
+- **Auto-repair on launch for already-stretched recordings** — new `voice_buffer::repair_stretched_recordings`, spawned on a background thread from `lib.rs` setup, walks the manifest once per startup. For each `.ogg` whose decoded length at 16 kHz drifts more than 50 ms from `manifest.duration_secs` (the ground-truth original duration), it decodes, resamples to the correct length, and re-encodes. Idempotent — files already at the right speed are skipped.
+
+---
+
 ## Unreleased — Linux release readiness
 
 ### New Features
