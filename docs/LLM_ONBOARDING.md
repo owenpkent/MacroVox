@@ -28,22 +28,31 @@ Owen — wheelchair user with muscular dystrophy.
 | `run.py` | Dev launcher — runs `npx tauri dev`, checks prerequisites |
 | `src-tauri/tauri.conf.json` | Tauri app config — window declarations, devUrl, frontendDist |
 | `src-tauri/capabilities/default.json` | Tauri IPC permissions for all windows |
-| `src-tauri/src/commands.rs` | All Tauri IPC commands (audio, Deepgram, clipboard, windows) |
 | `src-tauri/src/lib.rs` | App setup — plugins, global shortcut, tray, close handler |
+| `src-tauri/src/commands.rs` | All Tauri IPC commands (audio, Deepgram, clipboard, windows) |
 | `src-tauri/src/state.rs` | Shared Rust app state (audio, recording, settings, hotkey, language) |
+| `src-tauri/src/audio.rs` | cpal WASAPI native audio capture, WAV encoder |
 | `src-tauri/src/deepgram_ws.rs` | Deepgram WebSocket streaming (language, numerals, keywords) |
 | `src-tauri/src/voice_buffer.rs` | Dictation history — OGG Opus buffer, manifest, eviction |
+| `src-tauri/src/platform.rs` | Platform detection (OS, Wayland) |
 | `src/renderer/lib/tauri-ipc.ts` | Frontend IPC bridge — all `invoke()` calls |
 | `src/renderer/lib/auth.ts` | Supabase JS SDK auth (sign in, sign up, subscription) |
 | `src/renderer/lib/supabase.ts` | Supabase client singleton (reads VITE_SUPABASE_* from .env) |
+| `src/renderer/config.ts` | App configuration constants |
 | `src/renderer/components/DictationMode.tsx` | Main dictation UI — recording, transcript, tabs |
 | `src/renderer/components/SettingsPanel.tsx` | Settings window UI |
 | `src/renderer/components/AgentiveWriting.tsx` | Write tab — speak a request, Claude writes it |
+| `src/renderer/components/VoiceHistory.tsx` | Dictation history — playback, expand, reprocess |
+| `src/renderer/hooks/usePostProcessing.ts` | Claude transcript cleanup hook |
+| `src/renderer/hooks/useDeepgram.ts` | Deepgram streaming hook |
+| `src/renderer/hooks/useAgentiveWriting.ts` | Claude writing generation hook |
+| `src/renderer/hooks/useUpdater.ts` | Auto-updater hook |
 | `src/renderer/ThemeContext.tsx` | Theme provider — applies CSS variables, syncs across windows |
 | `src/renderer/themes.ts` | 6 theme definitions (MCRN, Mars, Belter, Earth, Protomolecule, Laconia) |
 | `docs/STATUS_AND_ROADMAP.md` | Current status, known issues, next steps |
 | `docs/CHANGELOG.md` | Detailed fix history |
 | `docs/SETUP.md` | Backend infrastructure guide (Supabase + Netlify + Stripe) |
+| `docs/RELEASE.md` | Build, sign, release, and auto-update pipeline |
 | `.env` | Local env vars — `VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` (not committed) |
 
 ---
@@ -53,7 +62,7 @@ Owen — wheelchair user with muscular dystrophy.
 - **Renderer:** TypeScript, React 18, Vite 6, Tailwind CSS
 - **Backend:** Rust, Tauri 2
 - **Audio:** cpal (WASAPI on Windows)
-- **STT:** Deepgram nova-2 (WebSocket streaming default, batch fallback)
+- **STT:** Deepgram nova-3 (WebSocket streaming default, batch fallback)
 - **AI:** Claude Haiku (transcript cleanup) + Claude Sonnet (agentic writing), via Netlify proxy
 - **Auth:** Supabase JS SDK (email/password, session in localStorage)
 - **Billing:** Stripe (via Supabase Edge Functions)

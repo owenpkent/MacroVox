@@ -40,7 +40,7 @@ Active — Tauri 2 production app. Stripe billing, free trial, auto-updater depl
 ## Quick Start
 
 ```powershell
-git clone https://github.com/owenpkent/MacroVox.git
+git clone https://github.com/okstudio1/MacroVox.git
 cd MacroVox
 python run.py
 ```
@@ -94,28 +94,38 @@ MacroVox/
 │   ├── tauri.conf.json           # App config — windows, devUrl, frontendDist
 │   ├── capabilities/default.json # IPC permissions for all windows
 │   └── src/
+│       ├── main.rs               # Entry point — calls lib::run()
 │       ├── lib.rs                # App setup, tray, global shortcut, close handler
 │       ├── commands.rs           # All IPC commands (audio, Deepgram, clipboard, windows)
 │       ├── state.rs              # Shared AppState (Mutex-wrapped)
+│       ├── audio.rs              # cpal WASAPI native audio capture
 │       ├── deepgram_ws.rs        # Deepgram WebSocket streaming
-│       └── voice_buffer.rs       # Dictation history (OGG Opus buffer + manifest)
+│       ├── voice_buffer.rs       # Dictation history (OGG Opus buffer + manifest)
+│       └── platform.rs           # Platform detection (OS, Wayland)
 ├── src/renderer/                 # React UI (Vite + Tailwind)
 │   ├── dictation.html/tsx        # Main dictation window entry
 │   ├── settings.html/tsx         # Settings window entry
 │   ├── index.css                 # Tailwind + CSS custom properties (theme vars)
+│   ├── config.ts                 # App configuration constants
 │   ├── themes.ts                 # 6 theme definitions
 │   ├── ThemeContext.tsx          # Theme provider — applies CSS vars, syncs windows
 │   ├── components/
 │   │   ├── DictationMode.tsx     # Main dictation UI (Dictate + Write tabs)
 │   │   ├── AgentiveWriting.tsx   # Write tab — speak → Claude generates
+│   │   ├── VoiceHistory.tsx      # Dictation history — playback, expand, reprocess
 │   │   └── SettingsPanel.tsx     # Settings window UI
 │   ├── hooks/
 │   │   ├── usePostProcessing.ts  # Claude transcript cleanup hook
-│   │   └── useAgentiveWriting.ts # Claude writing generation hook
-│   └── lib/
-│       ├── tauri-ipc.ts          # Typed invoke() / listen() wrappers
-│       ├── auth.ts               # Supabase JS SDK auth functions
-│       └── supabase.ts           # Supabase client singleton
+│   │   ├── useAgentiveWriting.ts # Claude writing generation hook
+│   │   ├── useDeepgram.ts        # Deepgram streaming hook
+│   │   └── useUpdater.ts         # Auto-updater hook
+│   ├── lib/
+│   │   ├── tauri-ipc.ts          # Typed invoke() / listen() wrappers
+│   │   ├── auth.ts               # Supabase JS SDK auth functions
+│   │   └── supabase.ts           # Supabase client singleton
+│   └── types/                    # Shared TypeScript type definitions
+├── netlify/functions/            # Netlify serverless (claude-proxy, deepgram-proxy)
+├── supabase/functions/           # Supabase Edge Functions (checkout, billing, webhook)
 ├── docs/                         # Documentation
 ├── vite.config.ts                # Vite + Vitest config
 └── package.json
@@ -128,9 +138,10 @@ MacroVox/
 ```
 ┌──────────────────────────────────────────────────┐
 │                   Rust / Tauri 2                  │
-│  lib.rs       — app lifecycle, tray, hotkey       │
-│  commands.rs  — audio, Deepgram, clipboard, paste │
-│  state.rs     — AppState (audio buffer, settings) │
+│  lib.rs       — app lifecycle, tray, hotkey        │
+│  commands.rs  — audio, Deepgram, clipboard, paste  │
+│  audio.rs     — cpal WASAPI capture, WAV encoder   │
+│  state.rs     — AppState (audio buffer, settings)  │
 └───────────────────┬──────────────────────────────┘
                     │  invoke() / emit()
 ┌───────────────────▼──────────────────────────────┐

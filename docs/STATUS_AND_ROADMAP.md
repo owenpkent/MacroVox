@@ -1,7 +1,7 @@
 # MacroVox — Status & Roadmap
 
-**Last Updated**: April 14, 2026 — Launch readiness hardening + Writing tab deferred  
-**Repository**: https://github.com/owenpkent/MacroVox
+**Last Updated**: April 25, 2026  
+**Repository**: https://github.com/okstudio1/MacroVox
 
 ---
 
@@ -163,8 +163,8 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 - [ ] **Usage limits** — enforce Pro tier quotas
 
 ### Medium-term
-- [ ] **Multi-provider STT** — selectable dictation provider (Deepgram, OpenAI Whisper, ElevenLabs Scribe) — see [provider-selection-design.md](provider-selection-design.md)
-- [x] **Voice memo buffer** — rolling WAV buffer with playback and manifest (v1 uses WAV, Opus compression planned) — see [voice-memo-buffer-design.md](voice-memo-buffer-design.md)
+- [ ] **Multi-provider STT** — selectable dictation provider (Deepgram, OpenAI Whisper, ElevenLabs Scribe)
+- [x] **Voice memo buffer** — rolling OGG Opus buffer with playback, reprocessing, and manifest
 - [ ] **Agentic Writing tab** — speak a request, Claude generates the content (deferred from v1 launch)
 - [ ] **macOS support** — cpal audio capture on macOS
 - [x] **Linux support (beta)** — ALSA/PulseAudio capture via cpal, `.deb` / `.rpm` / AppImage bundles, ALSA device-list filter, persisted mic pick. Remaining: full Wayland parity (auto-paste + global hotkey), signed `.deb`, Linux keys in updater manifest.
@@ -220,10 +220,13 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 | [SETUP.md](SETUP.md) | Backend setup guide (Supabase + Netlify + Stripe) |
 | [STATUS_AND_ROADMAP.md](STATUS_AND_ROADMAP.md) | This document — status and roadmap |
 | [CHANGELOG.md](CHANGELOG.md) | Detailed release history |
-| [provider-selection-design.md](provider-selection-design.md) | Design doc for multi-provider STT selection |
-| [stt-provider-evaluation.md](stt-provider-evaluation.md) | STT provider evaluation notes |
-| [voice-memo-buffer-design.md](voice-memo-buffer-design.md) | Design doc for voice memo buffer + model training |
-| [distribution-flow.md](distribution-flow.md) | Build, sign, release, and auto-update pipeline |
+| [LLM_ONBOARDING.md](LLM_ONBOARDING.md) | Quick reference for AI assistants |
+| [RELEASE.md](RELEASE.md) | Build, sign, release, and auto-update pipeline |
+| [SETTINGS_ROADMAP.md](SETTINGS_ROADMAP.md) | Settings panel feature roadmap |
+| [FREE_TRIAL_IMPLEMENTATION.md](FREE_TRIAL_IMPLEMENTATION.md) | Free trial + Stripe billing implementation |
+| [SECURITY_AUDIT_2026-04-16.md](SECURITY_AUDIT_2026-04-16.md) | Full security audit |
+| [SECURITY_AUDIT_2026-04-19.md](SECURITY_AUDIT_2026-04-19.md) | Follow-up security audit |
+| [src-tauri/ARCHITECTURE.md](../src-tauri/ARCHITECTURE.md) | Tauri/Rust backend architecture |
 
 ---
 
@@ -234,29 +237,37 @@ MacroVox/
 ├── docs/                    # Documentation
 │   ├── SETUP.md             # Backend setup guide
 │   ├── STATUS_AND_ROADMAP.md # Status & roadmap
-│   └── CHANGELOG.md         # Release history
+│   ├── CHANGELOG.md         # Release history
+│   ├── LLM_ONBOARDING.md   # AI assistant quick reference
+│   └── RELEASE.md           # Build + release pipeline
 ├── src-tauri/               # Tauri 2 Rust backend
 │   ├── src/
+│   │   ├── main.rs          # Entry point — calls lib::run()
 │   │   ├── lib.rs           # App setup, global shortcut, window events
 │   │   ├── commands.rs      # IPC commands (audio, recording, clipboard, paste)
 │   │   ├── audio.rs         # cpal WASAPI native audio capture
 │   │   ├── deepgram_ws.rs   # Deepgram WebSocket streaming
-│   │   ├── voice_buffer.rs  # Voice memo rolling buffer (WAV storage + manifest)
+│   │   ├── voice_buffer.rs  # Dictation history (OGG Opus buffer + manifest)
+│   │   ├── platform.rs      # Platform detection (OS, Wayland)
 │   │   └── state.rs         # Shared app state (Mutex-wrapped)
 │   ├── capabilities/        # Tauri 2 permission capabilities
 │   ├── Cargo.toml
 │   └── tauri.conf.json      # Tauri config (windows, build, plugins)
 ├── src/
 │   └── renderer/            # React UI (Vite + Tailwind)
-│       ├── components/      # DictationMode, SettingsPanel
-│       ├── hooks/           # usePostProcessing
+│       ├── components/      # DictationMode, SettingsPanel, AgentiveWriting, VoiceHistory
+│       ├── hooks/           # usePostProcessing, useDeepgram, useAgentiveWriting, useUpdater
 │       ├── lib/             # tauri-ipc, auth (Supabase JS), supabase client
+│       ├── types/           # Shared TypeScript type definitions
+│       ├── config.ts        # App configuration constants
 │       ├── themes.ts        # 6 themed color schemes
 │       ├── ThemeContext.tsx  # Theme provider + CSS variable injection
 │       ├── dictation.html   # Dictation window entry point
 │       ├── dictation.tsx    # Dictation window React root
 │       ├── settings.html    # Settings window entry point
 │       └── settings.tsx     # Settings window React root
+├── netlify/functions/       # Netlify serverless (claude-proxy, deepgram-proxy)
+├── supabase/functions/      # Supabase Edge Functions (checkout, billing, webhook)
 ├── package.json
 ├── vite.config.ts           # Vite config (multi-page: dictation + settings)
 └── run.py                   # Dev launcher (python run.py)

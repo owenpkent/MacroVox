@@ -36,8 +36,10 @@ src-tauri/
     ├── main.rs         # Entry point — calls lib::run()
     ├── lib.rs          # Builder: register plugins, state, command handlers
     ├── state.rs        # AppState (Mutex-wrapped fields shared across commands)
-    ├── audio.rs        # Phase 3/4: cpal stream, WAV encoder, PCM→WS streaming
-    ├── deepgram_ws.rs  # Phase 4: Deepgram WebSocket session + event emitter
+    ├── audio.rs        # cpal stream, WAV encoder, PCM→WS streaming
+    ├── deepgram_ws.rs  # Deepgram WebSocket session + event emitter
+    ├── voice_buffer.rs # Dictation history — OGG Opus buffer, manifest, eviction
+    ├── platform.rs     # Platform detection (OS, Wayland)
     └── commands.rs     # IPC command implementations + unit tests
 ```
 
@@ -119,8 +121,23 @@ toggle with an inline explanation when `is_wayland` is true.
 |---|---|---|
 | `theme_broadcast(theme_id)` | `broadcastThemeChange(id)` | `OkResponse` |
 | `settings_broadcast(settings)` | `broadcastSettings(map)` | `OkResponse` |
+| `update_global_hotkey(shortcut)` | `updateGlobalHotkey(s)` | `OkResponse` |
 
 Push events: `"theme-changed"` (string), `"settings-changed"` (object)
+
+### Voice buffer (dictation history)
+
+| Command | JS equivalent | Returns |
+|---|---|---|
+| `voice_buffer_list` | `voiceBufferList()` | List of buffer entries |
+| `voice_buffer_info` | `voiceBufferInfo()` | Buffer stats (count, size) |
+| `voice_buffer_get_audio(id)` | `voiceBufferGetAudio(id)` | OGG Opus audio bytes |
+| `voice_buffer_delete(id)` | `voiceBufferDelete(id)` | `OkResponse` |
+| `voice_buffer_clear` | `voiceBufferClear()` | `OkResponse` |
+| `voice_buffer_save(...)` | `voiceBufferSave(...)` | `OkResponse` |
+| `voice_buffer_update_transcript(id, text)` | `voiceBufferUpdateTranscript(...)` | `OkResponse` |
+| `voice_buffer_reprocess(id, api_key)` | `voiceBufferReprocess(...)` | Reprocessed transcript |
+| `voice_buffer_open_folder` | `voiceBufferOpenFolder()` | `OkResponse` |
 
 ### Auth (Phase 6 — removed; renderer calls Supabase JS SDK directly)
 
@@ -311,7 +328,7 @@ VITE_SUPABASE_KEY=<publishable-key>
 | **4** | **Complete** | Deepgram WebSocket pre-warm + `whisper-rs` local STT (`local-stt` feature) |
 | **5** | **Complete** | `enigo` native paste (replace PowerShell ~700 ms) |
 | **6** | **Complete** | Supabase JS SDK from renderer; remove auth IPC stubs |
-| **7** | Not started | Tauri bundler, code signing, remove electron-builder |
+| **7** | **Complete** | Tauri bundler (NSIS), EV code signing, auto-updater, Stripe billing |
 
 ---
 
@@ -360,7 +377,7 @@ CSP pins to specific subdomains — no wildcards. `wasm-unsafe-eval` removed (no
 | Payload size limit | 512 KB | 25 MB |
 | Rate limiting | 200 calls/user/hour | 300 calls/user/hour |
 | user_id validation | Must match JWT `user.id` | N/A |
-| Model whitelist | Haiku, Sonnet, Opus | nova-2, nova, enhanced, base |
+| Model whitelist | Haiku, Sonnet, Opus | nova-3, nova-2, nova, enhanced, base |
 | Token limit | max 4096 | N/A |
 | System prompt length | max 10,000 chars | N/A |
 | Message validation | role + content type checks | N/A |
