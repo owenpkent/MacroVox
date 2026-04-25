@@ -1,5 +1,18 @@
 # MacroVox Changelog
 
+## Unreleased — Dependabot patches
+
+### Security
+- **`openssl` 0.10.76 → 0.10.78** — patches 4 advisories: PSK/cookie trampolines leaking adjacent memory (high), `MdCtxRef::digest_final` writing past caller buffer (high), incorrect bounds assertion in AES key wrap (high), and oversized PEM password-callback length (low). All are transitive via `native-tls` (used by `reqwest` for Deepgram REST and `tokio-tungstenite` for Deepgram streaming).
+- **`rustls-webpki` 0.103.12 → 0.103.13** — patches a high-severity DoS via panic on a malformed CRL `BIT STRING`. Transitive via `rustls` in the platform-verifier path.
+- **`rand` 0.8.5 → 0.8.6** — patches a low-severity unsoundness with custom loggers using `rand::rng()`.
+
+Two upstream-pinned advisories remain open and are not patchable from our `Cargo.toml`:
+- **`glib` 0.18.5** (medium, unsoundness in `VariantStrIter`) — pulled in by `gtk` 0.18 via Tauri 2.10's GTK stack. Linux-only build path; we don't construct `VariantStrIter` ourselves. Will clear when Tauri upgrades to gtk-rs 0.20+.
+- **`rand` 0.7.3** (low) — build-only dep of `phf_codegen` via `tauri-utils`; never compiled into the runtime binary, so the runtime advisory does not apply.
+
+---
+
 ## Unreleased — Voice buffer playback fix
 
 ### Bug Fixes
