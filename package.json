@@ -1,6 +1,6 @@
 {
   "name": "macrovox",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "MacroVox — Real-time voice dictation with AI cleanup",
   "main": "dist/main/main.js",
   "author": "OK Studio",
