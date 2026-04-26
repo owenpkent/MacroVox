@@ -26,6 +26,7 @@
 - **`openssl` 0.10.76 → 0.10.78** — patches 4 advisories: PSK/cookie trampolines leaking adjacent memory (high), `MdCtxRef::digest_final` writing past caller buffer (high), incorrect bounds assertion in AES key wrap (high), and oversized PEM password-callback length (low). All are transitive via `native-tls` (used by `reqwest` for Deepgram REST and `tokio-tungstenite` for Deepgram streaming).
 - **`rustls-webpki` 0.103.12 → 0.103.13** — patches a high-severity DoS via panic on a malformed CRL `BIT STRING`. Transitive via `rustls` in the platform-verifier path.
 - **`rand` 0.8.5 → 0.8.6** — patches a low-severity unsoundness with custom loggers using `rand::rng()`.
+- **`postcss` 8.5.8 → 8.5.12** — patches a medium-severity XSS via unescaped `</style>` in PostCSS's CSS stringify output (GHSA-qx2v-qp2m-jg93). devDependency only (Tailwind/autoprefixer build chain), never reaches the runtime bundle, but the gap was open in `package-lock.json`.
 
 Two upstream-pinned advisories remain open and are not patchable from our `Cargo.toml`:
 - **`glib` 0.18.5** (medium, unsoundness in `VariantStrIter`) — pulled in by `gtk` 0.18 via Tauri 2.10's GTK stack. Linux-only build path; we don't construct `VariantStrIter` ourselves. Will clear when Tauri upgrades to gtk-rs 0.20+.
