@@ -88,3 +88,9 @@ pass was required.
   generator will emit empty `signature` strings, and auto-update on both
   Windows and Linux is effectively disabled. This was already called out
   in the 2026-04-16 audit (§ C1) and remains an owner-action item.
+
+  **Resolved 2026-04-26:** keypair generated, public key (ID `9B91F23A49E0246D`)
+  wired into `tauri.conf.json`, `bundle.createUpdaterArtifacts: true` set,
+  EV signing wrapper at `scripts/sign-windows.ps1` integrated. `tauri build`
+  now emits valid `.sig` sidecars; smoke-test bundle for v1.0.6 verifies
+  end-to-end against the new pubkey. See CHANGELOG entry "Release pipeline + EV signing".

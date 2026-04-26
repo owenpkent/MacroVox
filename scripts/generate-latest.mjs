@@ -9,15 +9,20 @@
 // file is still valid JSON — the caller can fill it in or re-build with
 // signing enabled.
 //
-// Linux updater artifact is the `*.AppImage.tar.gz` (Tauri updater does not
-// currently auto-install `.deb`/`.rpm`). Windows updater artifact is the
-// NSIS `*-setup.nsis.zip` or MSI `*-setup.msi.zip`.
+// Tauri 2 updater artifacts:
+//   Windows — the NSIS `*-setup.exe` or MSI `*.msi` directly, with a
+//             `.sig` sidecar. (v1 produced an intermediate `*-setup.nsis.zip`;
+//             v2 does not.)
+//   Linux   — `*.AppImage` directly, with a `.sig` sidecar. (Tauri updater
+//             does not currently auto-install `.deb`/`.rpm`.) Older Tauri
+//             versions produced `*.AppImage.tar.gz`; we fall back to that
+//             pattern if no plain `.AppImage` is present.
 //
 // Usage:
 //   node scripts/generate-latest.mjs \
 //     --version 1.0.7 \
 //     --notes "Release notes" \
-//     --base-url https://github.com/owenpkent/MacroVox/releases/download/v1.0.7
+//     --base-url https://github.com/okstudio1/macrovox-releases/releases/download/v1.0.7
 // Writes `release/latest.json`.
 
 import { readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs'
@@ -40,7 +45,7 @@ const version = args.version || conf.version
 const notes = args.notes || `MacroVox ${version}`
 const baseUrl =
   args['base-url'] ||
-  `https://github.com/owenpkent/MacroVox/releases/download/v${version}`
+  `https://github.com/okstudio1/macrovox-releases/releases/download/v${version}`
 
 /** Return first file in `dir` matching `rx`, or null. */
 function findFirst(dir, rx) {
@@ -59,9 +64,14 @@ const winDir = join(repoRoot, 'release', 'windows')
 const linuxDir = join(repoRoot, 'release', 'linux')
 
 const winArtifact =
+  findFirst(winDir, /-setup\.exe$/) ||
+  findFirst(winDir, /\.msi$/) ||
+  // v1 fallback — Tauri 2 doesn't produce these, kept for safety.
   findFirst(winDir, /-setup\.nsis\.zip$/) ||
   findFirst(winDir, /-setup\.msi\.zip$/)
-const linuxArtifact = findFirst(linuxDir, /\.AppImage\.tar\.gz$/)
+const linuxArtifact =
+  findFirst(linuxDir, /\.AppImage$/) ||
+  findFirst(linuxDir, /\.AppImage\.tar\.gz$/)
 
 const platforms = {}
 if (winArtifact) {
@@ -80,8 +90,8 @@ if (linuxArtifact) {
 if (Object.keys(platforms).length === 0) {
   console.error(
     'No updater artifacts found. Expected:\n' +
-      `  ${winDir}/*-setup.nsis.zip  (or .msi.zip)\n` +
-      `  ${linuxDir}/*.AppImage.tar.gz`
+      `  ${winDir}/*-setup.exe  (or *.msi)\n` +
+      `  ${linuxDir}/*.AppImage`
   )
   process.exit(1)
 }

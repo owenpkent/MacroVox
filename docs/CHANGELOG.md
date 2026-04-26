@@ -1,5 +1,25 @@
 # MacroVox Changelog
 
+## Unreleased — Release pipeline + EV signing
+
+### New Features
+- **Updater signing keypair wired in** — minisign keypair generated at `~/.tauri/macrovox.key{,.pub}` (key ID `9B91F23A49E0246D`) and the public key baked into `tauri.conf.json → plugins.updater.pubkey`. Builds with `TAURI_SIGNING_PRIVATE_KEY[_PASSWORD]` env vars set now emit `.exe.sig` / `.msi.sig` / `.AppImage.sig` minisign sidecars that auto-update verifies.
+- **`bundle.createUpdaterArtifacts: true`** — explicit in `tauri.conf.json` so missing signing env vars fail the build loudly rather than silently skipping the updater artifacts.
+- **EV Authenticode signing wrapper** — `scripts/sign-windows.ps1` invoked via `bundle.windows.signCommand`. Uses the OK Studio Inc. EV cert (SHA1 `fc22b522...`) on the SafeNet eToken, retries up to 5× with linear backoff to handle Windows Defender file locks (mirrors `alpha-osk/build/windows/sign.py`), and skips vendor DLLs (Wix UI/Util extensions, NSIS plugins) so only `.exe` / `.msi` get OK Studio's signature. Order is correct end-to-end: bundler EV-signs → minisign computes its sig over the EV-signed bytes.
+- **Tag-triggered release workflow** — new `.github/workflows/release.yml` builds the Linux bundle on `ubuntu-22.04` with the minisign signing key injected from GitHub repo secrets, then opens a draft GitHub release for Owen to attach the locally EV-signed Windows artifacts to before publishing. Windows is not built in CI because the EV cert is on a hardware token (and split-host signing would invalidate either Authenticode or minisign).
+
+### Bug Fixes
+- **Updater scripts use Tauri 2 artifact basenames** — `scripts/generate-latest.mjs` and `npm run release:windows` / `release:linux` now look for `*-setup.exe` / `*.msi` / `*.AppImage` (with their `.sig` sidecars) instead of the v1 `*-setup.nsis.zip` / `*.AppImage.tar.gz` patterns Tauri 2 no longer emits.
+
+### Docs
+- **`docs/LAUNCH_PLAN.md`** — go-to-market plan for v1.0.7; Phase 1 keypair + workflow tasks now ticked.
+- **`docs/RELEASE.md` + `docs/RELEASE_CHECKLIST.md`** — rewritten Windows/Linux split (Windows local, Linux CI), new env-var contract, signing-wrapper notes, EV-cert verification step.
+
+### Security
+- **`.gitignore`** — added `*.key`, `*.key.pub`, `.tauri/` patterns as defense-in-depth so a stray copy of the signing key inside the repo tree can't accidentally be committed (the real key lives at `~/.tauri/macrovox.key`, outside the repo).
+
+---
+
 ## Unreleased — Dependabot patches
 
 ### Security
@@ -26,7 +46,7 @@ Two upstream-pinned advisories remain open and are not patchable from our `Cargo
 ### New Features
 - **Linux bundle metadata** — `bundle.linux` block in `tauri.conf.json` now sets `.deb` section/priority/depends (`libwebkit2gtk-4.1-0`, `libgtk-3-0`, `libasound2`, `libpulse0`) and `recommends` (`libayatana-appindicator3-1`), `.rpm` depends (`webkit2gtk4.1`, `gtk3`, `alsa-lib`, `pulseaudio-libs`), a shared desktop-file Handlebars template at `installer/linux/macrovox.desktop`, and app-wide `category`/`shortDescription`/`longDescription`/`copyright` that feed every bundle target.
 - **Wayland detection + UI guard** — new `platform_info` IPC command and `platform::is_wayland` helper. On Wayland, `dictation_auto_paste` short-circuits (clipboard still succeeds so users can paste manually) and the Settings → Quick Dictation panel renders the "Auto-paste on stop" toggle disabled with an inline explanation. Both X11 sessions and Windows keep the previous behavior untouched.
-- **Updater manifest generator** — `scripts/generate-latest.mjs` (wired as `npm run release:manifest`) scans `release/windows/` and `release/linux/` for `-setup.nsis.zip` / `*.AppImage.tar.gz` updater artifacts, reads their `.sig` sidecars, and emits a `latest.json` with both `windows-x86_64` and `linux-x86_64` platform keys. `release:linux`/`release:windows` npm scripts now also copy the updater artifacts and `.sig` files into `release/`.
+- **Updater manifest generator** — `scripts/generate-latest.mjs` (wired as `npm run release:manifest`) scans `release/windows/` and `release/linux/` for `*-setup.exe` / `*.msi` / `*.AppImage` updater artifacts, reads their `.sig` sidecars, and emits a `latest.json` with both `windows-x86_64` and `linux-x86_64` platform keys. `release:linux`/`release:windows` npm scripts now also copy the updater artifacts and `.sig` files into `release/`.
 - **Release documentation** — new `docs/RELEASE.md` covers version bump, per-platform bundle build, `latest.json` generation, updater-artifact requirements, and known Wayland limits. Linked from README.
 
 ### Bug Fixes
@@ -40,7 +60,7 @@ Two upstream-pinned advisories remain open and are not patchable from our `Cargo
 - `docs/STATUS_AND_ROADMAP.md` — Linux App row moved from 🔜 Planned to 🧪 Beta; macOS split into its own row.
 
 ### Security
-- **Delta audit, 2026-04-19** — focused review of all code changes in this batch via the `/security-review` workflow. No vulnerabilities introduced (0 Critical / 0 High / 0 Medium / 0 Low). Details: [SECURITY_AUDIT_2026-04-19.md](SECURITY_AUDIT_2026-04-19.md). The pre-existing empty `plugins.updater.pubkey` remains an owner-action item from the prior audit.
+- **Delta audit, 2026-04-19** — focused review of all code changes in this batch via the `/security-review` workflow. No vulnerabilities introduced (0 Critical / 0 High / 0 Medium / 0 Low). Details: [SECURITY_AUDIT_2026-04-19.md](SECURITY_AUDIT_2026-04-19.md).
 
 ---
 

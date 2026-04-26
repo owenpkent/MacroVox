@@ -43,14 +43,15 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/okstudio1/MacroVox/releases/latest/download/latest.json"
+        "https://github.com/okstudio1/macrovox-releases/releases/latest/download/latest.json"
       ],
-      "pubkey": ""
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlCOTFGMjNBNDlFMDI0NkQKUldSdEpPQkpPdktSbXljcjZCcEp1ZUFOOXdkWkVrbEdPY3Y0L1FPWExrU1N0bURxWjQ4bTRNbVgK"
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "category": "Utility",
     "shortDescription": "Real-time voice dictation with AI cleanup",
     "longDescription": "MacroVox is a managed voice dictation app powered by Deepgram and Claude. Speak into your microphone and get instantly cleaned-up text in any application.",
@@ -64,6 +65,7 @@
     ],
     "resources": [],
     "windows": {
+      "signCommand": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ../scripts/sign-windows.ps1 -Path %1",
       "nsis": {
         "headerImage": "installer/windows/installer-header.bmp",
         "sidebarImage": "installer/windows/installer-sidebar.bmp",

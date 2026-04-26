@@ -21,6 +21,13 @@ sox-*/
 *.pfx
 *.cert
 
+# Tauri updater signing keys — must NEVER be committed.
+# Real key lives at ~/.tauri/macrovox.key; this is belt-and-suspenders
+# in case a copy ever lands inside the repo tree.
+*.key
+*.key.pub
+.tauri/
+
 # Legacy build artifacts (PyInstaller v0.1, Electron builder)
 build/
 *.pyc

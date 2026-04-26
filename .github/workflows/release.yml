@@ -1,0 +1,121 @@
+name: Release
+
+# Tag-triggered release builder.
+#
+# Trigger: push a tag matching v*.*.* (e.g. v1.0.7). The workflow builds
+# the Linux bundle, generates the updater manifest with the Linux entry,
+# and opens a DRAFT GitHub release. Owen attaches the locally-built
+# Windows artifacts to the same draft, regenerates latest.json with both
+# platforms locally, and publishes manually after walking
+# docs/RELEASE_CHECKLIST.md.
+#
+# Why no Windows job: the EV Authenticode cert lives on a hardware token
+# on Owen's local machine and the correct order is build → EV-sign →
+# minisign. Splitting that across CI + local would either lose the EV
+# signature or invalidate the minisign signature. Windows is therefore
+# always built locally; CI handles only Linux.
+#
+# Updater signing: the .sig sidecars are produced here using the minisign
+# key stored as TAURI_SIGNING_PRIVATE_KEY repo secret — same key as the
+# local Windows build, so all platforms verify against the same pubkey
+# baked into tauri.conf.json.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libgtk-3-dev
+
+      - run: npm ci
+
+      - name: tauri build (signed)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build
+
+      - name: Stage release/linux
+        run: npm run release:linux
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-bundle
+          path: release/linux/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish draft release
+    needs: [build-linux]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-bundle
+          path: release/linux
+
+      - name: Resolve version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate latest.json (Linux only — Owen regenerates locally with Windows)
+        run: |
+          node scripts/generate-latest.mjs \
+            --version "${{ steps.version.outputs.version }}" \
+            --notes "MacroVox ${{ steps.version.outputs.version }} — see CHANGELOG.md"
+
+      - name: Create draft GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: MacroVox ${{ steps.version.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            release/linux/*
+            release/latest.json

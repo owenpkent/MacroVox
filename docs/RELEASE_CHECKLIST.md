@@ -37,11 +37,20 @@ required only if shipping a Linux release this cycle (skip otherwise and note
 
 ## 3. Windows build verification (required)
 
+Windows is built **locally** on the EV-cert host, not in CI. CI's `windows-latest`
+runner has no EV hardware token, and the correct ordering is `build → EV-sign → minisign`
+— if EV-signing happens after the minisign `.sig` is generated, the `.exe` bytes
+change and the published `.sig` no longer matches, breaking auto-update. Tauri
+solves this via `bundle.windows.signCommand` in `tauri.conf.json` which has to
+run on a host with the token plugged in.
+
 On the EV-cert Windows host:
 
-- [ ] `npx tauri build` produces `.exe`, `.msi`, and the matching `*-setup.nsis.zip` / `*-setup.msi.zip` updater artifacts in `src-tauri/target/release/bundle/{nsis,msi}/`
-- [ ] `npm run release:windows` copies all of the above into `release/windows/`, including the `.sig` sidecar files
+- [ ] `bundle.windows.signCommand` in `tauri.conf.json` invokes `scripts/sign-windows.ps1` (the wrapper that filters out vendor DLLs and retries on Defender file locks)
+- [ ] `signtool.exe` is on `PATH` for the build shell — typically `C:\Program Files (x86)\Windows Kits\10\bin\<latest>\x64`. Verify with `Get-Command signtool.exe`.
+- [ ] `npx tauri build` produces `.exe`, `.msi`, and matching `.exe.sig` / `.msi.sig` minisign sidecars in `src-tauri/target/release/bundle/{nsis,msi}/`. The `.sig` is computed over the **EV-signed** bytes — order is enforced by Tauri's bundler when `signCommand` is configured. Sidecars only appear when `TAURI_SIGNING_PRIVATE_KEY[_PASSWORD]` env vars are set; if missing, the build fails because `bundle.createUpdaterArtifacts` is `true`.
 - [ ] EV signature on the installer: right-click `.exe` → Properties → Digital Signatures shows "OK Studio" (or run `signtool verify /pa /v <path>`)
+- [ ] `npm run release:windows` copies all of the above into `release/windows/`
 - [ ] **Clean-VM smoke test** on a Windows 11 VM with no prior MacroVox install:
   - [ ] NSIS installer runs end-to-end without SmartScreen warnings
   - [ ] First-run sign-in (Supabase email/password) succeeds
@@ -49,7 +58,7 @@ On the EV-cert Windows host:
   - [ ] Batch transcription works (Settings → Voice Recognition → Batch mode)
   - [ ] **Voice History playback runs at real-time speed** (regression check for the OGG Opus rate fix in v1.0.7)
   - [ ] Auto-update path: install the previous published version first, point `tauri.conf.json` updater endpoint at staging or `release/latest.json` served locally, launch — verify the in-app updater detects the new version, downloads, and relaunches
-- [ ] `release/latest.json` `signature` for `windows-x86_64` matches the contents of `*-setup.nsis.zip.sig` and the `pub_date` is the current UTC time
+- [ ] `release/latest.json` `signature` for `windows-x86_64` matches the contents of `*-setup.exe.sig` and the `pub_date` is the current UTC time
 
 ---
 
@@ -57,14 +66,14 @@ On the EV-cert Windows host:
 
 On a Debian/Ubuntu host (and a Fedora host if shipping `.rpm`):
 
-- [ ] `npx tauri build && npm run release:linux` produces `.deb`, `.rpm`, AppImage, and `*.AppImage.tar.gz` + `.sig` in `release/linux/`
+- [ ] `npx tauri build && npm run release:linux` produces `.deb`, `.rpm`, the `.AppImage`, and the matching `.AppImage.sig` in `release/linux/`
 - [ ] `.deb` installs on a clean Ubuntu 22.04 VM (`sudo dpkg -i` or `apt install ./...`); `apt` resolves `libwebkit2gtk-4.1-0`, `libgtk-3-0`, `libasound2`, `libpulse0` without errors
 - [ ] `.rpm` installs on a clean Fedora VM if shipping `.rpm`
 - [ ] AppImage runs from a stock distro (no `--appimage-extract-and-run` workarounds)
 - [ ] Smoke test on **X11** session: dictation flow, auto-paste, voice history playback all work
 - [ ] Smoke test on **Wayland** session: clipboard copy succeeds, the Settings → Auto-paste toggle is rendered disabled with the inline explanation, global hotkey behaves per compositor's portal
 - [ ] Mic picker shows real devices only (no `hw:`, `plughw:`, `dmix:`, `surround*:` entries)
-- [ ] `release/latest.json` includes `linux-x86_64` with signature from `*.AppImage.tar.gz.sig`
+- [ ] `release/latest.json` includes `linux-x86_64` with signature from `*.AppImage.sig`
 
 ---
 
@@ -85,7 +94,7 @@ Run only after every required item above is ticked:
 - [ ] `git tag v1.0.X && git push --tags`
 - [ ] Create the GitHub release on the tag, attach **all** files in `release/windows/`, `release/linux/` (if shipping), and `release/latest.json`
 - [ ] Publish the release
-- [ ] `curl -I https://github.com/owenpkent/MacroVox/releases/latest/download/latest.json` returns `200` (the URL Tauri's updater hits)
+- [ ] `curl -I https://github.com/okstudio1/macrovox-releases/releases/latest/download/latest.json` returns `200` (the URL Tauri's updater hits)
 - [ ] One existing-install machine (your own) auto-updates on relaunch and lands on the new version
 
 ---

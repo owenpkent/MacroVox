@@ -141,6 +141,33 @@ npm run test:rust    # cargo test
 
 ---
 
+## Release builds
+
+Production builds need two env vars set so Tauri's bundler can produce
+the minisign `.sig` sidecars that the auto-updater verifies (`.exe.sig`
+and `.msi.sig` on Windows; `.AppImage.sig` on Linux):
+
+```powershell
+$env:TAURI_SIGNING_PRIVATE_KEY = "$env:USERPROFILE\.tauri\macrovox.key"
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = '<password>'
+npx tauri build
+```
+
+`bundle.createUpdaterArtifacts: true` in `tauri.conf.json` makes the
+build fail loudly if the env vars are missing, so a forgotten secret
+can't silently ship an unsigned bundle.
+
+Windows additionally EV-Authenticode-signs `.exe` and `.msi` via the
+wrapper at `scripts/sign-windows.ps1` (filters vendor DLLs, retries on
+Defender locks). The EV cert lives on a SafeNet eToken plugged into
+Owen's local machine — Windows builds never run in CI. The Linux build
+runs in CI via `.github/workflows/release.yml` on tag push (`v*.*.*`).
+
+Full mechanics in [RELEASE.md](RELEASE.md); preflight gate in
+[RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
+
+---
+
 ## Constellation
 
 This repo is tracked by [Constellation](https://github.com/owenpkent/constellation).
