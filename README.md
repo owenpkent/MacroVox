@@ -82,6 +82,7 @@ MacroVox builds `.deb`, `.rpm`, and AppImage bundles on Linux. Install the bundl
 - **[Setup Guide](docs/SETUP.md)** — Backend infrastructure (Supabase + Netlify + Stripe)
 - **[Release Process](docs/RELEASE.md)** — How to cut a release, build bundles, and generate `latest.json`
 - **[Release Checklist](docs/RELEASE_CHECKLIST.md)** — Preflight gates (tests, smoke tests, signing) before tagging
+- **[Marketing Strategy](docs/MARKETING.md)** — Positioning, pricing, launch playbook, SEO content plan, demo video specs
 - **[Changelog](docs/CHANGELOG.md)** — Release history
 
 ---
