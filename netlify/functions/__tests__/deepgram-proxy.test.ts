@@ -66,7 +66,7 @@ function mockProUser() {
             }),
           }),
         }),
-        insert: vi.fn().mockReturnValue({ then: (cb: () => void) => cb() }),
+        insert: vi.fn().mockResolvedValue(undefined),
       }
     }
     return {}

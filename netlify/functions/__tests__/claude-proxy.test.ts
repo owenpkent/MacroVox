@@ -83,7 +83,7 @@ function mockProUser() {
             }),
           }),
         }),
-        insert: vi.fn().mockReturnValue({ then: (cb: () => void) => cb() }),
+        insert: vi.fn().mockResolvedValue(undefined),
       }
     }
     return {}
@@ -220,7 +220,7 @@ describe('claude-proxy', () => {
               }),
             }),
           }),
-          insert: vi.fn().mockReturnValue({ then: (cb: () => void) => cb() }),
+          insert: vi.fn().mockResolvedValue(undefined),
         }
       }
       return {}
@@ -249,22 +249,22 @@ describe('claude-proxy', () => {
     )
   })
 
-  it('falls back to default model when unknown model is requested', async () => {
+  it('rejects unknown model with 400 instead of silently substituting', async () => {
     mockProUser()
     mockMessagesCreate.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] })
 
     const body = JSON.stringify({
       user_id: 'user-123',
-      model: 'gpt-4o',  // not in allowlist
+      model: 'gpt-4o', // not in allowlist
       max_tokens: 100,
       messages: [{ role: 'user', content: 'Hi' }],
     })
 
-    await handler(makeEvent({ body }), {} as never, vi.fn())
+    const result = await handler(makeEvent({ body }), {} as never, vi.fn())
 
-    expect(mockMessagesCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'claude-sonnet-4-20250514' }),
-    )
+    expect(result.statusCode).toBe(400)
+    expect(JSON.parse(result.body!).error).toBe('Unknown model')
+    expect(mockMessagesCreate).not.toHaveBeenCalled()
   })
 
   it('returns 502 when Anthropic API throws', async () => {
