@@ -1,35 +1,35 @@
-/// MacroVox — Phase 4: Deepgram WebSocket streaming.
-///
-/// Manages a persistent `wss://api.deepgram.com` connection that streams
-/// raw PCM audio in real time and emits transcript events back to the renderer.
-///
-/// ## Flow
-///
-/// ```text
-/// deepgram_start(api_key)
-///   └── start_session(api_key, sample_rate, channels, app)
-///         ├── connect_async(wss://...) — TLS handshake happens here (pre-warm)
-///         ├── spawn background task
-///         └── return DgSender (stored in AppState::dg_sender)
-///
-/// cpal callback (per ~10 ms frame):
-///   └── if is_recording && dg_sender.is_some()
-///         └── f32_to_i16_bytes(frame) → DgSender.send(DgMessage::Pcm(bytes))
-///
-/// background task:
-///   ├── DgMessage::Pcm(bytes)  → WebSocket binary frame
-///   ├── DgMessage::Stop        → send {"type":"CloseStream"}, exit loop
-///   └── WebSocket text frame   → parse JSON → emit "deepgram:transcript" event
-///
-/// deepgram_stop()
-///   └── drop DgSender  (→ recv() returns None → task sends CloseStream and exits)
-///       OR send DgMessage::Stop explicitly
-/// ```
-///
-/// ## Emitted events
-///
-/// `"deepgram:transcript"` — payload `{ transcript: string, isFinal: boolean }`
-/// Emitted for every non-empty result (interim and final) from Deepgram.
+//! MacroVox — Phase 4: Deepgram WebSocket streaming.
+//!
+//! Manages a persistent `wss://api.deepgram.com` connection that streams
+//! raw PCM audio in real time and emits transcript events back to the renderer.
+//!
+//! ## Flow
+//!
+//! ```text
+//! deepgram_start(api_key)
+//!   └── start_session(api_key, sample_rate, channels, app)
+//!         ├── connect_async(wss://...) — TLS handshake happens here (pre-warm)
+//!         ├── spawn background task
+//!         └── return DgSender (stored in AppState::dg_sender)
+//!
+//! cpal callback (per ~10 ms frame):
+//!   └── if is_recording && dg_sender.is_some()
+//!         └── f32_to_i16_bytes(frame) → DgSender.send(DgMessage::Pcm(bytes))
+//!
+//! background task:
+//!   ├── DgMessage::Pcm(bytes)  → WebSocket binary frame
+//!   ├── DgMessage::Stop        → send {"type":"CloseStream"}, exit loop
+//!   └── WebSocket text frame   → parse JSON → emit "deepgram:transcript" event
+//!
+//! deepgram_stop()
+//!   └── drop DgSender  (→ recv() returns None → task sends CloseStream and exits)
+//!       OR send DgMessage::Stop explicitly
+//! ```
+//!
+//! ## Emitted events
+//!
+//! `"deepgram:transcript"` — payload `{ transcript: string, isFinal: boolean }`
+//! Emitted for every non-empty result (interim and final) from Deepgram.
 
 use futures_util::{SinkExt, StreamExt};
 use tauri::Emitter;

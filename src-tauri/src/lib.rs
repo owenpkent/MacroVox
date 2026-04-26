@@ -51,7 +51,7 @@ pub fn run() {
             }
 
             // Initialize voice buffer directory
-            if let Some(app_data) = app.path().app_local_data_dir().ok() {
+            if let Ok(app_data) = app.path().app_local_data_dir() {
                 let voice_dir = app_data.join("voice-buffer");
                 debug!("[setup] Voice buffer directory: {:?}", voice_dir);
                 let state = app.state::<AppState>();

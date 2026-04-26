@@ -1,10 +1,10 @@
-/// MacroVox audio utilities — Phase 3/4: cpal WASAPI native capture.
-///
-/// This module provides:
-/// - `pcm_to_wav`          — encode f32 PCM samples as RIFF/WAV bytes (for Deepgram upload)
-/// - `f32_to_i16_bytes`    — convert f32 samples to interleaved i16 LE bytes (for WS streaming)
-/// - `process_audio_frame` — cpal callback body; updates level, buffer, and streams PCM
-/// - `build_input_stream`  — open a cpal capture stream, dispatching on sample format
+//! MacroVox audio utilities — Phase 3/4: cpal WASAPI native capture.
+//!
+//! This module provides:
+//! - `pcm_to_wav`          — encode f32 PCM samples as RIFF/WAV bytes (for Deepgram upload)
+//! - `f32_to_i16_bytes`    — convert f32 samples to interleaved i16 LE bytes (for WS streaming)
+//! - `process_audio_frame` — cpal callback body; updates level, buffer, and streams PCM
+//! - `build_input_stream`  — open a cpal capture stream, dispatching on sample format
 
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::sync::atomic::{AtomicUsize, Ordering};

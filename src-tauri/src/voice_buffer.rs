@@ -1,24 +1,24 @@
-/// MacroVox — Voice memo buffer.
-///
-/// Saves dictation recordings as WAV files in a rolling buffer directory,
-/// capped at a configurable size (default 100 MB). Each recording is paired
-/// with its transcript in a JSON manifest for future playback and model
-/// training use.
-///
-/// ## Storage layout
-///
-/// ```text
-/// %LOCALAPPDATA%/com.okstudio.macrovox/voice-buffer/
-/// ├── manifest.json          ← index of all recordings
-/// ├── 2026-04-14T09-32-17.wav
-/// ├── 2026-04-14T10-15-03.wav
-/// └── ...
-/// ```
-///
-/// ## Eviction policy
-///
-/// FIFO — oldest recordings are deleted first when the buffer exceeds
-/// `max_size_bytes`. Eviction runs before each new save.
+//! MacroVox — Voice memo buffer.
+//!
+//! Saves dictation recordings as WAV files in a rolling buffer directory,
+//! capped at a configurable size (default 100 MB). Each recording is paired
+//! with its transcript in a JSON manifest for future playback and model
+//! training use.
+//!
+//! ## Storage layout
+//!
+//! ```text
+//! %LOCALAPPDATA%/com.okstudio.macrovox/voice-buffer/
+//! ├── manifest.json          ← index of all recordings
+//! ├── 2026-04-14T09-32-17.wav
+//! ├── 2026-04-14T10-15-03.wav
+//! └── ...
+//! ```
+//!
+//! ## Eviction policy
+//!
+//! FIFO — oldest recordings are deleted first when the buffer exceeds
+//! `max_size_bytes`. Eviction runs before each new save.
 
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
