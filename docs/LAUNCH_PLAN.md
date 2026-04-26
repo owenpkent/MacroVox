@@ -15,26 +15,85 @@ in the repo is annotated; everything that doesn't yet is the work.
 
 ---
 
-## Where we actually are
+## Where we actually are (updated 2026-04-26)
 
-- **App code:** v1.0.6 is feature-complete for v1 launch. CI gate
-  (`.github/workflows/ci.yml`) is green: `tsc --noEmit`, `cargo clippy
-  -D warnings`, `pyright`.
-- **Updater code:** `tauri-plugin-updater` is wired and points at
+- **App code:** v1.0.7 bumped, CHANGELOG consolidated, all gates green
+  (Vitest 20/20, `cargo test` 55/55, `tsc --noEmit` ×2, `cargo clippy
+  -D warnings`).
+- **EV signing pipeline:** working end-to-end on a single `tauri build`
+  via `scripts/sign-windows.ps1` (filters vendor DLLs, retries on
+  Defender locks). Signed v1.0.7 `.exe` + `.msi` + `.sig` sidecars
+  staged in `release/windows/`; `release/latest.json` regenerated with
+  the correct version + signature + URL. `signtool verify /pa` passes.
+- **Updater code:** `tauri-plugin-updater` is wired with a real pubkey
+  (minisign key ID `9B91F23A49E0246D`).
+  `bundle.createUpdaterArtifacts: true`, so missing signing env vars
+  fail the build loudly.
+  **Endpoint mismatch:** `tauri.conf.json` points at
   `https://github.com/okstudio1/macrovox-releases/releases/latest/download/latest.json`
-  (the public binaries-only repo). **`pubkey` is empty** — installed
-  clients would currently accept any manifest. Must be filled before
-  any auto-update is published.
+  but that repo doesn't exist — see "Open blockers" below.
+- **CI:** `.github/workflows/ci.yml` (typescript / clippy / pyright on
+  every push to `main`) green.
+  `.github/workflows/release.yml` (tag-triggered, builds Linux only
+  in CI; Windows is built locally because of the EV hardware token)
+  has not yet fired since no `v*.*.*` tag exists yet.
 - **Auth + billing code:** Supabase auth UI, Netlify proxies (Claude,
   Deepgram), and Supabase Edge Functions (`create-checkout`,
-  `billing-portal`, `stripe-webhook`) are all written.
+  `billing-portal`, `stripe-webhook`) are all written. **Untested
+  end-to-end on the live site** — see "First-account smoke test"
+  below.
 - **Marketing site (`C:\Users\Owen\dev\macrovox-web`):** Next.js on
   Netlify; landing/pricing/login/signup/dashboard pages exist;
-  `/api/download` redirects to GitHub Releases latest .exe — currently
-  404s because no release exists.
-- **Public artifact:** none. The GitHub repo
-  `okstudio1/macrovox-releases` does not exist yet — needs to be
-  created (public) before v1.0.7 ships.
+  `/api/download` redirects to GitHub Releases latest `.exe` —
+  currently 404s because no release exists. **No code changes
+  needed**, just the live-site smoke test.
+
+## Open blockers before v1.0.7 ship
+
+1. **Decide where v1.0.7 publishes.** `okstudio1/macrovox-releases` is
+   404 today, but `tauri.conf.json` points at it. Two paths:
+   - **(a) Create the releases repo** (`gh repo create
+     okstudio1/macrovox-releases --public`) and update
+     `release.yml` to publish there cross-repo (needs a PAT with
+     write access on the new repo, exposed as a workflow secret).
+   - **(b) Point the updater at the source repo.** Change
+     `plugins.updater.endpoints` in `tauri.conf.json` to
+     `https://github.com/okstudio1/MacroVox/releases/latest/download/latest.json`.
+     Source repo is already public (Dependabot is configured), so
+     this isn't a privacy regression. Simplest path; can revisit if
+     the source ever needs to go private. **Recommended for v1.0.7.**
+
+2. **Clean-VM smoke test on Windows 11** (Section 3 of
+   `RELEASE_CHECKLIST.md`). Required before tagging. Not yet done.
+
+## Remaining release steps (in order)
+
+3. Resolve blocker #1 (point updater at source repo OR create
+   `macrovox-releases`).
+4. Run blocker #2 (clean-VM smoke test).
+5. `git tag v1.0.7 && git push --tags` — CI's `release.yml` builds
+   Linux, opens a draft GitHub release.
+6. Attach `release/windows/*` to the draft, regenerate `latest.json`
+   locally with both platforms, replace the Linux-only `latest.json`
+   on the draft.
+7. Publish the draft.
+8. Verify: existing v1.0.6 install picks up v1.0.7 on relaunch.
+9. Post-release watch (24–48 h).
+
+## Launch validation & marketing (parallel, doesn't block tag)
+
+- **First-account end-to-end test** on the live site
+  (`https://macrovox.netlify.app`, production): signup → email
+  verify → Stripe Checkout (or 7-day trial flow) → land back in
+  dashboard → managed API keys issued → download `.exe` → install →
+  sign in → dictate. Only way to catch broken Netlify functions,
+  missing Stripe webhook config, or RLS policy mistakes. Owen
+  hasn't run this yet.
+- **Product screenshots** for marketing — dictation HUD, Settings
+  panel (Quick Dictation + Voice History especially), streaming
+  transcript flow.
+- **Demo GIF** (optional but high-leverage) — `Ctrl+Space` → speak →
+  release → text appears in target app. Tools: ScreenToGif.
 
 ## Lessons we're carrying over from `alpha-osk`
 
