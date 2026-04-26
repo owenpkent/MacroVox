@@ -47,10 +47,17 @@ const baseUrl =
   args['base-url'] ||
   `https://github.com/okstudio1/macrovox-releases/releases/download/v${version}`
 
-/** Return first file in `dir` matching `rx`, or null. */
-function findFirst(dir, rx) {
+/** Return first file in `dir` matching `rx` AND containing `version`, or null.
+ *
+ * Filtering by version prevents stale artifacts from a prior build (left in
+ * the bundle dir or release/ staging) from being picked instead of the
+ * current release — `find` returns lexical order, so `1.0.6` would win over
+ * `1.0.7`. */
+function findFirst(dir, rx, version) {
   if (!existsSync(dir)) return null
-  return readdirSync(dir).find((f) => rx.test(f)) || null
+  return (
+    readdirSync(dir).find((f) => rx.test(f) && f.includes(version)) || null
+  )
 }
 
 /** Read `<artifact>.sig` next to the artifact, if present. */
@@ -64,14 +71,14 @@ const winDir = join(repoRoot, 'release', 'windows')
 const linuxDir = join(repoRoot, 'release', 'linux')
 
 const winArtifact =
-  findFirst(winDir, /-setup\.exe$/) ||
-  findFirst(winDir, /\.msi$/) ||
+  findFirst(winDir, /-setup\.exe$/, version) ||
+  findFirst(winDir, /\.msi$/, version) ||
   // v1 fallback — Tauri 2 doesn't produce these, kept for safety.
-  findFirst(winDir, /-setup\.nsis\.zip$/) ||
-  findFirst(winDir, /-setup\.msi\.zip$/)
+  findFirst(winDir, /-setup\.nsis\.zip$/, version) ||
+  findFirst(winDir, /-setup\.msi\.zip$/, version)
 const linuxArtifact =
-  findFirst(linuxDir, /\.AppImage$/) ||
-  findFirst(linuxDir, /\.AppImage\.tar\.gz$/)
+  findFirst(linuxDir, /\.AppImage$/, version) ||
+  findFirst(linuxDir, /\.AppImage\.tar\.gz$/, version)
 
 const platforms = {}
 if (winArtifact) {
