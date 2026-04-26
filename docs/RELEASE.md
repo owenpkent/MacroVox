@@ -3,6 +3,12 @@
 How MacroVox cuts a release. Covers Windows and Linux bundles and the
 `latest.json` manifest consumed by `tauri-plugin-updater` for auto-update.
 
+> **Before running any of the steps below, work through
+> [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).** That document is the
+> preflight gate (tests, smoke tests, signing, Dependabot status, doc updates).
+> The steps here only describe the mechanics; the checklist decides whether
+> the release should happen at all.
+
 ---
 
 ## 1. Bump the version
