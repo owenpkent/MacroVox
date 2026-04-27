@@ -1,19 +1,31 @@
 name: Release
 
-# Tag-triggered release builder.
+# Tag-triggered Linux build. Publishing is local — alpha-osk pattern.
 #
 # Trigger: push a tag matching v*.*.* (e.g. v1.0.7). The workflow builds
-# the Linux bundle, generates the updater manifest with the Linux entry,
-# and opens a DRAFT GitHub release. Owen attaches the locally-built
-# Windows artifacts to the same draft, regenerates latest.json with both
-# platforms locally, and publishes manually after walking
-# docs/RELEASE_CHECKLIST.md.
+# the Linux bundle, generates a Linux-only updater manifest, and uploads
+# both as a workflow artifact named `linux-bundle`. Nothing is published
+# to GitHub Releases from CI.
 #
-# Why no Windows job: the EV Authenticode cert lives on a hardware token
-# on Owen's local machine and the correct order is build → EV-sign →
-# minisign. Splitting that across CI + local would either lose the EV
-# signature or invalidate the minisign signature. Windows is therefore
-# always built locally; CI handles only Linux.
+# Owen then, on the EV-cert host:
+#   1. Downloads the `linux-bundle` artifact for the tag.
+#   2. Builds Windows locally (tauri build with signCommand → EV-signed).
+#   3. Regenerates latest.json locally so it covers both platforms.
+#   4. Runs `gh release create v1.0.7 --repo okstudio1/macrovox-releases
+#      --draft <files>` from the local machine. Owen's gh auth has
+#      write access to both repos, so no PAT or workflow secret is
+#      needed for cross-repo publishing.
+#   5. Walks docs/RELEASE_CHECKLIST.md, then publishes the draft.
+#
+# Why no Windows job in CI: the EV Authenticode cert lives on a hardware
+# token on Owen's local machine. The correct order is build → EV-sign →
+# minisign; splitting that across CI + local would invalidate one of
+# the signatures.
+#
+# Why no CI publish: source repo (okstudio1/MacroVox) is private and the
+# default GITHUB_TOKEN can't write to other repos. Cross-repo publishing
+# would require a PAT secret. Local publish avoids the secret entirely
+# and matches alpha-osk's release flow.
 #
 # Updater signing: the .sig sidecars are produced here using the minisign
 # key stored as TAURI_SIGNING_PRIVATE_KEY repo secret — same key as the
@@ -26,7 +38,7 @@ on:
       - "v*.*.*"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -76,46 +88,21 @@ jobs:
       - name: Stage release/linux
         run: npm run release:linux
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-bundle
-          path: release/linux/
-          if-no-files-found: error
-          retention-days: 7
-
-  publish:
-    name: Publish draft release
-    needs: [build-linux]
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: linux-bundle
-          path: release/linux
-
       - name: Resolve version from tag
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Generate latest.json (Linux only — Owen regenerates locally with Windows)
+      - name: Generate Linux-only latest.json (Owen regenerates locally with Windows)
         run: |
           node scripts/generate-latest.mjs \
             --version "${{ steps.version.outputs.version }}" \
             --notes "MacroVox ${{ steps.version.outputs.version }} — see CHANGELOG.md"
 
-      - name: Create draft GitHub release
-        uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
         with:
-          draft: true
-          name: MacroVox ${{ steps.version.outputs.version }}
-          tag_name: ${{ github.ref_name }}
-          generate_release_notes: true
-          files: |
-            release/linux/*
+          name: linux-bundle
+          path: |
+            release/linux/
             release/latest.json
+          if-no-files-found: error
+          retention-days: 14

@@ -59,12 +59,18 @@ minisign signatures (`-setup.exe.sig`, `.msi.sig`) from
 In Tauri 2 the installer itself is the updater artifact — there's no
 intermediate `.zip` step like v1 had.
 
-### Linux (built in CI)
+### Linux (built in CI, published locally)
 
 The Linux bundle is built automatically by `.github/workflows/release.yml`
 when a `v*.*.*` tag is pushed. The workflow runs `npx tauri build` and
-`npm run release:linux` on `ubuntu-22.04`, opens a draft GitHub release,
-and uploads `.deb`, `.rpm`, the AppImage, and the AppImage `.sig`.
+`npm run release:linux` on `ubuntu-22.04`, generates a Linux-only
+`latest.json`, and uploads everything as a workflow artifact named
+`linux-bundle`. **The workflow does not create a GitHub release.**
+You download the artifact during the publish step (Section 4).
+
+This matches the alpha-osk pattern: CI builds, you publish from your
+local machine using your own `gh` auth — no PAT or workflow secret is
+needed for cross-repo writes to `okstudio1/macrovox-releases`.
 
 To build Linux locally instead (Debian/Ubuntu recommended for `.deb`,
 Fedora/RHEL for `.rpm`, any distro for AppImage):
@@ -147,18 +153,32 @@ which clients on the current pubkey will reject, breaking auto-update.
 ## 4. Publish
 
 1. Tag the commit: `git tag v1.0.7 && git push --tags`. CI starts the
-   Linux build and opens a draft GitHub release with the Linux files
-   and a Linux-only `latest.json` attached.
+   Linux build and uploads the bundle as a workflow artifact named
+   `linux-bundle`. Nothing is published to GitHub Releases yet.
 2. On the local EV-cert Windows host, run the Windows build (Section 2)
    to produce `release/windows/`.
-3. Re-run `npm run release:manifest -- --version 1.0.7 --notes "..."`
-   locally. With both `release/windows/` and `release/linux/` populated
-   (download `release/linux/` from the draft if needed), the script
-   emits a `latest.json` with both platforms.
-4. On the draft GitHub release page: upload everything in
-   `release/windows/`, replace the existing `latest.json` with the
-   newly-regenerated one, then click Publish.
-5. The `tauri.conf.json → plugins.updater.endpoints` entry points at
+3. Download the Linux artifact from the workflow run into `release/linux/`:
+   ```
+   gh run download --name linux-bundle --dir release
+   ```
+   (Or download manually from the Actions tab.) After this, `release/linux/`
+   has the `.deb` / `.rpm` / `.AppImage` / `.sig` files.
+4. Re-run `npm run release:manifest -- --version 1.0.7 --notes "..."`
+   locally. With both `release/windows/` and `release/linux/` populated,
+   the script emits a `latest.json` covering both platforms.
+5. Create the draft release on `macrovox-releases` from your local
+   machine (your `gh` auth has write access — no PAT needed):
+   ```
+   gh release create v1.0.7 \
+     --repo okstudio1/macrovox-releases \
+     --draft \
+     --title "MacroVox 1.0.7" \
+     --notes "MacroVox 1.0.7 — see CHANGELOG.md in the source repo." \
+     release/windows/* release/linux/* release/latest.json
+   ```
+6. Walk `RELEASE_CHECKLIST.md` Section 6 (post-build verify), then
+   click Publish on the draft release.
+7. The `tauri.conf.json → plugins.updater.endpoints` entry points at
    `https://github.com/okstudio1/macrovox-releases/releases/latest/download/latest.json`,
    so existing installs will pick up the new version on their next launch.
 

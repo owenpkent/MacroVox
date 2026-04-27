@@ -89,11 +89,14 @@ On a Debian/Ubuntu host (and a Fedora host if shipping `.rpm`):
 
 ## 6. Tag, publish, verify
 
-Run only after every required item above is ticked:
+Run only after every required item above is ticked. Publishing is local
+(alpha-osk pattern) — CI only builds Linux into a workflow artifact.
 
-- [ ] `git tag v1.0.X && git push --tags`
-- [ ] Create the GitHub release on the tag, attach **all** files in `release/windows/`, `release/linux/` (if shipping), and `release/latest.json`
-- [ ] Publish the release
+- [ ] `git tag v1.0.X && git push --tags` — fires `release.yml`, builds Linux, uploads `linux-bundle` artifact
+- [ ] If shipping Linux: `gh run download --name linux-bundle --dir release` once the workflow finishes — pulls Linux files into `release/linux/` alongside the locally-built `release/windows/`
+- [ ] Regenerate `release/latest.json` locally with both platforms: `npm run release:manifest -- --version 1.0.X --notes "…"`
+- [ ] `gh release create v1.0.X --repo okstudio1/macrovox-releases --draft --title "MacroVox 1.0.X" release/windows/* release/linux/* release/latest.json` (omit `release/linux/*` if Linux not shipping). Local `gh` auth handles cross-repo write — no PAT needed.
+- [ ] Publish the draft release
 - [ ] `curl -I https://github.com/okstudio1/macrovox-releases/releases/latest/download/latest.json` returns `200` (the URL Tauri's updater hits)
 - [ ] One existing-install machine (your own) auto-updates on relaunch and lands on the new version
 

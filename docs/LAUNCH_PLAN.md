@@ -68,17 +68,23 @@ in the repo is annotated; everything that doesn't yet is the work.
 
 ## Remaining release steps (in order)
 
-3. Resolve blocker #1 (point updater at source repo OR create
-   `macrovox-releases`).
+3. ~~Resolve blocker #1~~ — `okstudio1/macrovox-releases` was created
+   public on 2026-04-26 and seeded with a README. CI workflow rewritten
+   to alpha-osk pattern: builds Linux and uploads an artifact, doesn't
+   create a release. Owen publishes locally.
 4. Run blocker #2 (clean-VM smoke test).
 5. `git tag v1.0.7 && git push --tags` — CI's `release.yml` builds
-   Linux, opens a draft GitHub release.
-6. Attach `release/windows/*` to the draft, regenerate `latest.json`
-   locally with both platforms, replace the Linux-only `latest.json`
-   on the draft.
-7. Publish the draft.
-8. Verify: existing v1.0.6 install picks up v1.0.7 on relaunch.
-9. Post-release watch (24–48 h).
+   Linux and uploads `linux-bundle` workflow artifact.
+6. On EV host: build Windows locally, then
+   `gh run download --name linux-bundle --dir release` to pull the CI
+   Linux output into `release/linux/`.
+7. Regenerate `latest.json` locally with both platforms.
+8. `gh release create v1.0.7 --repo okstudio1/macrovox-releases --draft
+   release/windows/* release/linux/* release/latest.json`. Local `gh`
+   auth handles cross-repo write — no PAT secret needed.
+9. Publish the draft.
+10. Verify: existing v1.0.6 install picks up v1.0.7 on relaunch.
+11. Post-release watch (24–48 h).
 
 ## Launch validation & marketing (parallel, doesn't block tag)
 
@@ -168,24 +174,26 @@ Owen-action items in this phase: just review and approve.
       `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` env vars for `tauri build`.
 - [x] Write `.github/workflows/release.yml`:
   - Triggered on tag push matching `v*.*.*`.
-  - **Linux-only CI build.** Windows is built locally on the EV-cert
-    host because the EV hardware token can't live in GitHub Actions and
-    the correct order is `build → EV-sign → minisign`; splitting that
-    across CI + local breaks one signature or the other.
+  - **Linux-only CI build, no CI publish** (alpha-osk pattern).
+    Windows is built locally on the EV-cert host because the EV hardware
+    token can't live in GitHub Actions and the correct order is
+    `build → EV-sign → minisign`; splitting that across CI + local
+    breaks one signature or the other.
   - Linux job: checkout, install Node + Rust + Linux system deps, run
-    `npx tauri build`, then `npm run release:linux`, upload artifacts.
-  - Publish job: downloads the Linux bundle, runs
-    `npm run release:manifest`, opens a draft GitHub release with the
-    Linux files attached.
-  - Owen separately runs the local Windows build, attaches `.exe`,
-    `.msi`, and their `.sig` sidecars to the same draft, then
-    regenerates `latest.json` locally so it includes both platforms,
-    replaces the Linux-only `latest.json` on the draft, and publishes.
+    `npx tauri build`, then `npm run release:linux`, generate a
+    Linux-only `latest.json`, upload everything as a workflow artifact
+    named `linux-bundle`.
+  - **No publish job in CI.** Owen runs the Windows build locally,
+    `gh run download --name linux-bundle --dir release` to pull the
+    Linux artifact, regenerates `latest.json` covering both platforms,
+    then `gh release create v1.0.7 --repo okstudio1/macrovox-releases
+    --draft <files>` from the local machine. Local `gh` auth has
+    cross-repo write access, so no PAT secret is needed.
   - `TAURI_SIGNING_PRIVATE_KEY` + password injected via GitHub
-    repository secrets. Other build secrets (Sentry DSN if added) the
-    same way.
-  - **Does not** auto-publish. Always lands as draft, Owen ticks the
-    preflight, then publishes manually.
+    repository secrets for the Linux build. Other build secrets
+    (Sentry DSN if added) the same way.
+  - **Always lands as draft.** Owen walks the preflight checklist,
+    then publishes manually.
 
 ## Phase 2 — Backend wiring (Stripe, Supabase, Netlify dashboards)
 
