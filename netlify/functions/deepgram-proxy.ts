@@ -152,8 +152,10 @@ export const handler: Handler = async (event) => {
     }
 
     supabase.from('api_usage').insert({ user_id: user.id, service: 'deepgram' })
-      .then(() => {})
-      .catch(err => console.error('[deepgram-proxy] Failed to log API usage:', err))
+      .then(
+        () => {},
+        err => console.error('[deepgram-proxy] Failed to log API usage:', err),
+      )
   }
 
   const deepgramKey = process.env.DEEPGRAM_MANAGED_KEY

@@ -156,8 +156,10 @@ export const handler: Handler = async (event) => {
     }
 
     supabase.from('api_usage').insert({ user_id: user.id, service: 'claude' })
-      .then(() => {})
-      .catch(err => console.error('[claude-proxy] Failed to log API usage:', err))
+      .then(
+        () => {},
+        err => console.error('[claude-proxy] Failed to log API usage:', err),
+      )
   }
 
   // Parse request body
