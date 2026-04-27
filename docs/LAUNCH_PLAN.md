@@ -15,76 +15,88 @@ in the repo is annotated; everything that doesn't yet is the work.
 
 ---
 
-## Where we actually are (updated 2026-04-26)
+## Where we actually are (updated 2026-04-26 end-of-day)
 
 - **App code:** v1.0.7 bumped, CHANGELOG consolidated, all gates green
   (Vitest 20/20, `cargo test` 55/55, `tsc --noEmit` ×2, `cargo clippy
   -D warnings`).
 - **EV signing pipeline:** working end-to-end on a single `tauri build`
-  via `scripts/sign-windows.ps1` (filters vendor DLLs, retries on
-  Defender locks). Signed v1.0.7 `.exe` + `.msi` + `.sig` sidecars
-  staged in `release/windows/`; `release/latest.json` regenerated with
-  the correct version + signature + URL. `signtool verify /pa` passes.
-- **Updater code:** `tauri-plugin-updater` is wired with a real pubkey
-  (minisign key ID `9B91F23A49E0246D`).
-  `bundle.createUpdaterArtifacts: true`, so missing signing env vars
-  fail the build loudly.
-  **Endpoint mismatch:** `tauri.conf.json` points at
-  `https://github.com/okstudio1/macrovox-releases/releases/latest/download/latest.json`
-  but that repo doesn't exist — see "Open blockers" below.
-- **CI:** `.github/workflows/ci.yml` (typescript / clippy / pyright on
-  every push to `main`) green.
-  `.github/workflows/release.yml` (tag-triggered, builds Linux only
-  in CI; Windows is built locally because of the EV hardware token)
-  has not yet fired since no `v*.*.*` tag exists yet.
-- **Auth + billing code:** Supabase auth UI, Netlify proxies (Claude,
-  Deepgram), and Supabase Edge Functions (`create-checkout`,
-  `billing-portal`, `stripe-webhook`) are all written. **Untested
-  end-to-end on the live site** — see "First-account smoke test"
-  below.
-- **Marketing site (`C:\Users\Owen\dev\macrovox-web`):** Next.js on
-  Netlify; landing/pricing/login/signup/dashboard pages exist;
-  `/api/download` redirects to GitHub Releases latest `.exe` —
-  currently 404s because no release exists. **No code changes
-  needed**, just the live-site smoke test.
+  via `scripts/sign-windows.ps1`. Signed v1.0.7 `.exe` + `.msi` + `.sig`
+  staged in `release/windows/`; `signtool verify /pa` passes.
+- **Updater code:** `tauri-plugin-updater` wired with real pubkey
+  (minisign key ID `9B91F23A49E0246D`). `tauri.conf.json` points at
+  `okstudio1/macrovox-releases` — **repo now exists** (created public
+  2026-04-26 and seeded). Endpoint resolves once v1.0.7 is published.
+- **CI release workflow:** `.github/workflows/release.yml` rewritten to
+  alpha-osk pattern (commit `MacroVox@fa5ced8`) — Linux build →
+  workflow artifact only; **no CI publish**. Owen publishes locally.
+  Has not yet fired (no `v*.*.*` tag exists yet).
+- **Backend wiring (Stripe / Supabase / Netlify):** **fully audited and
+  fixed end-of-2026-04-26.** Stripe product+webhook+portal verified;
+  Supabase tables + Edge Functions + secrets verified (the missing
+  `api_usage` table was created today; `verify_jwt = false` for
+  `stripe-webhook` toggled and persisted in `supabase/config.toml`);
+  webhook delivery confirmed working (HTTP 200 after the JWT-verify
+  fix). Trial flow wired in code: `subscription_data: {
+  trial_period_days: 7 }` in both `create-checkout` implementations
+  + trial copy across the marketing site.
+- **Marketing site (`macrovox-web`):** Netlify deploy was broken since
+  2026-04-14. Now green at `master@836661f`. Live at
+  `https://macrovox.netlify.app`.
+- **Proxy hosting:** `claude-proxy.ts` + `deepgram-proxy.ts` were
+  uploaded into the wrong repo (MacroVox) and never deployed. Moved
+  into `macrovox-web/netlify/functions/` today (commit
+  `macrovox-web@836661f`). Now resolve at the URLs the desktop app
+  expects (`https://macrovox.netlify.app/.netlify/functions/*`),
+  zero desktop code change.
 
 ## Open blockers before v1.0.7 ship
 
-1. **Decide where v1.0.7 publishes.** `okstudio1/macrovox-releases` is
-   404 today, but `tauri.conf.json` points at it. Two paths:
-   - **(a) Create the releases repo** (`gh repo create
-     okstudio1/macrovox-releases --public`) and update
-     `release.yml` to publish there cross-repo (needs a PAT with
-     write access on the new repo, exposed as a workflow secret).
-   - **(b) Point the updater at the source repo.** Change
-     `plugins.updater.endpoints` in `tauri.conf.json` to
-     `https://github.com/okstudio1/MacroVox/releases/latest/download/latest.json`.
-     Source repo is already public (Dependabot is configured), so
-     this isn't a privacy regression. Simplest path; can revisit if
-     the source ever needs to go private. **Recommended for v1.0.7.**
+1. **Add `SUPABASE_URL` env var to macrovox-web Netlify.** Same value
+   as `NEXT_PUBLIC_SUPABASE_URL`, mark secret. The proxies read
+   `process.env.SUPABASE_URL` directly — without this, every Pro
+   dictation request 500s at runtime. **30-second dashboard fix.**
 
-2. **Clean-VM smoke test on Windows 11** (Section 3 of
+2. **Redeploy Supabase `create-checkout`** so the trial code at
+   `MacroVox@d620a39` actually takes effect. Code in repo doesn't
+   auto-deploy to Supabase: `supabase functions deploy create-checkout`
+   from `C:\Users\Owen\dev\MacroVox`. Until this runs, signups still
+   charge $6.99 immediately while the marketing copy advertises a
+   trial.
+
+3. **Click "Save changes" on Stripe Customer Portal**
+   (https://dashboard.stripe.com/settings/billing/portal). Default
+   config exists but may be unsaved — `billingPortal.sessions.create`
+   returns "not configured" until saved.
+
+4. **First-account end-to-end smoke test** on the live site (Task #4).
+   Signup → trial Stripe Checkout → /success → verify in Supabase
+   that `subscriptions` and `managed_api_keys` rows are populated →
+   verify in Stripe that subscription is in `trialing` state →
+   cancel/refund and verify `managed_api_keys` row is deleted.
+
+5. **Clean-VM smoke test on Windows 11** (Section 3 of
    `RELEASE_CHECKLIST.md`). Required before tagging. Not yet done.
 
 ## Remaining release steps (in order)
 
-3. ~~Resolve blocker #1~~ — `okstudio1/macrovox-releases` was created
-   public on 2026-04-26 and seeded with a README. CI workflow rewritten
-   to alpha-osk pattern: builds Linux and uploads an artifact, doesn't
-   create a release. Owen publishes locally.
-4. Run blocker #2 (clean-VM smoke test).
-5. `git tag v1.0.7 && git push --tags` — CI's `release.yml` builds
+After the open blockers above are cleared, the publish sequence:
+
+1. `git tag v1.0.7 && git push --tags` — CI's `release.yml` builds
    Linux and uploads `linux-bundle` workflow artifact.
-6. On EV host: build Windows locally, then
+2. On EV host: build Windows locally, then
    `gh run download --name linux-bundle --dir release` to pull the CI
    Linux output into `release/linux/`.
-7. Regenerate `latest.json` locally with both platforms.
-8. `gh release create v1.0.7 --repo okstudio1/macrovox-releases --draft
-   release/windows/* release/linux/* release/latest.json`. Local `gh`
-   auth handles cross-repo write — no PAT secret needed.
-9. Publish the draft.
-10. Verify: existing v1.0.6 install picks up v1.0.7 on relaunch.
-11. Post-release watch (24–48 h).
+3. Regenerate `latest.json` locally with both platforms.
+4. `gh release create v1.0.7 --repo okstudio1/macrovox-releases --draft
+   --title "MacroVox 1.0.7" release/windows/* release/linux/*
+   release/latest.json`. Local `gh` auth handles cross-repo write —
+   no PAT secret needed.
+5. Publish the draft.
+6. Verify: `curl -I https://github.com/okstudio1/macrovox-releases/releases/latest/download/latest.json`
+   returns `200`; existing v1.0.6 install picks up v1.0.7 on relaunch.
+7. Post-release watch (24–48 h): Netlify function logs, Supabase
+   auth/sub tables.
 
 ## Launch validation & marketing (parallel, doesn't block tag)
 
@@ -125,33 +137,41 @@ in the repo is annotated; everything that doesn't yet is the work.
    to 5× with exponential backoff because `signtool` regularly fights
    Defender's real-time scan for newly written `.exe` files.
 
-## Decisions needed from Owen before phase 3
+## Decisions resolved before v1.0.7 ship
 
-1. **Repo visibility model.** ✅ **Decided: split (option B).**
-   `okstudio1/MacroVox` (source) stays as-is. `okstudio1/macrovox-releases`
-   (public, binaries-only) needs to be created on GitHub before v1.0.7
-   ships. All updater + website plumbing has been updated to point at it.
+1. **Repo visibility model.** ✅ **Decided: split.** `okstudio1/MacroVox`
+   (source) stays private. `okstudio1/macrovox-releases` (public,
+   binaries-only) was created on GitHub 2026-04-26. All updater +
+   website plumbing points at it. CI workflow rewritten to alpha-osk
+   pattern (build artifact in CI; publish locally with `gh release
+   create --repo okstudio1/macrovox-releases`) so no PAT secret is
+   needed.
 
-2. **Managed-API-key delivery model.** The Stripe webhook provisions
-   per-user rows in `managed_api_keys`, but the Netlify proxies
-   currently forward using shared env-var keys (`ANTHROPIC_MANAGED_KEY`,
-   `DEEPGRAM_MANAGED_KEY`). Pick:
-   - **Shared keys (status quo):** simpler, fewer Supabase round-trips
-     per request, but a leaked key affects every Pro user and rotation
-     is global.
-   - **Per-user keys:** the proxies read each user's row at request
-     time. Better isolation, easier individual revocation, slightly
-     slower (one Supabase select per request, cacheable).
-   - One side or the other needs to change so they're consistent.
+2. **Managed-API-key delivery model.** ✅ **Decided: asymmetric, by
+   service.** The original framing was a false dichotomy — the two
+   services have different latency requirements:
+   - **Deepgram:** per-user key from `managed_api_keys.deepgram_key`,
+     read by the renderer at `src/renderer/lib/auth.ts:213`. The Rust
+     backend uses it directly to open a WebSocket to Deepgram for
+     low-latency streaming. A proxy hop is incompatible with real-time
+     audio. Webhook provisions the row at checkout.
+   - **Anthropic:** shared env-var key on the proxy (`claude-proxy`).
+     No streaming concern, so all calls go through the proxy. The
+     `managed_api_keys.anthropic_key` column is stored but unused
+     (cleanup queued — drop the column).
+   - This wasn't documented before; today's audit revealed the
+     intended design. Both deliveries are correct as implemented.
 
-3. **Free-trial copy alignment.** Landing page promises "7-day free
-   trial without a credit card." Stripe Checkout requires a payment
-   method by default. Pick:
-   - **Rewrite copy** to "7-day free trial — cancel anytime." Zero
-     code, ships today.
-   - **Build no-CC trial** via a server-side trial flag in Supabase
-     and gate Pro features without Stripe involvement until day 7.
-     Real work; estimate 1–2 days.
+3. **Free-trial flow.** ✅ **Decided: native Stripe trial with CC
+   up-front.** Both `create-checkout` implementations now set
+   `subscription_data: { trial_period_days: 7 }` (commits
+   `MacroVox@d620a39` + `macrovox-web@8bb13f0`). Stripe collects the
+   card at signup but doesn't charge until day 7. Marketing copy
+   aligned across landing/dashboard/success pages: "Start Free Trial",
+   "no charge until the trial ends." Default Stripe trial behavior
+   (CC required) keeps churn low and qualifies leads; the no-CC
+   variant (`payment_method_collection: 'if_required'`) is available
+   later if signup conversion becomes a problem.
 
 ---
 
@@ -197,57 +217,96 @@ Owen-action items in this phase: just review and approve.
 
 ## Phase 2 — Backend wiring (Stripe, Supabase, Netlify dashboards)
 
-Needs Owen logged into the dashboards. I can prepare the migrations and
-config snippets but the dashboard clicks are yours.
+**Audited and verified end of 2026-04-26.** Most of the dashboard work is
+done. Two follow-ups before the smoke test (see "Open blockers" above).
 
-- [ ] Decide managed-keys architecture (decision 2 above) — implement
-      whichever side needs to change.
-- [ ] Stripe Dashboard:
-  - Create Product "MacroVox Pro" with monthly Price $6.99.
-  - Save Price ID for env vars.
-  - Add a webhook endpoint pointing at the deployed Supabase Edge
-    Function URL (`https://hlioqbizljywisvnbtat.supabase.co/functions/v1/stripe-webhook`),
-    listening on `checkout.session.completed`,
-    `customer.subscription.updated`, `customer.subscription.deleted`.
-  - Save the webhook signing secret.
-- [ ] Supabase:
-  - Run `supabase/migrations/20260411_create_api_usage.sql`.
-  - Deploy Edge Functions:
-    `supabase functions deploy create-checkout billing-portal stripe-webhook`.
-  - Set Edge Function env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
-    `STRIPE_PRICE_ID`, `DEEPGRAM_MANAGED_KEY`, `ANTHROPIC_MANAGED_KEY`,
-    `SITE_URL`.
-- [ ] Netlify (`macrovox-web`):
-  - Connect repo, deploy.
-  - Set env: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
-    `ANTHROPIC_MANAGED_KEY`, `DEEPGRAM_MANAGED_KEY`,
-    `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID_PRO`,
-    `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_*` keys.
-- [ ] Smoke test end-to-end on a non-prod email:
-  - Sign up → checkout → webhook fires → `subscriptions` and
-    `managed_api_keys` rows appear → app proxy calls succeed → cancel
-    via billing portal → keys revoked.
+- [x] Managed-keys architecture decided (decision 2 above) —
+      Deepgram per-user (in-DB), Anthropic shared (proxy env). Both
+      already implemented; no code change needed.
+- [x] **Stripe Dashboard:**
+  - [x] Product "MacroVox" $6.99/mo Active. Price ID
+        `price_1TKT6F1kamQkbkSVfYoIVAqs` matches both env-var slots.
+  - [x] Webhook endpoint registered at
+        `https://hlioqbizljywisvnbtat.supabase.co/functions/v1/stripe-webhook`,
+        listening on `checkout.session.completed`,
+        `customer.subscription.updated`, `customer.subscription.deleted`,
+        `charge.refunded`. Signing secret stored in Supabase as
+        `STRIPE_WEBHOOK_SECRET`. Delivery confirmed (HTTP 200 after
+        the JWT-verify fix below).
+  - [ ] Click "Save changes" on Customer Portal config — default
+        `bpc_…` config exists but may be unsaved. Until saved,
+        `billingPortal.sessions.create` returns "not configured".
+- [x] **Supabase:**
+  - [x] Tables `subscriptions`, `managed_api_keys`, `api_usage`
+        present. The `api_usage` table was created today by running
+        `supabase/migrations/20260411_create_api_usage.sql` via the
+        SQL Editor — the migration had never been applied.
+  - [x] Edge Functions `billing-portal`, `create-checkout`,
+        `stripe-webhook` deployed.
+  - [x] Edge Function secrets: `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`,
+        `STRIPE_WEBHOOK_SECRET`, `DEEPGRAM_MANAGED_KEY` all set.
+        `ANTHROPIC_MANAGED_KEY` deliberately not set — webhook stores
+        it into a column the app never reads (cleanup in queue).
+        `SITE_URL` not set — code has fallback to `macrovox.netlify.app`.
+        Auto-injected: `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+        `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`.
+  - [x] **`verify_jwt = false`** for `stripe-webhook` (Stripe doesn't
+        carry a Supabase JWT; the function verifies Stripe's HMAC
+        itself). Toggled via dashboard **and** persisted in
+        `supabase/config.toml` so it survives future redeploys.
+        Without this, every webhook delivery returned 401.
+  - [ ] Redeploy `create-checkout` so the trial code at
+        `MacroVox@d620a39` takes effect:
+        `supabase functions deploy create-checkout`.
+- [x] **Netlify (`macrovox-web`):**
+  - [x] Repo connected, deploys auto-trigger on master push.
+  - [x] Env vars set: `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID_PRO`,
+        `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPABASE_URL`,
+        `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+        `ANTHROPIC_MANAGED_KEY`, `DEEPGRAM_MANAGED_KEY`.
+        `STRIPE_WEBHOOK_SECRET` deliberately NOT set here — Supabase
+        owns the webhook.
+  - [ ] **Add `SUPABASE_URL`** (server-only, same value as
+        `NEXT_PUBLIC_SUPABASE_URL`). Without this, the proxies
+        (`claude-proxy`, `deepgram-proxy`) 500 at runtime — every Pro
+        dictation request fails.
+  - [x] Proxies now hosted alongside the Next.js app
+        (commit `macrovox-web@836661f`). Resolve at
+        `https://macrovox.netlify.app/.netlify/functions/{claude-proxy,deepgram-proxy}`,
+        which is what the desktop app's `src/renderer/config.ts`
+        already expects.
+- [ ] **Smoke test end-to-end on a non-prod email** — Task #4. Run
+      AFTER the two `[ ]` items above:
+  - Sign up → trial checkout → webhook fires → `subscriptions` and
+    `managed_api_keys` rows appear → desktop app proxy calls succeed
+    → cancel via billing portal → keys revoked.
 
 ## Phase 3 — Public release
 
 Chicken-and-egg phase: the app cannot auto-update from "no version"
 to v1, so v1.0.7 ships as a fresh installer download.
 
-- [ ] Create `okstudio1/macrovox-releases` on GitHub (public, empty
-      is fine — it just needs to exist so the release workflow can push
-      tags + release artifacts to it). Wiring is already done.
-- [ ] Bump version to 1.0.7 in `package.json` + `tauri.conf.json`,
+- [x] Create `okstudio1/macrovox-releases` on GitHub (public, empty
+      is fine). Done 2026-04-26, seeded with a README so it has a
+      default branch.
+- [x] Bump version to 1.0.7 in `package.json` + `tauri.conf.json`,
       collapse the CHANGELOG `## Unreleased` sections into
-      `## v1.0.7 — YYYY-MM-DD`.
+      `## v1.0.7 — YYYY-MM-DD`. Done in earlier session.
 - [ ] Walk `RELEASE_CHECKLIST.md` end-to-end on the EV-cert host. Don't
       skip the clean-VM smoke test.
-- [ ] `git tag v1.0.7 && git push --tags` → release workflow fires →
-      draft release on `okstudio1/macrovox-releases` with artifacts.
+- [ ] `git tag v1.0.7 && git push --tags` → release workflow runs the
+      Linux build and uploads a `linux-bundle` workflow artifact.
+- [ ] On EV host: build Windows locally, `gh run download --name
+      linux-bundle --dir release` to pull the Linux files, regenerate
+      `release/latest.json` with both platforms, then
+      `gh release create v1.0.7 --repo okstudio1/macrovox-releases
+      --draft --title "MacroVox 1.0.7" release/windows/* release/linux/*
+      release/latest.json`.
 - [ ] Publish the draft. Confirm
       `curl -I https://github.com/okstudio1/macrovox-releases/releases/latest/download/latest.json`
       returns 200.
-- [ ] Confirm `https://<your-domain>/api/download` redirects to a real
-      `.exe`.
+- [ ] Confirm `https://macrovox.netlify.app/api/download` redirects to
+      a real `.exe`.
 
 ## Phase 4 — Auto-update verification (the alpha-osk pitfall)
 
