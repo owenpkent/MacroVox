@@ -15,68 +15,72 @@ in the repo is annotated; everything that doesn't yet is the work.
 
 ---
 
-## Where we actually are (updated 2026-04-26 end-of-day)
+## Where we actually are (updated 2026-04-27 end-of-day)
 
 - **App code:** v1.0.7 bumped, CHANGELOG consolidated, all gates green
   (Vitest 20/20, `cargo test` 55/55, `tsc --noEmit` ×2, `cargo clippy
   -D warnings`).
 - **EV signing pipeline:** working end-to-end on a single `tauri build`
-  via `scripts/sign-windows.ps1`. Signed v1.0.7 `.exe` + `.msi` + `.sig`
-  staged in `release/windows/`; `signtool verify /pa` passes.
+  via `scripts/sign-windows.ps1`. ⚠️ **Currently-staged signed `.exe`/
+  `.msi` in `release/windows/` are stale** — built before today's
+  hostname migration; they hardcode the dead `macrovox.netlify.app` in
+  the CSP and SITE_URL. Must rebuild before tagging (see blocker #1).
 - **Updater code:** `tauri-plugin-updater` wired with real pubkey
   (minisign key ID `9B91F23A49E0246D`). `tauri.conf.json` points at
-  `okstudio1/macrovox-releases` — **repo now exists** (created public
-  2026-04-26 and seeded). Endpoint resolves once v1.0.7 is published.
+  `okstudio1/macrovox-releases` — repo public, seeded. Endpoint
+  resolves once v1.0.7 is published.
 - **CI release workflow:** `.github/workflows/release.yml` rewritten to
   alpha-osk pattern (commit `MacroVox@fa5ced8`) — Linux build →
-  workflow artifact only; **no CI publish**. Owen publishes locally.
-  Has not yet fired (no `v*.*.*` tag exists yet).
+  workflow artifact only; no CI publish. Owen publishes locally. Not
+  yet fired (no `v*.*.*` tag exists yet).
 - **Backend wiring (Stripe / Supabase / Netlify):** **fully audited and
   fixed end-of-2026-04-26.** Stripe product+webhook+portal verified;
-  Supabase tables + Edge Functions + secrets verified (the missing
-  `api_usage` table was created today; `verify_jwt = false` for
-  `stripe-webhook` toggled and persisted in `supabase/config.toml`);
-  webhook delivery confirmed working (HTTP 200 after the JWT-verify
-  fix). Trial flow wired in code: `subscription_data: {
-  trial_period_days: 7 }` in both `create-checkout` implementations
-  + trial copy across the marketing site.
-- **Marketing site (`macrovox-web`):** Netlify deploy was broken since
-  2026-04-14. Now green at `master@836661f`. Live at
-  `https://macrovox.tech`.
-- **Proxy hosting:** `claude-proxy.ts` + `deepgram-proxy.ts` were
-  uploaded into the wrong repo (MacroVox) and never deployed. Moved
-  into `macrovox-web/netlify/functions/` today (commit
-  `macrovox-web@836661f`). Now resolve at the URLs the desktop app
-  expects (`https://macrovox.tech/.netlify/functions/*`),
-  zero desktop code change.
+  Supabase tables + Edge Functions + secrets verified; webhook
+  delivery confirmed working (HTTP 200). Trial flow wired:
+  `subscription_data: { trial_period_days: 7 }` in both
+  `create-checkout` implementations + trial copy across the site.
+- **Hostname migration (2026-04-27):** The marketing site moved from
+  `macrovox.netlify.app` to the custom domain `https://macrovox.tech`;
+  the old netlify.app subdomain 404s. Fixed every hardcoded reference
+  across both repos: desktop CSP, renderer SITE_URL, edge function
+  ALLOWED_ORIGINS, Stripe redirect URLs, deprecated Netlify proxy
+  copies, all docs. Commits: `MacroVox@64b6a85`,
+  `macrovox-web@835629e` + `@d1a51e3`. Netlify env vars updated
+  (`SUPABASE_URL` added non-secret; `NEXT_PUBLIC_SITE_URL` updated).
+  Supabase Edge Functions `create-checkout` + `billing-portal`
+  redeployed via dashboard with new ALLOWED_ORIGINS + trial code.
+  All four endpoints verified live: macrovox.tech accepted (200/401),
+  macrovox.netlify.app rejected (403).
+- **Marketing site (`macrovox-web`):** Live at `https://macrovox.tech`,
+  proxies hosted alongside the Next.js app at
+  `/.netlify/functions/{claude-proxy,deepgram-proxy}`. Latest deploy
+  `master@d1a51e3`.
 
 ## Open blockers before v1.0.7 ship
 
-1. **Add `SUPABASE_URL` env var to macrovox-web Netlify.** Same value
-   as `NEXT_PUBLIC_SUPABASE_URL`, mark secret. The proxies read
-   `process.env.SUPABASE_URL` directly — without this, every Pro
-   dictation request 500s at runtime. **30-second dashboard fix.**
+1. **Rebuild v1.0.7 Windows artifacts on EV host.** The currently-
+   staged `release/windows/*.exe`/`*.msi` were built before today's
+   hostname migration — they still hardcode the dead `macrovox.netlify.app`
+   in the CSP and SITE_URL fallback. Clean
+   `src-tauri/target/release/bundle/{nsis,msi}` AND `release/windows/`,
+   then `npx tauri build` (which runs `scripts/sign-windows.ps1` via
+   `signCommand`). Re-stage the new signed `.exe`/`.msi`/`.sig`.
 
-2. **Redeploy Supabase `create-checkout`** so the trial code at
-   `MacroVox@d620a39` actually takes effect. Code in repo doesn't
-   auto-deploy to Supabase: `supabase functions deploy create-checkout`
-   from `C:\Users\Owen\dev\MacroVox`. Until this runs, signups still
-   charge $6.99 immediately while the marketing copy advertises a
-   trial.
-
-3. **Click "Save changes" on Stripe Customer Portal**
+2. **Click "Save changes" on Stripe Customer Portal**
    (https://dashboard.stripe.com/settings/billing/portal). Default
    config exists but may be unsaved — `billingPortal.sessions.create`
    returns "not configured" until saved.
 
-4. **First-account end-to-end smoke test** on the live site (Task #4).
-   Signup → trial Stripe Checkout → /success → verify in Supabase
-   that `subscriptions` and `managed_api_keys` rows are populated →
-   verify in Stripe that subscription is in `trialing` state →
-   cancel/refund and verify `managed_api_keys` row is deleted.
+3. **First-account end-to-end smoke test** on the live site
+   (https://macrovox.tech). Signup → email verify → trial Stripe
+   Checkout → /success → verify in Supabase that `subscriptions` and
+   `managed_api_keys` rows are populated → verify in Stripe that
+   subscription is in `trialing` state → cancel/refund and verify
+   `managed_api_keys` row is deleted.
 
-5. **Clean-VM smoke test on Windows 11** (Section 3 of
-   `RELEASE_CHECKLIST.md`). Required before tagging. Not yet done.
+4. **Clean-VM smoke test on Windows 11** (Section 3 of
+   `RELEASE_CHECKLIST.md`). Required before tagging. Includes Voice
+   History playback regression check (OGG Opus rate-fix in v1.0.7).
 
 ## Remaining release steps (in order)
 
