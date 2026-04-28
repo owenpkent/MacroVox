@@ -7,17 +7,17 @@
     Tauri runs signCommand against every staged binary going into the bundle:
     the app .exe, the final .msi/-setup.exe installer, AND every vendor DLL
     along the way (Wix UI/Util extensions, NSIS plugins). Vendor DLLs are
-    already signed by their authors and don't need OK Studio's signature —
+    already signed by their authors and don't need OK Studio's signature --
     re-signing them is wasteful and increases exposure to Windows Defender
     file-lock failures during the build.
 
     Behavior:
-      - .exe / .msi  → sign with the OK Studio EV cert via the SafeNet
+      - .exe / .msi  --> sign with the OK Studio EV cert via the SafeNet
                        eToken, retrying up to 5 times with linear backoff
                        (mirrors alpha-osk/build/windows/sign.py).
-      - everything else (.dll, .tmp, etc.) → exit 0 without doing anything.
+      - everything else (.dll, .tmp, etc.) --> exit 0 without doing anything.
       - missing/garbled path (e.g. literal "%1" if Tauri's substitution
-        misbehaves) → log and exit 0 so the bundle keeps moving.
+        misbehaves) --> log and exit 0 so the bundle keeps moving.
 
     Cert is identified by SHA-1 thumbprint to disambiguate if multiple certs
     are present in the user store.
@@ -27,7 +27,7 @@
     the signCommand template with this value.
 
 .NOTES
-    The eToken is invisible to elevated processes — invoke `tauri build`
+    The eToken is invisible to elevated processes -- invoke `tauri build`
     from a non-elevated PowerShell with the token plugged in.
 #>
 
@@ -36,7 +36,7 @@ param(
     [string]$Path
 )
 
-# Don't use Stop here — we want to exit 0 on unexpected input rather than
+# Don't use Stop here -- we want to exit 0 on unexpected input rather than
 # crash the bundle for a vendor file we'd skip anyway.
 $ErrorActionPreference = 'Continue'
 
@@ -63,8 +63,34 @@ if ($ext -ne '.exe' -and $ext -ne '.msi') {
     exit 0
 }
 
+# Resolve signtool.exe -- Tauri's signCommand spawns this script in a plain
+# (non-Developer) PowerShell where the Windows SDK isn't on PATH. Prefer
+# whatever's on PATH; otherwise pick the highest-versioned x64 signtool from
+# the SDK install root.
+$signtool = $null
+$cmd = Get-Command signtool.exe -ErrorAction SilentlyContinue
+if ($cmd) { $signtool = $cmd.Source }
+if (-not $signtool) {
+    $sdkRoots = @()
+    $pf32 = [Environment]::GetEnvironmentVariable('ProgramFiles')
+    $pf86 = [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
+    if ($pf32) { $sdkRoots += (Join-Path $pf32 'Windows Kits\10\bin') }
+    if ($pf86) { $sdkRoots += (Join-Path $pf86 'Windows Kits\10\bin') }
+    foreach ($root in $sdkRoots) {
+        if (-not (Test-Path -LiteralPath $root)) { continue }
+        $found = Get-ChildItem -Path $root -Recurse -Filter 'signtool.exe' -ErrorAction SilentlyContinue
+        $x64   = $found | Where-Object { $_.FullName -like '*\x64\signtool.exe' }
+        $best  = $x64 | Sort-Object FullName -Descending | Select-Object -First 1
+        if ($best) { $signtool = $best.FullName; break }
+    }
+}
+if (-not $signtool) {
+    Write-Host "[sign-windows] signtool.exe not found on PATH or in Windows Kits -- install the Windows 10/11 SDK or run from a Developer PowerShell"
+    exit 1
+}
+
 for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-    & signtool sign /sha1 $Thumbprint /fd sha256 /tr $TimestampUrl /td sha256 $Path
+    & $signtool sign /sha1 $Thumbprint /fd sha256 /tr $TimestampUrl /td sha256 $Path
     if ($LASTEXITCODE -eq 0) {
         Write-Host "[sign-windows] signed (attempt $attempt): $Path"
         exit 0
