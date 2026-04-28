@@ -7,7 +7,7 @@
  * Required environment variables (set in Supabase dashboard → Settings → Edge Functions):
  *   STRIPE_SECRET_KEY    — Stripe secret key (sk_live_... or sk_test_...)
  *   STRIPE_PRICE_ID  — Stripe Price ID for MacroVox ($6.99/month)
- *   SITE_URL             — Your Netlify site URL (https://macrovox.netlify.app)
+ *   SITE_URL             — Your Netlify site URL (https://macrovox.tech)
  */
 
 import Stripe from 'npm:stripe@17'
@@ -19,7 +19,7 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 )
 
-const ALLOWED_ORIGINS = ['https://macrovox.netlify.app', 'tauri://localhost', 'https://tauri.localhost']
+const ALLOWED_ORIGINS = ['https://macrovox.tech', 'tauri://localhost', 'https://tauri.localhost']
 
 function getCorsHeaders(req: Request) {
   const origin = (req.headers.get('origin') ?? '').toLowerCase()
@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    const siteUrl = Deno.env.get('SITE_URL') ?? 'https://macrovox.netlify.app'
+    const siteUrl = Deno.env.get('SITE_URL') ?? 'https://macrovox.tech'
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',

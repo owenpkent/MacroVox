@@ -42,12 +42,12 @@ in the repo is annotated; everything that doesn't yet is the work.
   + trial copy across the marketing site.
 - **Marketing site (`macrovox-web`):** Netlify deploy was broken since
   2026-04-14. Now green at `master@836661f`. Live at
-  `https://macrovox.netlify.app`.
+  `https://macrovox.tech`.
 - **Proxy hosting:** `claude-proxy.ts` + `deepgram-proxy.ts` were
   uploaded into the wrong repo (MacroVox) and never deployed. Moved
   into `macrovox-web/netlify/functions/` today (commit
   `macrovox-web@836661f`). Now resolve at the URLs the desktop app
-  expects (`https://macrovox.netlify.app/.netlify/functions/*`),
+  expects (`https://macrovox.tech/.netlify/functions/*`),
   zero desktop code change.
 
 ## Open blockers before v1.0.7 ship
@@ -101,7 +101,7 @@ After the open blockers above are cleared, the publish sequence:
 ## Launch validation & marketing (parallel, doesn't block tag)
 
 - **First-account end-to-end test** on the live site
-  (`https://macrovox.netlify.app`, production): signup → email
+  (`https://macrovox.tech`, production): signup → email
   verify → Stripe Checkout (or 7-day trial flow) → land back in
   dashboard → managed API keys issued → download `.exe` → install →
   sign in → dictate. Only way to catch broken Netlify functions,
@@ -247,7 +247,7 @@ done. Two follow-ups before the smoke test (see "Open blockers" above).
         `STRIPE_WEBHOOK_SECRET`, `DEEPGRAM_MANAGED_KEY` all set.
         `ANTHROPIC_MANAGED_KEY` deliberately not set — webhook stores
         it into a column the app never reads (cleanup in queue).
-        `SITE_URL` not set — code has fallback to `macrovox.netlify.app`.
+        `SITE_URL` not set — code has fallback to `macrovox.tech`.
         Auto-injected: `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
         `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`.
   - [x] **`verify_jwt = false`** for `stripe-webhook` (Stripe doesn't
@@ -272,7 +272,7 @@ done. Two follow-ups before the smoke test (see "Open blockers" above).
         dictation request fails.
   - [x] Proxies now hosted alongside the Next.js app
         (commit `macrovox-web@836661f`). Resolve at
-        `https://macrovox.netlify.app/.netlify/functions/{claude-proxy,deepgram-proxy}`,
+        `https://macrovox.tech/.netlify/functions/{claude-proxy,deepgram-proxy}`,
         which is what the desktop app's `src/renderer/config.ts`
         already expects.
 - [ ] **Smoke test end-to-end on a non-prod email** — Task #4. Run
@@ -305,7 +305,7 @@ to v1, so v1.0.7 ships as a fresh installer download.
 - [ ] Publish the draft. Confirm
       `curl -I https://github.com/okstudio1/macrovox-releases/releases/latest/download/latest.json`
       returns 200.
-- [ ] Confirm `https://macrovox.netlify.app/api/download` redirects to
+- [ ] Confirm `https://macrovox.tech/api/download` redirects to
       a real `.exe`.
 
 ## Phase 4 — Auto-update verification (the alpha-osk pitfall)

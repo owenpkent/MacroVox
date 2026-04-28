@@ -368,7 +368,7 @@ default-src 'self';
 script-src 'self';
 style-src 'self' 'unsafe-inline';
 connect-src 'self' https://hlioqbizljywisvnbtat.supabase.co
-            https://macrovox.netlify.app https://api.deepgram.com
+            https://macrovox.tech https://api.deepgram.com
             wss://api.deepgram.com;
 img-src 'self' data:;
 font-src 'self' data:

@@ -66,7 +66,7 @@ function buildCorsHeaders(corsOrigin: string | null): Record<string, string> {
 
 export const handler: Handler = async (event) => {
   const origin = (event.headers['origin'] ?? '').toLowerCase()
-  const allowedOrigins = ['https://macrovox.netlify.app', 'tauri://localhost', 'https://tauri.localhost']
+  const allowedOrigins = ['https://macrovox.tech', 'tauri://localhost', 'https://tauri.localhost']
   if (isDevBypass) allowedOrigins.push('http://localhost:8888', 'http://localhost:5173')
   const corsOrigin = allowedOrigins.includes(origin) ? origin : null
 

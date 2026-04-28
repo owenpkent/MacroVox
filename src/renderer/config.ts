@@ -4,7 +4,7 @@
 // Netlify site URL — use local dev server when running in Vite dev mode
 export const SITE_URL = import.meta.env.DEV
   ? 'http://localhost:8888'
-  : 'https://macrovox.netlify.app'
+  : 'https://macrovox.tech'
 
 // Supabase Edge Functions (proxied through Netlify or direct)
 export const API = {
