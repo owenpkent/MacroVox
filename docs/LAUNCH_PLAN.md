@@ -21,10 +21,14 @@ in the repo is annotated; everything that doesn't yet is the work.
   (Vitest 20/20, `cargo test` 55/55, `tsc --noEmit` ×2, `cargo clippy
   -D warnings`).
 - **EV signing pipeline:** working end-to-end on a single `tauri build`
-  via `scripts/sign-windows.ps1`. ⚠️ **Currently-staged signed `.exe`/
-  `.msi` in `release/windows/` are stale** — built before today's
-  hostname migration; they hardcode the dead `macrovox.netlify.app` in
-  the CSP and SITE_URL. Must rebuild before tagging (see blocker #1).
+  via `scripts/sign-windows.ps1`. v1.0.7 rebuilt 2026-04-27 with the
+  hostname migration baked in: signed `.exe` (4.5M) + `.msi` (6.5M) +
+  minisign `.sig` sidecars staged in `release/windows/`. Authenticode
+  verified (SHA-256, RFC3161 timestamp). Renderer JS confirmed to ship
+  `https://macrovox.tech` as `SITE_URL`; CSPs allow only macrovox.tech.
+  Sign-script hardened in `MacroVox@4d2088d` to auto-resolve signtool
+  from the Windows SDK and to be ASCII-only (PS5.1 BOM-less parse
+  fragility). Build now runs from any non-Developer PowerShell.
 - **Updater code:** `tauri-plugin-updater` wired with real pubkey
   (minisign key ID `9B91F23A49E0246D`). `tauri.conf.json` points at
   `okstudio1/macrovox-releases` — repo public, seeded. Endpoint
@@ -58,29 +62,28 @@ in the repo is annotated; everything that doesn't yet is the work.
 
 ## Open blockers before v1.0.7 ship
 
-1. **Rebuild v1.0.7 Windows artifacts on EV host.** The currently-
-   staged `release/windows/*.exe`/`*.msi` were built before today's
-   hostname migration — they still hardcode the dead `macrovox.netlify.app`
-   in the CSP and SITE_URL fallback. Clean
-   `src-tauri/target/release/bundle/{nsis,msi}` AND `release/windows/`,
-   then `npx tauri build` (which runs `scripts/sign-windows.ps1` via
-   `signCommand`). Re-stage the new signed `.exe`/`.msi`/`.sig`.
-
-2. **Click "Save changes" on Stripe Customer Portal**
-   (https://dashboard.stripe.com/settings/billing/portal). Default
-   config exists but may be unsaved — `billingPortal.sessions.create`
-   returns "not configured" until saved.
-
-3. **First-account end-to-end smoke test** on the live site
+1. **First-account end-to-end smoke test** on the live site
    (https://macrovox.tech). Signup → email verify → trial Stripe
    Checkout → /success → verify in Supabase that `subscriptions` and
    `managed_api_keys` rows are populated → verify in Stripe that
    subscription is in `trialing` state → cancel/refund and verify
-   `managed_api_keys` row is deleted.
+   `managed_api_keys` row is deleted. Use Stripe test card
+   `4242 4242 4242 4242`. **Top blocker — only way to catch broken
+   webhook config / RLS / proxy auth before strangers hit them.**
 
-4. **Clean-VM smoke test on Windows 11** (Section 3 of
-   `RELEASE_CHECKLIST.md`). Required before tagging. Includes Voice
-   History playback regression check (OGG Opus rate-fix in v1.0.7).
+2. **Clean-VM smoke test on Windows 11** (Section 3 of
+   `RELEASE_CHECKLIST.md`). Install
+   `release/windows/MacroVox_1.0.7_x64-setup.exe` on a fresh VM,
+   sign in, dictate, check Voice History playback runs at real-time
+   speed (OGG Opus rate-fix regression check).
+
+### Resolved 2026-04-27
+
+- ~~Rebuild v1.0.7 Windows artifacts.~~ Done; `release/windows/`
+  staged with hostname migration baked in and Authenticode-verified.
+- ~~Save Stripe Customer Portal config.~~ Already saved (Save Changes
+  button greyed out; cancel + payment-method update toggles confirmed
+  on).
 
 ## Remaining release steps (in order)
 
