@@ -181,7 +181,7 @@ See the **Auth subsystem** section below for details.
 | `is_recording` | `Arc<Mutex<bool>>` | `false` | Toggle between `recording_start`/`stop` or `deepgram_start`/`stop` |
 | `audio_sample_rate` | `Mutex<u32>` | `16000` | Updated by `audio_start` from device config |
 | `audio_channels` | `Mutex<u16>` | `1` | Updated by `audio_start` from device config |
-| `deepgram_keywords` | `Mutex<Vec<String>>` | `[]` | Parsed by `settings_broadcast`; sent to Deepgram as `&keywords=` params in both streaming and batch modes |
+| `deepgram_keywords` | `Mutex<Vec<String>>` | `[]` | Parsed by `settings_broadcast`; sent to Deepgram as `&keyterm=` params (nova-3) in both streaming and batch modes |
 | `dg_sender` | `Arc<Mutex<Option<DgSender>>>` | `None` | WebSocket PCM channel; set by `deepgram_start`, cleared by `deepgram_stop` |
 
 ---

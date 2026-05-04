@@ -471,8 +471,9 @@ pub async fn recording_stop(
     if number_format == "digits" {
         url.push_str("&numerals=true");
     }
+    // nova-3 uses `keyterm` (not the legacy `keywords` param, which 400s on nova-3).
     for kw in &keywords {
-        url.push_str(&format!("&keywords={}", urlencoding::encode(kw)));
+        url.push_str(&format!("&keyterm={}", urlencoding::encode(kw)));
     }
 
     let client = reqwest::Client::new();
@@ -1100,8 +1101,9 @@ pub async fn voice_buffer_reprocess(
     if number_format == "digits" {
         url.push_str("&numerals=true");
     }
+    // nova-3 uses `keyterm` (not the legacy `keywords` param, which 400s on nova-3).
     for kw in &keywords {
-        url.push_str(&format!("&keywords={}", urlencoding::encode(kw)));
+        url.push_str(&format!("&keyterm={}", urlencoding::encode(kw)));
     }
 
     let client = reqwest::Client::new();
