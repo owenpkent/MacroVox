@@ -15,20 +15,25 @@ in the repo is annotated; everything that doesn't yet is the work.
 
 ---
 
-## Where we actually are (updated 2026-04-27 end-of-day)
+## Where we actually are (updated 2026-05-05)
 
 - **App code:** v1.0.7 bumped, CHANGELOG consolidated, all gates green
   (Vitest 20/20, `cargo test` 55/55, `tsc --noEmit` ×2, `cargo clippy
-  -D warnings`).
+  -D warnings`). Two post-2026-04-27 follow-ups landed on `main`:
+  Deepgram nova-3 keyterm fix (`466eb11`, 2026-05-04 — see below) and
+  an industry-standard TSDoc pass on `src/main/` + `src/renderer/`
+  (`63999ba`, 2026-05-05; no behavior change, the Rust backend was
+  already at standard).
 - **EV signing pipeline:** working end-to-end on a single `tauri build`
-  via `scripts/sign-windows.ps1`. v1.0.7 rebuilt 2026-04-27 with the
-  hostname migration baked in: signed `.exe` (4.5M) + `.msi` (6.5M) +
-  minisign `.sig` sidecars staged in `release/windows/`. Authenticode
-  verified (SHA-256, RFC3161 timestamp). Renderer JS confirmed to ship
-  `https://macrovox.tech` as `SITE_URL`; CSPs allow only macrovox.tech.
-  Sign-script hardened in `MacroVox@4d2088d` to auto-resolve signtool
-  from the Windows SDK and to be ASCII-only (PS5.1 BOM-less parse
-  fragility). Build now runs from any non-Developer PowerShell.
+  via `scripts/sign-windows.ps1`. The 2026-04-27 v1.0.7 bundles in
+  `release/windows/` are now **stale** — the keyterm fix touches
+  Rust source, so the binaries need to be rebuilt and re-signed before
+  ship. The script itself is unchanged: signed `.exe`/`.msi`+ minisign
+  `.sig` sidecars, Authenticode verified (SHA-256, RFC3161 timestamp),
+  renderer JS shipping `https://macrovox.tech`, CSPs allowing only
+  macrovox.tech. Sign-script auto-resolves signtool from the Windows
+  SDK and stays ASCII-only (`MacroVox@4d2088d`); runs from any
+  non-Developer PowerShell.
 - **Updater code:** `tauri-plugin-updater` wired with real pubkey
   (minisign key ID `9B91F23A49E0246D`). `tauri.conf.json` points at
   `okstudio1/macrovox-releases` — repo public, seeded. Endpoint
@@ -59,28 +64,46 @@ in the repo is annotated; everything that doesn't yet is the work.
   proxies hosted alongside the Next.js app at
   `/.netlify/functions/{claude-proxy,deepgram-proxy}`. Latest deploy
   `master@d1a51e3`.
+- **Deepgram nova-3 keyterm fix (`466eb11`, 2026-05-04):** Nova-3
+  retired the legacy `&keywords=` URL parameter; sending it returned
+  400 Bad Request the moment a user added a custom keyword boost.
+  All three URL builders (live WebSocket, `recording_stop`,
+  `voice_buffer_reprocess`) updated to `&keyterm=` with proper URL
+  encoding. CHANGELOG and `src-tauri/ARCHITECTURE.md` notes updated.
+  The fix invalidates the previously-signed bundles in
+  `release/windows/`; rebuild + re-sign is now the top blocker.
+- **Dependabot alerts (deferred):** Two transitive Rust unsoundness
+  alerts on `Cargo.lock` — `glib` `VariantStrIter` (#10, moderate) and
+  `rand` with custom logger (#14, low). Vulnerable code paths are
+  never exercised by MacroVox; bumping mid-launch would force another
+  rebuild → resign → smoke loop for ~zero risk reduction. Apply via
+  `cargo update -p glib -p rand` after v1.0.7 ships.
 
 ## Open blockers before v1.0.7 ship
 
-1. **First-account end-to-end smoke test** on the live site
+1. **Rebuild v1.0.7 Windows artifacts.** The 2026-04-27 bundles in
+   `release/windows/` were rendered stale by the Deepgram keyterm fix
+   (`466eb11`, 2026-05-04). Run `tauri build` on the EV-cert host so
+   the new `.exe` / `.msi` + `.sig` sidecars are signed and staged.
+
+2. **First-account end-to-end smoke test** on the live site
    (https://macrovox.tech). Signup → email verify → trial Stripe
    Checkout → /success → verify in Supabase that `subscriptions` and
    `managed_api_keys` rows are populated → verify in Stripe that
    subscription is in `trialing` state → cancel/refund and verify
    `managed_api_keys` row is deleted. Use Stripe test card
-   `4242 4242 4242 4242`. **Top blocker — only way to catch broken
-   webhook config / RLS / proxy auth before strangers hit them.**
+   `4242 4242 4242 4242`. Only way to catch broken webhook config /
+   RLS / proxy auth before strangers hit them.
 
-2. **Clean-VM smoke test on Windows 11** (Section 3 of
-   `RELEASE_CHECKLIST.md`). Install
+3. **Clean-VM smoke test on Windows 11** (Section 3 of
+   `RELEASE_CHECKLIST.md`). Install the freshly-rebuilt
    `release/windows/MacroVox_1.0.7_x64-setup.exe` on a fresh VM,
-   sign in, dictate, check Voice History playback runs at real-time
-   speed (OGG Opus rate-fix regression check).
+   sign in, dictate (with at least one custom keyword boost — direct
+   regression check on the keyterm fix), check Voice History playback
+   runs at real-time speed (OGG Opus rate-fix regression check).
 
 ### Resolved 2026-04-27
 
-- ~~Rebuild v1.0.7 Windows artifacts.~~ Done; `release/windows/`
-  staged with hostname migration baked in and Authenticode-verified.
 - ~~Save Stripe Customer Portal config.~~ Already saved (Save Changes
   button greyed out; cancel + payment-method update toggles confirmed
   on).

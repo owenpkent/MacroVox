@@ -1,6 +1,6 @@
 # MacroVox — Status & Roadmap
 
-**Last Updated**: April 25, 2026  
+**Last Updated**: May 5, 2026  
 **Repository**: https://github.com/okstudio1/MacroVox
 
 ---
@@ -29,11 +29,11 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 
 | Category | Status |
 |----------|--------|
-| **Windows App** | ✅ Released — v1.0.6 (EV code signed) |
+| **Windows App** | ✅ Released v1.0.6 (EV code signed); v1.0.7 staged — pending rebuild + smoke tests, then ship |
 | **Linux App** | 🧪 Beta — `.deb` / `.rpm` / AppImage bundles build cleanly; X11 full-parity, Wayland has auto-paste + global-hotkey limitations (see [README Linux notes](../README.md#linux-notes)) |
 | **macOS App** | 🔜 Planned |
 | **Auth (Supabase)** | ✅ Complete — email/password |
-| **Stripe Billing** | 🔧 In Progress — functions written, pending deployment |
+| **Stripe Billing** | ✅ Complete — product, webhook, portal audited and verified end-of-2026-04-26 (see [LAUNCH_PLAN.md](LAUNCH_PLAN.md#where-we-actually-are-updated-2026-05-05)) |
 | **Managed API Keys** | ✅ Complete — Deepgram + Claude both required, provisioned for Pro users |
 | **Netlify Functions** | ✅ Complete — claude-proxy + deepgram-proxy written |
 | **Supabase Edge Functions** | ✅ Complete — create-checkout, billing-portal, stripe-webhook written |
