@@ -75,6 +75,7 @@ auto-update pipeline, and a working Tauri 2 release workflow.
 
 ### Security
 
+- **`openssl` bumped 0.10.78 → 0.10.79** — patches `GHSA-xp3w-r5p5-63rr` (UB in `X509Ref::ocsp_responders` for certs with non-UTF-8 OCSP URLs). Pulled in transitively via `reqwest` + `tokio-tungstenite` → `native-tls`. Not exploitable in MacroVox (we never call `ocsp_responders`, and on Windows `native-tls` uses SChannel rather than openssl), but updating closes the alert. `glib` 0.18.5 (medium) and `rand` 0.7.3 build-dep (low) remain pinned by upstream gtk-rs / Tauri's `kuchikiki` chain and will move when those parents do.
 - **Delta audit, 2026-04-19** — focused review of all code changes via the `/security-review` workflow. No vulnerabilities introduced (0 Critical / 0 High / 0 Medium / 0 Low). Details: [SECURITY_AUDIT_2026-04-19.md](SECURITY_AUDIT_2026-04-19.md).
 - **CORS: reject unknown origins** — Netlify proxy functions (`claude-proxy`, `deepgram-proxy`) previously fell back to the first allowed origin when the request origin didn't match the allowlist, effectively allowing any origin. Now returns 403 for unknown origins. Comparison is also case-insensitive now.
 - **Per-user rate limiting on proxy functions** — `claude-proxy` (200/hour) and `deepgram-proxy` (300/hour) now track API calls per user via Supabase `api_usage` table. Returns 429 with `Retry-After` header when exceeded.
