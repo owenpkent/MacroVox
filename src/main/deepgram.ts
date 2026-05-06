@@ -1,15 +1,40 @@
+/**
+ * MacroVox — Deepgram client for the Electron main process.
+ *
+ * Wraps the official `@deepgram/sdk` for two paths:
+ *   1. Real-time streaming via `start()` — pumps PCM from a `PassThrough`
+ *      into a Live Transcription socket and dispatches `(transcript, isFinal)`
+ *      callbacks. Used when the user has selected "streaming" mode.
+ *   2. Batch via `transcribeBatch()` — uploads a finished PCM buffer (wrapped
+ *      in a WAV header) to the pre-recorded API and returns the final
+ *      transcript. Used by the default "record then transcribe" mode.
+ *
+ * The Tauri rebuild moves both paths into Rust (`src-tauri/src/deepgram_ws.rs`
+ * + the `recording_stop` HTTP path); this module remains for the Electron build.
+ */
+
 import { createClient, LiveTranscriptionEvents, LiveClient } from '@deepgram/sdk'
 import { PassThrough } from 'stream'
 
+/** Callback fired for every interim and final transcript fragment. */
 type TranscriptCallback = (transcript: string, isFinal: boolean) => void
 
+/** Result returned by the pre-recorded ("batch") transcription path. */
 export interface BatchTranscriptResult {
+  /** Final transcript text (joined alternatives). */
   transcript: string
+  /** Confidence of the top alternative, 0.0–1.0. */
   confidence: number
+  /** Audio duration in seconds, as reported by Deepgram metadata. */
   duration: number
 }
 
-// Convert raw PCM buffer to WAV format
+/**
+ * Wraps a raw PCM buffer in a 44-byte RIFF/WAV header.
+ *
+ * Deepgram's pre-recorded API accepts raw PCM but is more forgiving when
+ * given a proper WAV container with explicit sample-rate/channel metadata.
+ */
 function pcmToWav(pcmBuffer: Buffer, sampleRate: number = 16000, channels: number = 1, bitsPerSample: number = 16): Buffer {
   const byteRate = sampleRate * channels * bitsPerSample / 8
   const blockAlign = channels * bitsPerSample / 8
@@ -41,6 +66,11 @@ function pcmToWav(pcmBuffer: Buffer, sampleRate: number = 16000, channels: numbe
   return Buffer.concat([header, pcmBuffer])
 }
 
+/**
+ * Manages a Deepgram session — either a Live Transcription WebSocket or a
+ * one-shot pre-recorded upload. One instance handles one logical session
+ * (start → stop, or a single batch call).
+ */
 export class DeepgramStreamer {
   private client: ReturnType<typeof createClient>
   private connection: LiveClient | null = null
@@ -50,6 +80,7 @@ export class DeepgramStreamer {
   private errorHandler: ((err: Error) => void) | null = null
   private endHandler: (() => void) | null = null
 
+  /** @param apiKey Deepgram API token. Throws synchronously if empty. */
   constructor(apiKey: string) {
     if (!apiKey) {
       throw new Error('Deepgram API key is required')
@@ -57,6 +88,18 @@ export class DeepgramStreamer {
     this.client = createClient(apiKey)
   }
 
+  /**
+   * Opens a Live Transcription WebSocket and pipes `audioStream` into it.
+   *
+   * The promise resolves when Deepgram's `Open` event fires (so callers can
+   * be sure the connection is ready before they signal "recording" in the UI).
+   * Transcripts arrive via `onTranscript(text, isFinal)` for both interim and
+   * final results; empty fragments are filtered.
+   *
+   * Tunings (set on the live options): `utterance_end_ms: 500` and
+   * `endpointing: 200` are tighter than the SDK defaults so a sentence ends
+   * faster after a brief pause — important for dictation feel.
+   */
   async start(audioStream: PassThrough, onTranscript: TranscriptCallback): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
@@ -143,6 +186,13 @@ export class DeepgramStreamer {
     })
   }
 
+  /**
+   * Detaches from the audio stream, then closes the Deepgram socket.
+   *
+   * Listeners are removed **before** the connection is finished so a chunk
+   * arriving from a still-alive ffmpeg stream can't try to write to a closed
+   * socket. Safe to call multiple times.
+   */
   stop(): void {
     // Remove audio stream listeners before closing connection to prevent
     // stale chunks being sent if the ffmpeg stream outlives this session
@@ -163,10 +213,23 @@ export class DeepgramStreamer {
     }
   }
 
+  /** True between Deepgram's `Open` and `Close` events (or until `stop()`). */
   isLive(): boolean {
     return this.isConnected
   }
 
+  /**
+   * Uploads a completed PCM buffer to Deepgram's pre-recorded API and
+   * returns the final transcript.
+   *
+   * @param audioBuffer  Raw 16-bit signed little-endian PCM at 16 kHz mono.
+   * @param keywords     Optional keyword-boost list (forwarded to the API).
+   * @returns Transcript text plus confidence/duration metadata.
+   *
+   * Logging note: error paths log `err.message` only — the SDK attaches the
+   * outgoing request to errors, which carries the `Authorization` header. A
+   * naive `JSON.stringify(err)` would leak the API key into stdout.
+   */
   async transcribeBatch(audioBuffer: Buffer, keywords?: string[]): Promise<BatchTranscriptResult> {
     console.log(`[Deepgram] Transcribing batch audio: ${audioBuffer.length} bytes`)
     

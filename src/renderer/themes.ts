@@ -1,4 +1,13 @@
-// Theme definitions for MacroVox
+/**
+ * MacroVox theme catalog.
+ *
+ * Each `Theme` is a self-contained color palette consumed by `ThemeContext`,
+ * which copies the values into CSS custom properties on `<html>`. Theme names
+ * are an Expanse-fandom homage; the active theme is persisted in `localStorage`
+ * under `app_theme` (default `'mcrn'`).
+ */
+
+/** A named color palette. */
 export interface Theme {
   id: string
   name: string
@@ -155,14 +164,17 @@ export const THEMES: Theme[] = [
   },
 ]
 
+/** Looks up a theme by id; falls back to the default (`THEMES[0]`) on miss. */
 export function getTheme(themeId: string): Theme {
   return THEMES.find(t => t.id === themeId) || THEMES[0]
 }
 
+/** Reads the persisted theme id from localStorage, defaulting to `'mcrn'`. */
 export function getStoredTheme(): string {
   return localStorage.getItem('app_theme') || 'mcrn'
 }
 
+/** Persists the active theme id to localStorage. */
 export function setStoredTheme(themeId: string): void {
   localStorage.setItem('app_theme', themeId)
 }

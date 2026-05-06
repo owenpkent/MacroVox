@@ -10,11 +10,17 @@ import { useState, useEffect, useCallback } from 'react'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 
+/** Reactive state surfaced by `useUpdater` for the update-prompt UI. */
 interface UpdateState {
+  /** A `check()` call is in flight. */
   checking: boolean
+  /** A newer version is available on the configured updater endpoint. */
   available: boolean
+  /** A `downloadAndInstall()` call is in flight. */
   downloading: boolean
+  /** Latest version string from the updater manifest, if `available`. */
   version: string | null
+  /** Last error message from `check()` or `downloadAndInstall()`. */
   error: string | null
 }
 

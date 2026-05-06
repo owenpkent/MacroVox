@@ -1,9 +1,32 @@
+/**
+ * usePostProcessing — Claude transcript cleanup via the Netlify proxy.
+ *
+ * Sends the raw Deepgram transcript to `claude-proxy` along with the user's
+ * optional `post_processing_context` (their description of speech patterns)
+ * and number-format / language preferences. Returns the cleaned text or
+ * `null` on failure (network, proxy error, abort, missing session).
+ *
+ * **Pro / Team only.** The hook fails closed when there's no Supabase session,
+ * and the dev-bypass token is only used under `netlify dev` where the proxy
+ * itself enforces additional `NETLIFY_DEV` + `DEV_BYPASS_AUTH` env checks.
+ *
+ * Prompt-injection guard: any `<user_speech_context>` closing-tag-like
+ * sequence in the user's context is escaped before interpolation so a
+ * malicious context can't break out of the delimiter and inject system-level
+ * instructions to Claude. Context is also capped at 800 chars.
+ *
+ * Requests have a 15-second `AbortController` timeout to keep the UI
+ * responsive when the proxy is slow or unreachable.
+ */
+
 import { useState, useCallback } from 'react'
 import { ANTHROPIC_MODEL_CLEANUP, API } from '../config'
 import { supabase } from '../lib/supabase'
 
 interface UsePostProcessingOptions {
+  /** True when the user is authenticated and entitled to managed AI. */
   useProxy?: boolean
+  /** Supabase user UUID — required when `useProxy` is true. */
   userId?: string
 }
 

@@ -1,3 +1,15 @@
+/**
+ * AgentiveWriting — voice → AI-generated content (email/message/document).
+ *
+ * Records the user's spoken command, transcribes it through Deepgram, then
+ * sends the transcript to Claude (via `useAgentiveWriting`) which infers the
+ * format and tone and produces finished writing. The user can edit the
+ * transcribed command and click "regenerate" to try again without re-recording.
+ *
+ * **Deferred from v1 UI** per `project_writing_tab_deferred` — this component
+ * is kept in tree for the post-launch revival but no parent currently mounts it.
+ */
+
 import { useState, useRef } from 'react'
 import { Mic, MicOff, Copy, Check, RefreshCw, Loader2 } from 'lucide-react'
 import { useAgentiveWriting } from '../hooks/useAgentiveWriting'
@@ -5,7 +17,9 @@ import * as ipc from '../lib/tauri-ipc'
 import type { AppUser } from '../lib/tauri-ipc'
 
 interface Props {
+  /** Authenticated user (drives Pro/Team gating in `useAgentiveWriting`). */
   user: AppUser | null
+  /** Deepgram API key from the user's managed-keys row. */
   apiKey: string | null
 }
 

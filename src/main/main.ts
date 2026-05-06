@@ -1,7 +1,30 @@
-// MacroVox — Standalone Voice Dictation App (main process)
-// Powered by Deepgram speech-to-text with AI post-processing.
-// No IDE features, no file system access.
-// Uses preload.ts for a restricted renderer context.
+/**
+ * MacroVox — Electron main process.
+ *
+ * Creates the dictation and settings windows, owns the singleton
+ * `AudioCapture`/`DeepgramStreamer`/`AuthManager` instances, and exposes the
+ * IPC surface consumed by `preload.ts`. The Tauri rebuild reproduces this
+ * file's responsibilities in `src-tauri/src/lib.rs` + `commands.rs`.
+ *
+ * ## Process model
+ * - **Dictation window**: small always-on-top React app for recording.
+ *   Hidden (not destroyed) on close when `minimize_to_tray` is on so
+ *   re-showing via the tray / Ctrl+Space stays cheap.
+ * - **Settings window**: secondary modal-ish window. Closing it actually
+ *   destroys it (re-created on demand).
+ * - **Pre-warm**: `AudioCapture.startPersistent()` runs as soon as the
+ *   dictation window finishes loading so the user doesn't pay ffmpeg
+ *   startup latency on the first Ctrl+Space.
+ *
+ * ## Security
+ * - All renderer windows run with `contextIsolation: true`,
+ *   `nodeIntegration: false`, `sandbox: true`.
+ * - `BROADCASTABLE_SETTINGS` allow-lists which keys `settings:broadcast`
+ *   may forward to the renderer's localStorage — keeps a future caller
+ *   from poisoning `post_processing_context` (which feeds Claude prompts).
+ * - `EXTERNAL_URL_ALLOWLIST` constrains `shell.openExternal` to known
+ *   Stripe hosts so a tampered checkout response can't open arbitrary URLs.
+ */
 
 import { app, BrowserWindow, ipcMain, Menu, Tray, globalShortcut, nativeImage, clipboard, shell } from 'electron'
 import * as path from 'path'
@@ -48,6 +71,11 @@ const EXTERNAL_URL_ALLOWLIST = new Set([
   'stripe.com',
 ])
 
+/**
+ * Opens `rawUrl` in the user's default browser **only** if it's HTTPS and the
+ * hostname is in `EXTERNAL_URL_ALLOWLIST`. Returns `true` on success.
+ * Used as the gate for Stripe checkout / billing portal redirects.
+ */
 function openExternalSafely(rawUrl: string): boolean {
   try {
     const parsed = new URL(rawUrl)
@@ -86,6 +114,15 @@ const BROADCASTABLE_SETTINGS = new Set([
 // Window creation
 // ============================================================================
 
+/**
+ * Creates the dictation `BrowserWindow` if one doesn't already exist and
+ * pre-warms `AudioCapture`. Idempotent: subsequent calls just show/focus the
+ * existing window.
+ *
+ * @param autoStartRecording If true, fire `quick-dictation-toggle` once the
+ *                           window is ready (used by the Ctrl+Space hotkey).
+ * @param hidden             If true, create the window but don't show it.
+ */
 function createDictationWindow(autoStartRecording = false, hidden = false) {
   if (dictationWindow) {
     if (!hidden) {
@@ -169,6 +206,10 @@ function createDictationWindow(autoStartRecording = false, hidden = false) {
   })
 }
 
+/**
+ * Creates the settings `BrowserWindow`. If one is already open it just gains
+ * focus. The window is destroyed on close (not hidden) — re-created on demand.
+ */
 function createSettingsWindow() {
   if (settingsWindow) {
     settingsWindow.focus()
@@ -205,6 +246,11 @@ function createSettingsWindow() {
   })
 }
 
+/**
+ * Loads the app icon from the resources directory, scaled to 256×256.
+ * Returns an empty image on failure rather than throwing — the window will
+ * still render, just without a custom icon.
+ */
 function getAppIcon(): Electron.NativeImage {
   try {
     const iconPath = app.isPackaged
@@ -216,6 +262,10 @@ function getAppIcon(): Electron.NativeImage {
   return nativeImage.createEmpty()
 }
 
+/**
+ * Builds the system tray icon and right-click menu. Left-click on the tray
+ * icon shows the dictation window.
+ */
 function createTray() {
   const icon = getAppIcon().resize({ width: 32, height: 32 })
   tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon)
@@ -233,6 +283,10 @@ function createTray() {
   tray.on('click', () => { createDictationWindow(); dictationWindow?.show() })
 }
 
+/**
+ * Registers global hotkeys. Today: Ctrl+Space (Cmd+Space on macOS) opens
+ * the dictation window and starts recording.
+ */
 function registerGlobalShortcuts() {
   // Quick Dictation: Ctrl+Space
   globalShortcut.register('CommandOrControl+Space', () => {

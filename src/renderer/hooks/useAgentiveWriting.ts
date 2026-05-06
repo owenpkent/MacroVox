@@ -1,11 +1,34 @@
+/**
+ * useAgentiveWriting — generate written content from a spoken command.
+ *
+ * Sends the user's transcript through the Netlify `claude-proxy` with a
+ * writing-focused system prompt and the optional `writing_style_profile`
+ * setting (the user's tone/voice description). Returns the generated text
+ * or `null` on failure.
+ *
+ * **Pro / Team only.** Same fail-closed auth pattern as `usePostProcessing`.
+ *
+ * Prompt-injection guard: closing-tag-like sequences in the style profile
+ * are escaped before interpolation into the `<user_style_profile>` block,
+ * so a malicious profile can't break out and inject system-level
+ * instructions. Profile is capped at 800 chars.
+ *
+ * Note: the Agentive Writing tab is deferred from the v1 launch UI per
+ * `project_writing_tab_deferred` — this hook is kept in tree for the
+ * post-launch revival.
+ */
+
 import { useState, useCallback } from 'react'
 import { ANTHROPIC_MODEL_WRITING, API } from '../config'
 import { supabase } from '../lib/supabase'
 
+/** System prompt sent to Claude alongside the user's spoken command. */
 const SYSTEM_PROMPT = `You are an expert writer. Based on the user's spoken request, produce the appropriate written content — an email, a message, a book chapter, meeting notes, a document, or anything else. Infer the format and tone entirely from context. Return only the finished text — no commentary, no preamble, no meta-explanation of what you wrote.`
 
 interface Options {
+  /** True when the user is authenticated and entitled to managed AI. */
   useProxy: boolean
+  /** Supabase user UUID — required when `useProxy` is true. */
   userId?: string
 }
 

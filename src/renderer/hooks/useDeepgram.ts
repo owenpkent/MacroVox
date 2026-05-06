@@ -1,3 +1,20 @@
+/**
+ * useDeepgram — recording + transcription state for a single dictation flow.
+ *
+ * Wraps the IPC bridge (`startDeepgram`/`startRecording` etc.) and exposes
+ * UI-friendly state: `isRecording`, `isProcessing`, `transcript`, `error`,
+ * `audioLevel`. Supports both `'streaming'` (live WebSocket) and `'batch'`
+ * (record-then-upload) modes via the `mode` argument.
+ *
+ * In streaming mode the returned `transcript` is **not** populated by this
+ * hook — interim/final fragments arrive via `onTranscript` events and are
+ * combined by the caller. `stopRecording` returns `null` in that case.
+ *
+ * Audio level polling runs every 50 ms while recording so the UI VU meter
+ * stays smooth; the interval is cleared on stop and on unmount via the
+ * `audioLevelIntervalRef` guard.
+ */
+
 import { useState, useRef, useCallback } from 'react'
 import * as ipc from '../lib/tauri-ipc'
 
@@ -9,6 +26,10 @@ export function useDeepgram() {
   const [audioLevel, setAudioLevel] = useState(0)
   const audioLevelIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  /**
+   * Begins capture. Returns `true` if the backend accepted the start; `false`
+   * (and sets `error`) if it rejected. The audio level poller starts on success.
+   */
   const startRecording = useCallback(async (apiKey: string, mode: 'streaming' | 'batch' = 'batch') => {
     setError(null)
 
@@ -36,6 +57,11 @@ export function useDeepgram() {
     return true
   }, [])
 
+  /**
+   * Stops capture. In batch mode resolves to the final transcript string (or
+   * `null` on failure). In streaming mode always resolves to `null` — the
+   * transcript stream comes from `onTranscript` events handled by the caller.
+   */
   const stopRecording = useCallback(async (apiKey: string, mode: 'streaming' | 'batch' = 'batch') => {
     if (audioLevelIntervalRef.current) {
       clearInterval(audioLevelIntervalRef.current)

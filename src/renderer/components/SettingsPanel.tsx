@@ -1,3 +1,22 @@
+/**
+ * SettingsPanel — sole UI for all user-facing configuration.
+ *
+ * Renders the entire settings window content (`settings.tsx` mounts this with
+ * `isPopup={true}`). Sections include:
+ *   - Account (sign-in, sign-up, OAuth, billing portal, checkout)
+ *   - Audio device picker
+ *   - Dictation behavior (auto-copy, auto-paste, AI cleanup, auto-cutoff,
+ *     transcription mode, language, number format)
+ *   - Window behavior (always-on-top, minimize-to-tray, global hotkey)
+ *   - Voice buffer management (capacity, browse history via `<VoiceHistory>`)
+ *   - Theme picker
+ *
+ * Setting changes are written to `localStorage` immediately and broadcast via
+ * `ipc.broadcastSettings()` so the dictation window picks them up live.
+ * The backend filters incoming broadcasts against an allow-list — see
+ * `src/main/main.ts` `BROADCASTABLE_SETTINGS`.
+ */
+
 import { useState, useEffect } from 'react'
 import { Settings, Mic, X, RefreshCw, Sparkles, Loader2, CreditCard, MessageSquare, Pin, Palette, LogIn, User, HardDrive, Trash2, FolderOpen } from 'lucide-react'
 import { THEMES, getStoredTheme, setStoredTheme } from '../themes'
@@ -7,9 +26,13 @@ import type { AppUser } from '../lib/tauri-ipc'
 import * as auth from '../lib/auth'
 
 interface SettingsPanelProps {
+  /** Render as visible (legacy modal flag — `isPopup` mode ignores this). */
   isOpen: boolean
+  /** Called when the user dismisses the panel (modal mode) or closes the window. */
   onClose: () => void
+  /** Currently authenticated user, or `null` if signed out. */
   user?: AppUser | null
+  /** True when mounted as a standalone Tauri window rather than an in-app modal. */
   isPopup?: boolean
 }
 

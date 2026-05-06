@@ -1,3 +1,30 @@
+/**
+ * MacroVox — Dictation window component.
+ *
+ * Owns the entire record/transcribe/post-process flow:
+ *   1. Loads the Deepgram API key from the current Supabase session (managed
+ *      keys for Pro subscribers); polls every 5 s to pick up sign-in from the
+ *      settings window.
+ *   2. Starts capture in either `'streaming'` mode (live WebSocket; transcripts
+ *      arrive via `onTranscript` events) or `'batch'` mode (record then upload
+ *      to Deepgram pre-recorded API on stop).
+ *   3. Optionally runs Claude cleanup in the background via `usePostProcessing`
+ *      and updates the clipboard if the cleaned text differs from the raw
+ *      transcript — the raw text is copied first (optimistic) so the user
+ *      doesn't wait for cleanup.
+ *   4. Optionally fires `dictation:autoPaste` to send Ctrl+V to the previously
+ *      focused window after the dictation window hides itself.
+ *
+ * Concurrency guards:
+ *   - `operationInProgressRef` prevents double-clicking the record button from
+ *     starting a second start/stop while the first is still in flight.
+ *   - `autoCutoffFiredRef` distinguishes a user-initiated stop from a timer
+ *     auto-stop so the prior transcript isn't double-prepended in the latter case.
+ *
+ * Hotkey integration: listens for `quick-dictation-start` (begin recording on
+ * first show) and `quick-dictation-toggle` (start ↔ stop+copy) events emitted
+ * by the backend in response to the global Ctrl+Space hotkey.
+ */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Mic, MicOff, Copy, Check, Trash2, Loader2, Settings, Minus, X } from 'lucide-react'
 import { usePostProcessing } from '../hooks/usePostProcessing'

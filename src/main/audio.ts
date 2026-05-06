@@ -1,10 +1,39 @@
+/**
+ * MacroVox — Electron-era audio capture (ffmpeg subprocess).
+ *
+ * Spawns `ffmpeg` to capture microphone audio as 16-bit signed little-endian
+ * PCM at 16 kHz mono and exposes:
+ *   - level metering (RMS + peak, smoothed) for the UI VU meter
+ *   - a buffered "record-then-transcribe" path (`startBuffering`/`stopBuffering`)
+ *   - a streaming `PassThrough` consumed by `DeepgramStreamer`
+ *
+ * The Tauri rebuild uses `cpal` directly (`src-tauri/src/audio.rs`) which
+ * removes the subprocess and ~700 ms of ffmpeg startup latency. This module
+ * remains in tree for the Electron build path.
+ *
+ * ## Platform notes
+ * - Windows: enumerates DirectShow devices via `ffmpeg -list_devices`. Output
+ *   is parsed from stderr because ffmpeg writes the device list there and exits
+ *   non-zero. Stereo input is downmixed to mono via the `pan` filter so we
+ *   capture audio even when one channel is dead.
+ * - macOS: AVFoundation `:default` (whatever the system picks).
+ * - Linux: PulseAudio `default` source.
+ */
+
 import { spawn, spawnSync, ChildProcess, execSync } from 'child_process'
 import { PassThrough } from 'stream'
 import * as path from 'path'
 import * as os from 'os'
 import * as fs from 'fs'
 
-// Find ffmpeg executable - checks PATH and common installation locations
+/**
+ * Locates an `ffmpeg` executable.
+ *
+ * Tries PATH first, then probes well-known install locations (WinGet's
+ * `Gyan.FFmpeg` package, common `C:\ffmpeg`/`Program Files` paths on Windows;
+ * Homebrew on macOS; `/usr/bin` on Linux). Returns `null` if nothing is found,
+ * leaving the caller to surface an install-instruction error to the user.
+ */
 function findFfmpeg(): string | null {
   // First try PATH
   try {
@@ -68,10 +97,17 @@ function findFfmpeg(): string | null {
   return null
 }
 
-// List Windows audio devices using ffmpeg.
-// Uses spawnSync (not execSync) with the path as a separate argv entry so a
-// path containing spaces / quotes / shell metacharacters can never be reparsed
-// by /bin/sh or cmd.exe.
+/**
+ * Enumerates DirectShow audio capture devices on Windows by parsing
+ * `ffmpeg -list_devices`.
+ *
+ * Uses `spawnSync` (not `execSync`) with the binary path as a separate argv
+ * entry so a path containing spaces, quotes, or shell metacharacters can never
+ * be reparsed by `/bin/sh` or `cmd.exe`.
+ *
+ * `ffmpeg -list_devices` exits non-zero but writes the device list to **stderr**,
+ * so the parser concatenates stdout + stderr.
+ */
 function listWindowsAudioDevices(ffmpegPath: string): string[] {
   const result = spawnSync(
     ffmpegPath,
@@ -88,6 +124,15 @@ function listWindowsAudioDevices(ffmpegPath: string): string[] {
   return devices
 }
 
+/**
+ * Microphone capture session backed by an `ffmpeg` child process.
+ *
+ * Lifecycle: `new AudioCapture(device?)` → `start()` (or `startPersistent()` to
+ * pre-warm) → optional `enableStreaming()`/`startBuffering()` → `stop()`.
+ *
+ * One instance owns one ffmpeg subprocess. `stop()` kills the process and
+ * tears down the `PassThrough` stream; the instance should be discarded after.
+ */
 export class AudioCapture {
   private recordingProcess: ChildProcess | null = null
   private audioStream: PassThrough | null = null
@@ -98,7 +143,12 @@ export class AudioCapture {
   private isBuffering: boolean = false
   private selectedDevice: string | null = null
   private streamingEnabled: boolean = false
-  
+
+  /**
+   * Returns the list of input device names.
+   * On Windows this is the DirectShow device list; on other platforms it's
+   * just `['default']` because we hand audio routing to the OS.
+   */
   static getAvailableDevices(): string[] {
     const ffmpegPath = findFfmpeg()
     if (!ffmpegPath) return []
@@ -109,10 +159,22 @@ export class AudioCapture {
     return ['default']
   }
 
+  /**
+   * @param deviceName - Optional Windows DirectShow device name. Pass nothing
+   *                     to let the platform pick a default (or the first device
+   *                     containing "Microphone" on Windows).
+   */
   constructor(deviceName?: string) {
     this.selectedDevice = deviceName || null
   }
 
+  /**
+   * Spawns ffmpeg and resolves once the first audio chunk arrives (or after
+   * 1.5 s as a fallback so the UI is never blocked indefinitely if the OS
+   * decides to take a while to grant mic access).
+   *
+   * Rejects with an install-instructions error if ffmpeg can't be located.
+   */
   async start(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
@@ -288,6 +350,10 @@ export class AudioCapture {
     })
   }
 
+  /**
+   * Kills the ffmpeg subprocess, destroys the streaming PassThrough, and
+   * resets the level meter. Safe to call multiple times.
+   */
   stop(): void {
     if (this.levelInterval) {
       clearInterval(this.levelInterval)
@@ -309,10 +375,16 @@ export class AudioCapture {
     this.audioLevel = 0
   }
 
+  /** Returns the live PCM stream, or `null` if streaming hasn't been enabled. */
   getStream(): PassThrough | null {
     return this.audioStream
   }
 
+  /**
+   * Creates the `PassThrough` consumer (if needed) and starts forwarding PCM
+   * chunks to it. The stream is created lazily — without an active consumer
+   * we'd buffer ~32 KB/s indefinitely while ffmpeg is pre-warmed but idle.
+   */
   enableStreaming(): PassThrough {
     if (!this.audioStream || this.audioStream.destroyed) {
       this.audioStream = new PassThrough()
@@ -325,6 +397,10 @@ export class AudioCapture {
     return this.audioStream
   }
 
+  /**
+   * Stops forwarding PCM to the `PassThrough` and tears it down so memory
+   * isn't held while ffmpeg keeps running (pre-warm path).
+   */
   disableStreaming(): void {
     this.streamingEnabled = false
     if (this.audioStream && !this.audioStream.destroyed) {
@@ -334,16 +410,25 @@ export class AudioCapture {
     console.log('[Audio] Streaming disabled — PassThrough destroyed to free memory')
   }
 
+  /** Current smoothed level, range 0.0–1.0, suitable for VU rendering. */
   getAudioLevel(): number {
     return this.audioLevel
   }
 
+  /**
+   * Begins accumulating raw PCM chunks for the batch-transcribe path
+   * (`recording:stop` → Deepgram pre-recorded API). Discards any prior buffer.
+   */
   startBuffering(): void {
     this.audioBuffer = []
     this.isBuffering = true
     console.log('[Audio] Buffering started')
   }
 
+  /**
+   * Stops buffering and returns the concatenated PCM buffer (or `null` if
+   * no data was captured). Empties the internal buffer regardless.
+   */
   stopBuffering(): Buffer | null {
     this.isBuffering = false
     if (this.audioBuffer.length === 0) {
@@ -356,18 +441,24 @@ export class AudioCapture {
     return fullBuffer
   }
 
+  /** Snapshot of the buffered audio without stopping the buffer. */
   getBufferedAudio(): Buffer | null {
     if (this.audioBuffer.length === 0) return null
     return Buffer.concat(this.audioBuffer)
   }
 
+  /** True once the ffmpeg subprocess has been spawned and not yet stopped. */
   isRunning(): boolean {
     return this.recordingProcess !== null
   }
 
-  // Start audio capture and keep ffmpeg alive indefinitely.
-  // Buffering is still controlled via startBuffering/stopBuffering.
-  // Call this once when the dictation window opens; call stop() when it closes.
+  /**
+   * Starts the capture session and keeps ffmpeg alive indefinitely (pre-warm).
+   *
+   * Call once when the dictation window opens; call `stop()` when it closes.
+   * Buffering remains opt-in via `startBuffering`/`stopBuffering`. No-op if
+   * already running.
+   */
   async startPersistent(): Promise<void> {
     if (this.recordingProcess) {
       console.log('[Audio] Already running, skipping startPersistent')

@@ -1,10 +1,30 @@
+/**
+ * MacroVox theme context.
+ *
+ * The provider:
+ *   1. Reads the persisted theme id from `localStorage` on mount and applies
+ *      it to the document's CSS custom properties.
+ *   2. Subscribes to backend `theme-changed` events so a theme picked in the
+ *      settings window propagates to the dictation window in real time.
+ *   3. Exposes `setTheme(id, broadcast?)` to children. When `broadcast` is
+ *      true (default) the change is forwarded to the backend so the other
+ *      window updates too; the settings panel uses `false` for the local
+ *      `theme-change` DOM event to avoid double-broadcasts.
+ *
+ * `useTheme()` throws outside a provider so a missing provider fails loudly
+ * during development instead of silently rendering the wrong theme.
+ */
+
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { Theme, THEMES, getStoredTheme, setStoredTheme } from './themes'
 import * as ipc from './lib/tauri-ipc'
 
 interface ThemeContextType {
+  /** Resolved theme object (colors + metadata). */
   theme: Theme
+  /** Theme id (`'mcrn'`, `'mars'`, etc.) — useful for radio-button comparisons. */
   themeId: string
+  /** Switch theme. Persists to localStorage and broadcasts to other windows. */
   setTheme: (themeId: string) => void
 }
 
@@ -58,12 +78,21 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   )
 }
 
+/**
+ * Returns the active theme and a setter. Throws if used outside a
+ * `<ThemeProvider>` so a missing provider fails fast in dev.
+ */
 export function useTheme() {
   const context = useContext(ThemeContext)
   if (!context) throw new Error('useTheme must be used within a ThemeProvider')
   return context
 }
 
+/**
+ * Writes the theme's color palette to CSS custom properties on
+ * `document.documentElement`. All Tailwind-driven `style={{ color: 'var(...)' }}`
+ * call sites read from these variables.
+ */
 function applyThemeToDocument(theme: Theme) {
   const root = document.documentElement
   const { colors } = theme

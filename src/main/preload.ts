@@ -1,7 +1,22 @@
+/**
+ * MacroVox — Electron preload (restricted IPC surface).
+ *
+ * Exposes a hand-picked set of `ipcRenderer.invoke` channels and event
+ * subscriptions to the renderer via `contextBridge.exposeInMainWorld`.
+ * Anything not listed here is unreachable from the renderer, which is the
+ * whole point of `contextIsolation: true` + `nodeIntegration: false`.
+ *
+ * Each `on*` subscriber returns a cleanup function that calls
+ * `removeAllListeners` for that channel — callers are expected to invoke it
+ * from a React `useEffect` cleanup so a window reload doesn't accumulate
+ * listeners.
+ *
+ * The companion `Window.electronAPI` declaration at the bottom keeps the
+ * renderer's TypeScript honest about what's actually exposed.
+ */
+
 import { contextBridge, ipcRenderer } from 'electron'
 
-// MacroVox — Restricted preload for the standalone dictation app.
-// No GitHub auth, file system, or subscription IPC is exposed.
 contextBridge.exposeInMainWorld('electronAPI', {
   // Audio devices
   listAudioDevices: () => ipcRenderer.invoke('audio:listDevices'),
