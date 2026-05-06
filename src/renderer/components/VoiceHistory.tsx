@@ -36,15 +36,23 @@ export function VoiceHistory({ user, apiKey }: VoiceHistoryProps) {
     userId: user?.id,
   })
 
-  const loadRecordings = useCallback(async () => {
-    setLoading(true)
+  const loadRecordings = useCallback(async (showSpinner = true) => {
+    if (showSpinner) setLoading(true)
     const list = await ipc.voiceBufferList()
     setRecordings(list)
-    setLoading(false)
+    if (showSpinner) setLoading(false)
   }, [])
 
   useEffect(() => {
     loadRecordings()
+  }, [loadRecordings])
+
+  // Refresh when a new recording is saved elsewhere (e.g., DictationMode).
+  // Silent reload — no spinner flash on the existing list.
+  useEffect(() => {
+    const handler = () => { loadRecordings(false) }
+    window.addEventListener('voice-buffer-updated', handler)
+    return () => window.removeEventListener('voice-buffer-updated', handler)
   }, [loadRecordings])
 
   // Close context menu on click outside

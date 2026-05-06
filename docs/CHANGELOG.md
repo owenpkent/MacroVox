@@ -59,6 +59,8 @@ auto-update pipeline, and a working Tauri 2 release workflow.
 - **Settings window black screen** — root cause was two-fold: `devUrl` pointed to the full `dictation.html` URL instead of Vite root, and `WebviewUrl::App` for programmatically-created windows always uses `tauri://localhost`, never the dev server. Fix: declare the settings window in `tauri.conf.json` like the main window (hidden at startup); `settings_open_window` now just calls `show()` + `set_focus()` instead of constructing the window at runtime.
 - **Minimize and close buttons unresponsive** — the entire titlebar `div` had `data-tauri-drag-region`, swallowing click events. Only the `MacroVox` label span carries the drag attribute now; the buttons sit in a sibling flex container outside the drag region.
 - **Settings panel error boundary** — if the settings panel fails to render, an error message is shown instead of a blank page.
+- **Dictation history list now refreshes live** — the recordings list and storage-usage bar in the settings panel only loaded on mount, so newly-saved dictations didn't appear until the next app launch. `DictationMode` now dispatches a `voice-buffer-updated` window event after `voiceBufferSave` resolves, and `VoiceHistory` + `SettingsPanel` listen for it to silently re-fetch (no spinner flash on the existing list).
+- **"Open folder" button readability** — the dictation history "Open folder" action used `var(--text-muted)`, which rendered nearly invisible against the panel background. Bumped to `var(--text-secondary)` to match the rest of the panel's actionable text.
 
 ### Stability
 

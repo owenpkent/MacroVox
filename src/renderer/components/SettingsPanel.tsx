@@ -113,6 +113,15 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
     ipc.voiceBufferInfo().then(setVoiceBufferInfo).catch(() => {})
   }, [voiceBufferEnabled])
 
+  // Keep the storage usage bar in sync when DictationMode saves a new recording.
+  useEffect(() => {
+    const handler = () => {
+      ipc.voiceBufferInfo().then(setVoiceBufferInfo).catch(() => {})
+    }
+    window.addEventListener('voice-buffer-updated', handler)
+    return () => window.removeEventListener('voice-buffer-updated', handler)
+  }, [])
+
   // One-time platform probe so the UI can reflect runtime limits (e.g.,
   // auto-paste isn't available on Wayland — enigo can't inject keys there).
   useEffect(() => {
@@ -875,7 +884,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
                         <button
                           onClick={() => ipc.voiceBufferOpenFolder()}
                           className="flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-white/10 transition-colors"
-                          style={{ color: 'var(--text-muted)' }}
+                          style={{ color: 'var(--text-secondary)' }}
                           title="Open storage folder"
                         >
                           <FolderOpen size={12} /> Open folder
