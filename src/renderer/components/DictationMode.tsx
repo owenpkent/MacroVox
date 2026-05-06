@@ -251,10 +251,12 @@ export function DictationMode() {
       const currentText = streamingTranscriptRef.current
       if (currentText) {
         // Save to voice buffer (fire-and-forget — backend checks if enabled).
-        // Notify the settings panel so the recordings list refreshes without
-        // requiring an app restart.
+        // Broadcast across webviews so the settings window's recordings list
+        // and usage bar refresh without requiring an app restart. Uses Tauri's
+        // event bus because the dictation HUD and settings panel are separate
+        // webviews — DOM CustomEvents don't cross that boundary.
         ipc.voiceBufferSave(currentText)
-          .then(() => window.dispatchEvent(new CustomEvent('voice-buffer-updated')))
+          .then(() => ipc.emitVoiceBufferUpdated())
           .catch(() => {})
         // Optimistic: copy raw transcript immediately, don't wait for cleanup
         if (autoCopyOnStop) {

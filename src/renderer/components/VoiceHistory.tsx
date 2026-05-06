@@ -47,12 +47,12 @@ export function VoiceHistory({ user, apiKey }: VoiceHistoryProps) {
     loadRecordings()
   }, [loadRecordings])
 
-  // Refresh when a new recording is saved elsewhere (e.g., DictationMode).
+  // Refresh when a new recording is saved elsewhere (e.g., the dictation
+  // HUD window). Listens on Tauri's cross-webview event bus because the
+  // settings panel and dictation HUD are separate Tauri windows.
   // Silent reload — no spinner flash on the existing list.
   useEffect(() => {
-    const handler = () => { loadRecordings(false) }
-    window.addEventListener('voice-buffer-updated', handler)
-    return () => window.removeEventListener('voice-buffer-updated', handler)
+    return ipc.onVoiceBufferUpdated(() => { loadRecordings(false) })
   }, [loadRecordings])
 
   // Close context menu on click outside

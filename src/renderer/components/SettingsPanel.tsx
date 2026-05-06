@@ -113,13 +113,13 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
     ipc.voiceBufferInfo().then(setVoiceBufferInfo).catch(() => {})
   }, [voiceBufferEnabled])
 
-  // Keep the storage usage bar in sync when DictationMode saves a new recording.
+  // Keep the storage usage bar in sync when the dictation HUD saves a new
+  // recording. Uses Tauri's cross-webview event bus — the dictation window
+  // and settings window are separate webviews, so DOM events don't cross.
   useEffect(() => {
-    const handler = () => {
+    return ipc.onVoiceBufferUpdated(() => {
       ipc.voiceBufferInfo().then(setVoiceBufferInfo).catch(() => {})
-    }
-    window.addEventListener('voice-buffer-updated', handler)
-    return () => window.removeEventListener('voice-buffer-updated', handler)
+    })
   }, [])
 
   // One-time platform probe so the UI can reflect runtime limits (e.g.,

@@ -26,7 +26,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
+import { emit, listen } from '@tauri-apps/api/event'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 
 // Re-export AppUser so existing component imports (`from '../lib/tauri-ipc'`) still resolve.
@@ -211,6 +211,19 @@ export const voiceBufferList = (): Promise<VoiceRecording[]> =>
 
 export const voiceBufferInfo = (): Promise<VoiceBufferInfo> =>
   invoke('voice_buffer_info')
+
+/**
+ * Broadcasts a "voice-buffer-updated" event across all webviews so the
+ * settings window can refresh its recordings list / usage bar after a save
+ * happens in the dictation HUD. Uses Tauri's event system because
+ * `window.dispatchEvent` does not cross webview boundaries.
+ */
+export const emitVoiceBufferUpdated = (): Promise<void> =>
+  emit('voice-buffer-updated')
+
+/** Subscribes to cross-window voice-buffer change notifications. */
+export const onVoiceBufferUpdated = (callback: () => void): (() => void) =>
+  makeListener<unknown>('voice-buffer-updated', () => callback())
 
 export interface AudioDataResult {
   base64: string
