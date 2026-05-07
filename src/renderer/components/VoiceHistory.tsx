@@ -12,6 +12,7 @@ import { Play, Square, Trash2, Loader2, Sparkles, Copy, Check, ArrowDownWideNarr
 import { usePostProcessing } from '../hooks/usePostProcessing'
 import * as ipc from '../lib/tauri-ipc'
 import type { VoiceRecording } from '../lib/tauri-ipc'
+import { safeAudioMime } from '../lib/audio-mime'
 
 interface VoiceHistoryProps {
   user?: { id: string } | null
@@ -81,10 +82,7 @@ export function VoiceHistory({ user, apiKey }: VoiceHistoryProps) {
     setLoadingAudio(file)
     try {
       const { base64, mime } = await ipc.voiceBufferGetAudio(file)
-      // Whitelist the MIME so the data URI can never carry a non-audio type
-      // even if the backend ever returns one. The Audio element won't play
-      // text/html anyway, but this stops anything weird from being decoded.
-      const safeMime = mime === 'audio/wav' || mime === 'audio/ogg' ? mime : null
+      const safeMime = safeAudioMime(mime)
       if (!safeMime) {
         console.warn('[VoiceHistory] Refusing unknown audio MIME:', mime)
         return

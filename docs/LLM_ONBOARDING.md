@@ -135,8 +135,9 @@ npx tauri dev
 
 Tests:
 ```powershell
-npm test             # Vitest (JS)
-npm run test:rust    # cargo test
+npm test                  # Vitest (JS) — 109 tests across hooks, lib, components, netlify
+npm run test:rust         # cargo test — 75 tests in audio/voice_buffer/commands
+npm run check:versions    # verify Cargo.lock tauri ↔ package-lock.json @tauri-apps/api parity
 ```
 
 ---

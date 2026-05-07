@@ -167,6 +167,7 @@ MacroVox/
 | `npx tauri build` | Production build + installer |
 | `npm test` | Run JS tests (Vitest) |
 | `npm run test:rust` | Run Rust unit tests |
+| `npm run check:versions` | Verify Cargo.lock `tauri` and `@tauri-apps/api` major.minor match |
 
 ---
 

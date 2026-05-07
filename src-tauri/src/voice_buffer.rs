@@ -770,4 +770,204 @@ mod tests {
         assert!(info.current_size_bytes > 0);
         cleanup(&dir);
     }
+
+    // ── Corruption / error-path coverage ─────────────────────────────────────
+
+    #[test]
+    fn corrupt_manifest_is_backed_up_and_default_returned() {
+        let dir = temp_dir();
+        fs::write(dir.join("manifest.json"), "{ this is not json").unwrap();
+
+        let manifest = load_manifest(&dir);
+        // Default returned (callers can keep working).
+        assert!(manifest.recordings.is_empty());
+        assert_eq!(manifest.current_size_bytes, 0);
+
+        // Bad file preserved under a backup name so disk forensics is possible.
+        let backups: Vec<_> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().starts_with("manifest.json.bad-"))
+            .collect();
+        assert_eq!(backups.len(), 1, "expected exactly one .bad- backup");
+        // Original manifest.json was renamed away.
+        assert!(!dir.join("manifest.json").exists());
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn missing_manifest_returns_default_without_creating_files() {
+        let dir = temp_dir();
+        let manifest = load_manifest(&dir);
+        assert!(manifest.recordings.is_empty());
+        assert!(!dir.join("manifest.json").exists(),
+            "load_manifest must not write a fresh manifest as a side effect");
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn update_transcript_on_missing_file_errors() {
+        let dir = temp_dir();
+        let result = update_transcript(&dir, "does-not-exist.ogg", "new text");
+        assert!(result.is_err(), "expected error for unknown filename");
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn update_transcript_persists_change() {
+        let dir = temp_dir();
+        let samples = vec![0.0f32; 16_000];
+        let filename = save_recording(&dir, &samples, 16_000, 1, "original", None).unwrap();
+
+        update_transcript(&dir, &filename, "rewritten").unwrap();
+
+        let manifest = load_manifest(&dir);
+        let entry = manifest.recordings.iter().find(|r| r.file == filename).unwrap();
+        assert_eq!(entry.transcript, "rewritten");
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn delete_missing_file_errors() {
+        let dir = temp_dir();
+        // No save first — the file simply doesn't exist.
+        let result = delete_recording(&dir, "ghost.ogg");
+        assert!(result.is_err());
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn get_audio_on_missing_file_errors() {
+        let dir = temp_dir();
+        assert!(get_audio(&dir, "ghost.ogg").is_err());
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn validate_filename_rejects_dangerous_inputs() {
+        assert!(validate_filename("").is_err(), "empty filename");
+        assert!(validate_filename("..").is_err(), "parent-dir reference");
+        assert!(validate_filename("../etc/passwd").is_err(), "unix traversal");
+        assert!(validate_filename("..\\windows\\cmd").is_err(), "windows traversal");
+        assert!(validate_filename("dir/file.ogg").is_err(), "forward slash");
+        assert!(validate_filename("dir\\file.ogg").is_err(), "backslash");
+        assert!(validate_filename("C:\\file.ogg").is_err(), "drive letter");
+        assert!(validate_filename("with\0null.ogg").is_err(), "null byte");
+        // The happy path: a normal generated filename.
+        assert!(validate_filename("2026-05-06T17-10-13.ogg").is_ok());
+    }
+
+    #[test]
+    fn save_evicts_multiple_oldest_when_one_save_exceeds_cap_many_fold() {
+        let dir = temp_dir();
+        let samples = vec![0.1f32; 16_000];
+
+        // Establish file size so we can size the cap correctly.
+        let f1 = save_recording(&dir, &samples, 16_000, 1, "a", Some(100 * 1024 * 1024)).unwrap();
+        let manifest = load_manifest(&dir);
+        let one_size = manifest.recordings[0].size_bytes;
+
+        // Cap fits exactly 3 files (`one_size * 3` exactly, no slack).
+        let cap = one_size * 3;
+        let f2 = save_recording(&dir, &samples, 16_000, 1, "b", Some(cap)).unwrap();
+        let f3 = save_recording(&dir, &samples, 16_000, 1, "c", Some(cap)).unwrap();
+        assert_eq!(load_manifest(&dir).recordings.len(), 3);
+
+        // Saving a fourth at this cap requires evicting the oldest (`a`).
+        let f4 = save_recording(&dir, &samples, 16_000, 1, "d", Some(cap)).unwrap();
+        let after_one = load_manifest(&dir);
+        assert_eq!(after_one.recordings.len(), 3);
+        assert!(!dir.join(&f1).exists(), "oldest must be evicted");
+        assert!(dir.join(&f2).exists() && dir.join(&f3).exists() && dir.join(&f4).exists());
+
+        // Now shrink the cap so the next save must evict two of {b, c, d}.
+        let tight_cap = one_size * 2;
+        let f5 = save_recording(&dir, &samples, 16_000, 1, "e", Some(tight_cap)).unwrap();
+        let after_tight = load_manifest(&dir);
+        assert_eq!(after_tight.recordings.len(), 2);
+        assert!(dir.join(&f5).exists(), "newest must survive");
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn f32_to_i16_clamps_out_of_range_samples() {
+        // Samples outside [-1.0, 1.0] (overamplified mics, gain mistakes) must
+        // not wrap around into nonsense values. Implementation uses
+        // `i16::MAX as f32` (32767) as the scaling factor for both directions,
+        // so the negative limit lands at -32767, not i16::MIN (-32768).
+        let samples = vec![2.0f32, -2.0, 0.5, -0.5, 100.0];
+        let i16s = f32_to_i16_samples(&samples);
+        assert_eq!(i16s[0], i16::MAX);
+        assert_eq!(i16s[1], -i16::MAX);
+        assert!(i16s[2] > 0 && i16s[2] < i16::MAX);
+        assert!(i16s[3] < 0 && i16s[3] > -i16::MAX);
+        assert_eq!(i16s[4], i16::MAX, "huge value must clamp, not wrap");
+    }
+
+    #[test]
+    fn downmix_passthrough_for_mono_input() {
+        let mono = vec![0.1f32, 0.2, 0.3];
+        assert_eq!(downmix_to_mono(&mono, 1), mono);
+    }
+
+    #[test]
+    fn resample_linear_handles_same_rate_passthrough() {
+        let input = vec![0.5f32; 1000];
+        let out = resample_linear(&input, 16_000, 16_000);
+        assert_eq!(out.len(), 1000);
+    }
+
+    #[test]
+    fn resample_linear_handles_empty_input() {
+        // Repair path can hit this if a manifest entry exists for an empty
+        // file. Must not panic or divide by zero.
+        let out = resample_linear(&[], 48_000, 16_000);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn save_then_clear_zeroes_size_counter() {
+        let dir = temp_dir();
+        let samples = vec![0.0f32; 16_000];
+        save_recording(&dir, &samples, 16_000, 1, "x", None).unwrap();
+        save_recording(&dir, &samples, 16_000, 1, "y", None).unwrap();
+
+        // Sanity — counter is non-zero before clear.
+        assert!(load_manifest(&dir).current_size_bytes > 0);
+
+        clear_all(&dir).unwrap();
+        let after = load_manifest(&dir);
+        assert_eq!(after.current_size_bytes, 0);
+        assert!(after.recordings.is_empty());
+
+        // .ogg files actually deleted (not just removed from manifest).
+        let oggs: Vec<_> = fs::read_dir(&dir).unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().ends_with(".ogg"))
+            .collect();
+        assert!(oggs.is_empty(), "clear_all must remove .ogg files from disk");
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn set_max_size_updates_manifest_and_evicts() {
+        let dir = temp_dir();
+        let samples = vec![0.1f32; 16_000];
+        save_recording(&dir, &samples, 16_000, 1, "1", None).unwrap();
+        save_recording(&dir, &samples, 16_000, 1, "2", None).unwrap();
+        save_recording(&dir, &samples, 16_000, 1, "3", None).unwrap();
+
+        let before = load_manifest(&dir);
+        assert_eq!(before.recordings.len(), 3);
+        let one_size = before.recordings[0].size_bytes;
+
+        // Shrink cap to a value that holds only one recording.
+        let tight = one_size + 100;
+        set_max_size(&dir, tight).unwrap();
+
+        let after = load_manifest(&dir);
+        assert_eq!(after.max_size_bytes, tight);
+        assert_eq!(after.recordings.len(), 1, "shrinking cap must evict to fit");
+        cleanup(&dir);
+    }
 }

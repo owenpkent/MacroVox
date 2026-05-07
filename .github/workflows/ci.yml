@@ -11,6 +11,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  versions:
+    name: Tauri version parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: node scripts/check-tauri-versions.mjs
+
   typescript:
     name: TypeScript
     runs-on: windows-latest
@@ -22,6 +32,7 @@ jobs:
           cache: "npm"
       - run: npm ci
       - run: npx tsc --noEmit
+      - run: npm test
 
   rust:
     name: Rust (clippy)

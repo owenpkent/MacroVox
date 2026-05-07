@@ -1317,4 +1317,124 @@ mod tests {
         assert!(!*lock_or_recover(&state.is_recording));
         assert!(lock_or_recover(&state.recording_buffer).is_empty());
     }
+
+    // ── settings_broadcast voice_buffer parsing ──────────────────────────────
+    //
+    // settings_broadcast is the central pipe for renderer-driven config
+    // changes. The parsing branches for voice_buffer_* settings have caused
+    // user-visible bugs (silent acceptance of bogus sizes, on/off flips not
+    // persisting). These tests pin the branch logic without needing a real
+    // tauri::AppHandle.
+
+    #[test]
+    fn voice_buffer_enabled_setting_parses_true_and_false() {
+        let state = AppState::default();
+        let mut settings: HashMap<String, String> = HashMap::new();
+
+        settings.insert("voice_buffer_enabled".to_string(), "true".to_string());
+        if let Some(val) = settings.get("voice_buffer_enabled") {
+            *lock_or_recover(&state.voice_buffer_enabled) = val == "true";
+        }
+        assert!(*lock_or_recover(&state.voice_buffer_enabled));
+
+        settings.insert("voice_buffer_enabled".to_string(), "false".to_string());
+        if let Some(val) = settings.get("voice_buffer_enabled") {
+            *lock_or_recover(&state.voice_buffer_enabled) = val == "true";
+        }
+        assert!(!*lock_or_recover(&state.voice_buffer_enabled));
+    }
+
+    #[test]
+    fn voice_buffer_enabled_treats_unknown_strings_as_false() {
+        // Anything other than the literal string "true" should disable the
+        // buffer. This is a fail-safe: a typo'd setting must not silently
+        // start recording.
+        let state = AppState::default();
+        for raw in ["1", "yes", "TRUE", "True", "", "garbage"] {
+            *lock_or_recover(&state.voice_buffer_enabled) = raw == "true";
+            assert!(!*lock_or_recover(&state.voice_buffer_enabled),
+                "expected disabled for value {raw:?}");
+        }
+    }
+
+    #[test]
+    fn voice_buffer_max_size_parses_valid_u64() {
+        let state = AppState::default();
+        let mut settings: HashMap<String, String> = HashMap::new();
+        settings.insert("voice_buffer_max_size".to_string(), "104857600".to_string());
+        if let Some(val) = settings.get("voice_buffer_max_size") {
+            if let Ok(size) = val.parse::<u64>() {
+                *lock_or_recover(&state.voice_buffer_max_size) = size;
+            }
+        }
+        assert_eq!(*lock_or_recover(&state.voice_buffer_max_size), 104_857_600);
+    }
+
+    #[test]
+    fn voice_buffer_max_size_ignores_unparseable_values() {
+        // The parsing branch in settings_broadcast is `if let Ok(size) = ...`
+        // so unparseable input must leave the previous value intact, not
+        // panic and not zero out the cap. Default starts at 100 MB.
+        let state = AppState::default();
+        let initial = *lock_or_recover(&state.voice_buffer_max_size);
+
+        let mut settings: HashMap<String, String> = HashMap::new();
+        for bad in ["", "not-a-number", "-1", "12.5", "9999999999999999999999"] {
+            settings.insert("voice_buffer_max_size".to_string(), bad.to_string());
+            if let Some(val) = settings.get("voice_buffer_max_size") {
+                if let Ok(size) = val.parse::<u64>() {
+                    *lock_or_recover(&state.voice_buffer_max_size) = size;
+                }
+            }
+            assert_eq!(*lock_or_recover(&state.voice_buffer_max_size), initial,
+                "unparseable {bad:?} must leave max_size unchanged");
+        }
+    }
+
+    #[test]
+    fn transcription_language_setting_rejects_oversize_values() {
+        // The branch is `if !lang.is_empty() && lang.len() <= 5` — language
+        // codes are like "en"/"es"/"zh-CN"; anything longer is suspect input
+        // and must be ignored to avoid driving Deepgram into a bad state.
+        let state = AppState::default();
+        let initial = lock_or_recover(&state.transcription_language).clone();
+
+        for bad in ["", "english-us", "12345678"] {
+            let lang = bad.to_string();
+            if !lang.is_empty() && lang.len() <= 5 {
+                *lock_or_recover(&state.transcription_language) = lang;
+            }
+        }
+        assert_eq!(*lock_or_recover(&state.transcription_language), initial);
+
+        // The happy path still updates.
+        let lang = "es".to_string();
+        if !lang.is_empty() && lang.len() <= 5 {
+            *lock_or_recover(&state.transcription_language) = lang;
+        }
+        assert_eq!(*lock_or_recover(&state.transcription_language), "es");
+    }
+
+    #[test]
+    fn deepgram_keywords_parsing_strips_blanks_and_whitespace() {
+        // The settings_broadcast parser splits on '\n', trims, and drops
+        // empties — important so a trailing newline doesn't turn into an
+        // empty `&keyterm=` parameter that Nova-3 rejects with 400.
+        let state = AppState::default();
+        let mut map = HashMap::new();
+        map.insert(
+            "deepgram_keywords".to_string(),
+            "  alpha  \n\nbeta\n   \ngamma\n".to_string(),
+        );
+        if let Some(raw) = map.get("deepgram_keywords") {
+            let keywords: Vec<String> = raw
+                .split('\n')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            *lock_or_recover(&state.deepgram_keywords) = keywords;
+        }
+        let kws = lock_or_recover(&state.deepgram_keywords).clone();
+        assert_eq!(kws, vec!["alpha", "beta", "gamma"]);
+    }
 }

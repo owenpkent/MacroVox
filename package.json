@@ -17,6 +17,7 @@
     "test:watch": "vitest --config vitest.config.ts",
     "test:coverage": "vitest run --config vitest.config.ts --coverage",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "check:versions": "node scripts/check-tauri-versions.mjs",
     "release:linux": "mkdir -p release/linux && cp -v src-tauri/target/release/bundle/deb/*.deb src-tauri/target/release/bundle/rpm/*.rpm release/linux/ 2>/dev/null; cp -v src-tauri/target/release/bundle/appimage/*.AppImage src-tauri/target/release/bundle/appimage/*.AppImage.sig src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz* release/linux/ 2>/dev/null; ls -lh release/linux/",
     "release:windows": "node -e \"const fs=require('fs'),path=require('path');fs.mkdirSync('release/windows',{recursive:true});const src='src-tauri/target/release/bundle';['nsis','msi'].forEach(d=>{const dir=path.join(src,d);if(fs.existsSync(dir))for(const f of fs.readdirSync(dir))if(/(\\.exe|\\.exe\\.sig|\\.msi|\\.msi\\.sig)$/.test(f))fs.copyFileSync(path.join(dir,f),path.join('release/windows',f))});console.log(fs.readdirSync('release/windows'))\"",
     "release:manifest": "node scripts/generate-latest.mjs"
@@ -26,7 +27,7 @@
     "@deepgram/sdk": "^3.9.0",
     "@netlify/functions": "^2.8.2",
     "@supabase/supabase-js": "^2.101.1",
-    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-shell": "^2.3.5",
     "@tauri-apps/plugin-updater": "^2.10.1",
@@ -36,7 +37,7 @@
     "stripe": "^17.7.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.10.1",
+    "@tauri-apps/cli": "^2.11.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/jsdom": "^28.0.0",

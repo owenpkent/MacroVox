@@ -15,8 +15,8 @@ export default defineConfig({
     ],
     environment: 'node',
     include: [
-      'src/**/__tests__/**/*.test.ts',
-      'src/**/*.test.ts',
+      'src/**/__tests__/**/*.test.{ts,tsx}',
+      'src/**/*.test.{ts,tsx}',
       'netlify/**/__tests__/**/*.test.ts',
     ],
     coverage: {
