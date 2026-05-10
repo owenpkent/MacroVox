@@ -1,0 +1,76 @@
+version: 2
+updates:
+  # Renderer + Electron main + Netlify functions share the root package.json.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "javascript"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  # Tauri/Rust backend lives under src-tauri/.
+  - package-ecosystem: "cargo"
+    directory: "/src-tauri"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "rust"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    ignore:
+      # gtk-rs GTK3 bindings reach us transitively via Tauri on Linux.
+      # gtk-rs has moved to GTK4; Tauri 2.x still pins GTK3. We cannot bump
+      # these directly. Re-enable when upstream Tauri migrates to GTK4.
+      - dependency-name: "atk"
+      - dependency-name: "atk-sys"
+      - dependency-name: "gdk"
+      - dependency-name: "gdk-sys"
+      - dependency-name: "gdkwayland-sys"
+      - dependency-name: "gdkx11"
+      - dependency-name: "gdkx11-sys"
+      - dependency-name: "gtk"
+      - dependency-name: "gtk-sys"
+      - dependency-name: "gtk3-macros"
+      # Unmaintained transitive crates pinned by Tauri/wry. No fix available
+      # until upstream migrates off them.
+      - dependency-name: "fxhash"
+      - dependency-name: "proc-macro-error"
+      - dependency-name: "unic-char-property"
+      - dependency-name: "unic-char-range"
+      - dependency-name: "unic-common"
+      - dependency-name: "unic-ucd-ident"
+      - dependency-name: "unic-ucd-version"
+      # glib 0.18 has RUSTSEC-2024-0429 (unsoundness in VariantStrIter).
+      # Fixed in glib 0.19+, but our path through gtk-rs still resolves 0.18.
+      - dependency-name: "glib"
+        versions: ["0.18.x"]
+      # rand 0.7 has RUSTSEC-2026-0097 (custom-logger unsoundness). Pinned
+      # by an old transitive dep; direct deps already use rand 0.8+.
+      - dependency-name: "rand"
+        versions: ["0.7.x"]
+
+  # GitHub Actions workflows are pinned to commit SHAs (see workflows/*.yml).
+  # Dependabot keeps the SHA pins fresh and updates the trailing version
+  # comment when an action releases a new version.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"

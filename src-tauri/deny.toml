@@ -1,0 +1,90 @@
+# cargo-deny policy for MacroVox.
+#
+# Most of the noise this catches comes from Tauri 2.x's transitive dep tree.
+# We can't fix those upstream-pinned crates, so they're explicitly ignored
+# or skip-tree'd below. See .github/dependabot.yml for the matching ignore
+# list of crates Dependabot should not try to bump.
+
+[advisories]
+version = 2
+yanked = "warn"
+ignore = [
+    # GTK3 bindings reach us via Tauri on Linux. gtk-rs has moved to GTK4;
+    # Tauri 2.x still pins GTK3. Re-evaluate when Tauri migrates.
+    "RUSTSEC-2024-0411", # gdkwayland-sys unmaintained
+    "RUSTSEC-2024-0412", # gdk unmaintained
+    "RUSTSEC-2024-0413", # atk unmaintained
+    "RUSTSEC-2024-0414", # gdkx11-sys unmaintained
+    "RUSTSEC-2024-0415", # gtk unmaintained
+    "RUSTSEC-2024-0416", # atk-sys unmaintained
+    "RUSTSEC-2024-0417", # gdkx11 unmaintained
+    "RUSTSEC-2024-0418", # gdk-sys unmaintained
+    "RUSTSEC-2024-0419", # gtk3-macros unmaintained
+    "RUSTSEC-2024-0420", # gtk-sys unmaintained
+    # Other unmaintained transitive crates pinned by Tauri/wry.
+    "RUSTSEC-2024-0370", # proc-macro-error
+    "RUSTSEC-2025-0057", # fxhash
+    "RUSTSEC-2025-0075", # unic-char-range
+    "RUSTSEC-2025-0080", # unic-common
+    "RUSTSEC-2025-0081", # unic-char-property
+    "RUSTSEC-2025-0098", # unic-ucd-version
+    "RUSTSEC-2025-0100", # unic-ucd-ident
+    # glib 0.18 VariantStrIter unsoundness. Fixed in glib 0.19+, but our
+    # path through gtk-rs resolves 0.18. Tracked alongside the GTK3 work.
+    "RUSTSEC-2024-0429",
+    "GHSA-wrw7-89jp-8q8g",
+    # rand 0.7 custom-logger unsoundness. Pinned by an old transitive dep
+    # (cpal lineage); direct deps already use rand 0.8+.
+    "RUSTSEC-2026-0097",
+    "GHSA-cq8v-f236-94qc",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+deny = []
+# Skip duplicate-version checks for crates whose multiple-versions situation
+# is forced by Tauri/wry/objc2/windows-* and not fixable in our Cargo.toml.
+# We accept the bloat in exchange for not chasing upstream version skew.
+skip-tree = [
+    { name = "tauri" },
+    { name = "wry" },
+    { name = "windows", version = "*" },
+    { name = "windows-sys", version = "*" },
+    { name = "objc2", version = "*" },
+    { name = "ndk", version = "*" },
+]
+skip = []
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "Zlib",
+    "MPL-2.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.8
+exceptions = [
+    # clipboard-win and error-code (DoumanAsh) are BSL-1.0. Used transitively
+    # by arboard on Windows for clipboard access.
+    { name = "clipboard-win", allow = ["BSL-1.0"] },
+    { name = "error-code", allow = ["BSL-1.0"] },
+    # webpki-root-certs ships Mozilla's CA bundle. MPL-2.0 license file is
+    # included; cargo-deny sometimes mis-detects against the CCADB blob.
+    { name = "webpki-root-certs", allow = ["MPL-2.0", "CDLA-Permissive-2.0"] },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
