@@ -54,6 +54,7 @@ Owen — wheelchair user with muscular dystrophy.
 | `docs/SETUP.md` | Backend infrastructure guide (Supabase + Netlify + Stripe) |
 | `docs/RELEASE.md` | Build, sign, release, and auto-update pipeline |
 | `docs/KEY_ROTATION.md` | Runbook for rotating the Anthropic + Deepgram managed keys (covers `.env`, Netlify, Supabase, `managed_api_keys` table) |
+| `docs/PLAN_DEEPGRAM_PROXY_MIGRATION.md` | v1.0.8 implementation plan for C5 — Deepgram ephemeral-token flow so the renderer never sees the master key |
 | `SECURITY.md` | Vulnerability disclosure policy (private advisories preferred) |
 | `.github/dependabot.yml` | npm + cargo + github-actions update schedule; ignores upstream-pinned gtk-rs/glib/rand |
 | `.github/workflows/semgrep.yml` | SAST gate (semgrep 1.162.0, same pack set as the local audit); fails on ERROR severity only |

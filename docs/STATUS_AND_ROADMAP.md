@@ -1,6 +1,6 @@
 # MacroVox — Status & Roadmap
 
-**Last Updated**: May 5, 2026  
+**Last Updated**: May 10, 2026  
 **Repository**: https://github.com/okstudio1/MacroVox
 
 ---
@@ -156,6 +156,8 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 
 ### Near-term
 - [ ] **Complete Stripe integration** — end-to-end checkout + webhook + billing portal
+- [ ] **v1.0.8: Deepgram ephemeral tokens (C5)** — migrate from managed-key fetch to `POST /v1/auth/grant` short-lived JWTs so the renderer never sees a Deepgram master key. Full plan at [PLAN_DEEPGRAM_PROXY_MIGRATION.md](PLAN_DEEPGRAM_PROXY_MIGRATION.md). Estimated ~4.5 h. Closes the last open finding from the 2026-04-16 audit.
+- [ ] **Rotate Anthropic + Deepgram managed keys** — owner action per [KEY_ROTATION.md](KEY_ROTATION.md); compromised dev mirrors are still verified live by trufflehog.
 - [ ] **Google OAuth** — sign in with Google via Supabase Auth
 - [ ] **Facebook OAuth** — sign in with Facebook via Supabase Auth
 - [ ] **Onboarding flow** — guided first-run experience after sign-up
@@ -224,8 +226,11 @@ A premium, managed voice dictation experience — no API keys to configure, no s
 | [RELEASE.md](RELEASE.md) | Build, sign, release, and auto-update pipeline |
 | [SETTINGS_ROADMAP.md](SETTINGS_ROADMAP.md) | Settings panel feature roadmap |
 | [FREE_TRIAL_IMPLEMENTATION.md](FREE_TRIAL_IMPLEMENTATION.md) | Free trial + Stripe billing implementation |
-| [SECURITY_AUDIT_2026-04-16.md](SECURITY_AUDIT_2026-04-16.md) | Full security audit |
+| [SECURITY_AUDIT_2026-04-16.md](SECURITY_AUDIT_2026-04-16.md) | Full security audit (includes 2026-05-10 addendum dispositioning third-party audit findings) |
 | [SECURITY_AUDIT_2026-04-19.md](SECURITY_AUDIT_2026-04-19.md) | Follow-up security audit |
+| [../SECURITY.md](../SECURITY.md) | Vulnerability disclosure policy (private advisory channel + email fallback) |
+| [KEY_ROTATION.md](KEY_ROTATION.md) | Runbook for rotating the Anthropic + Deepgram managed keys |
+| [PLAN_DEEPGRAM_PROXY_MIGRATION.md](PLAN_DEEPGRAM_PROXY_MIGRATION.md) | v1.0.8 plan: move Deepgram auth off the renderer using ephemeral tokens (C5) |
 | [src-tauri/ARCHITECTURE.md](../src-tauri/ARCHITECTURE.md) | Tauri/Rust backend architecture |
 
 ---
