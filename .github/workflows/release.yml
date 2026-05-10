@@ -50,6 +50,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -58,9 +60,13 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
+      # Tag-triggered build with access to signing secrets. Read from cache
+      # if available, but never write back — a poisoned tag must not be
+      # able to contaminate cache entries that subsequent main builds use.
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
         with:
           workspaces: src-tauri
+          save-if: false
 
       - name: Install Linux system deps
         run: |
