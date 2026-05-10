@@ -29,20 +29,17 @@ if sys.stdout.encoding and sys.stdout.encoding.lower().replace("-", "") != "utf8
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
+# Dev launcher only. All callers pass literal source strings (`npm install`,
+# `npx tauri dev`, etc.); no user input reaches these helpers. shell=True is
+# required on Windows for PATH resolution of `npm`/`npx` `.cmd` shims.
 def run(cmd: str, **kwargs) -> int:
     print(f"  > {cmd}")
-    # nosemgrep: python.lang.security.audit.subprocess-shell-true.subprocess-shell-true
-    # Dev launcher only. All callers pass literal source strings (`npm install`,
-    # `npx tauri dev`, etc.); no user input reaches this function. shell=True is
-    # required on Windows for PATH resolution of `npm`/`npx` `.cmd` shims.
-    return subprocess.run(cmd, cwd=ROOT, shell=True, **kwargs).returncode
+    return subprocess.run(cmd, cwd=ROOT, shell=True, **kwargs).returncode  # nosemgrep: python.lang.security.audit.subprocess-shell-true.subprocess-shell-true
 
 
 def check(cmd: str, label: str) -> bool:
     try:
-        # nosemgrep: python.lang.security.audit.subprocess-shell-true.subprocess-shell-true
-        # Same rationale as run(): dev-launcher PATH resolution, literal-only input.
-        out = subprocess.check_output(cmd, shell=True, text=True,
+        out = subprocess.check_output(cmd, shell=True, text=True,  # nosemgrep: python.lang.security.audit.subprocess-shell-true.subprocess-shell-true
                                       stderr=subprocess.STDOUT).strip()
         first_line = out.splitlines()[0] if out else "(ok)"
         print(f"  [ok] {label}: {first_line}")
