@@ -457,6 +457,37 @@ is defense-in-depth, not a live exploit. Explicit is better.
 
 ---
 
+## Addendum 2026-05-10: third-party audit dispositions
+
+A third-party audit pass (semgrep, codeql, gitleaks, trufflehog, osv-scanner,
+scorecard, zizmor, cargo-deny) re-flagged a handful of items the 2026-04-16 audit
+didn't explicitly address. Documenting the disposition here so future runs see
+the rationale.
+
+- **`style-src 'unsafe-inline'`** (`tauri.conf.json`, CSP) — **Accepted.** Required
+  by React's `style={}` prop (every inline style becomes a `style="..."` attribute)
+  and Tailwind's runtime `@apply` resolution. Replacing it would require nonce
+  threading through every styled component, which is high-cost / low-value because
+  `script-src` remains `'self'` with no `unsafe-inline` or `unsafe-eval`. Inline
+  *scripts* are the high-risk vector; inline styles can be abused for limited
+  data exfiltration via `background-image:url(...)`, but `img-src` is already
+  pinned to `'self' data:` so URL-based exfil is blocked too.
+- **`shell:allow-open` capability** — **Accepted.** Backs Stripe checkout + billing
+  portal URLs and the future OAuth deep-link return. Call sites enforce hostname
+  allowlisting (§ H9). Documented inline in `capabilities/default.json`.
+- **`process:allow-restart` capability** — **Accepted.** Required by
+  `tauri-plugin-updater` to relaunch the app after `installAndRelaunch()`. Removing
+  it would break auto-update. Documented inline in `capabilities/default.json`.
+- **`whisper_transcribe_impl` unused `sample_rate`** (`commands.rs:655`) — **Fixed.**
+  Was a latent bug: feature-gated Whisper path accepted sample_rate but didn't
+  resample, silently producing garbled output on non-16kHz mics. Now validates
+  the rate and fails loudly with an actionable error.
+- **CSP allows `https://api.deepgram.com` and `wss://api.deepgram.com`** — **Accepted.**
+  Direct Deepgram calls from the renderer happen on the free-tier / dev paths.
+  The Pro path goes through the Netlify proxy and doesn't need these origins, but
+  removing them would break the free-tier flow. Tracked alongside the C5 follow-up
+  (move Deepgram entirely behind the proxy).
+
 ## Owner-only follow-ups
 
 These items can't be fixed by editing source — they need human action:

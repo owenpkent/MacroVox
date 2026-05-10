@@ -658,6 +658,24 @@ fn whisper_transcribe_impl(
 ) -> RecordingStopResponse {
     use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
+    // whisper-rs requires 16 kHz mono f32. We don't resample here, so fail
+    // loudly on mismatched rates rather than feed wrong-rate audio to the
+    // model (which silently produces garbled transcription). Callers who
+    // need 44.1/48 kHz support can resample to 16 kHz before calling, or
+    // configure cpal with a 16 kHz input stream in audio_start.
+    if sample_rate != 16_000 {
+        return RecordingStopResponse {
+            success: false,
+            transcript: None,
+            confidence: None,
+            duration: Some(duration),
+            error: Some(format!(
+                "whisper requires 16 kHz mono input; got {sample_rate} Hz. \
+                 Resample to 16 kHz before calling whisper_transcribe."
+            )),
+        };
+    }
+
     let ctx = match WhisperContext::new_with_params(model_path, WhisperContextParameters::default()) {
         Ok(c) => c,
         Err(e) => {
@@ -690,11 +708,6 @@ fn whisper_transcribe_impl(
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
 
-    // whisper-rs expects mono f32 samples at 16 kHz.
-    // If the device captured at a different rate, basic downmix/resample is
-    // needed. For now we pass samples as-is — 16 kHz mono is the recommended
-    // cpal config and the default MacroVox audio_start path uses the device
-    // default which is typically 16 kHz mono on Windows microphones.
     if let Err(e) = whisper_state.full(params, &samples) {
         return RecordingStopResponse {
             success: false,
