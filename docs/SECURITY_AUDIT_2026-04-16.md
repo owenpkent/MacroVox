@@ -508,8 +508,11 @@ These items can't be fixed by editing source — they need human action:
    - UPDATE existing `managed_api_keys` rows so already-subscribed users get the new value.
 3. **Move Deepgram batch + streaming through the proxy** (C5)
    The renderer still calls the Rust backend with a Deepgram key. Migrating both
-   call paths to the Netlify proxy would mean the renderer never sees the key. Out of
-   scope for this audit — touches the `deepgram_start`/`recording_stop` Tauri commands.
+   call paths to the Netlify proxy would mean the renderer never sees the key.
+   **Concrete plan landed 2026-05-10:** [`docs/PLAN_DEEPGRAM_PROXY_MIGRATION.md`](PLAN_DEEPGRAM_PROXY_MIGRATION.md)
+   uses Deepgram's verified `/v1/auth/grant` ephemeral-token API (30s JWT,
+   WebSocket-handshake-only auth). Targets v1.0.8 to avoid destabilizing the
+   v1.0.7 launch. Estimated ~4.5 hours of focused work.
 4. **Wire the OAuth deep-link callback** (H8)
    Register `macrovox://` as a Tauri single-instance protocol handler, and finish the
    `signInWithOAuth` flow in `src/renderer/lib/auth.ts`. Until then, document the
