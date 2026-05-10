@@ -84,6 +84,7 @@ MacroVox builds `.deb`, `.rpm`, and AppImage bundles on Linux. Install the bundl
 - **[Release Checklist](docs/RELEASE_CHECKLIST.md)** — Preflight gates (tests, smoke tests, signing) before tagging
 - **[Marketing Strategy](docs/MARKETING.md)** — Positioning, pricing, launch playbook, SEO content plan, demo video specs
 - **[Changelog](docs/CHANGELOG.md)** — Release history
+- **[Security Policy](SECURITY.md)** — How to report a vulnerability (private disclosure preferred)
 
 ---
 
@@ -168,6 +169,16 @@ MacroVox/
 | `npm test` | Run JS tests (Vitest) |
 | `npm run test:rust` | Run Rust unit tests |
 | `npm run check:versions` | Verify Cargo.lock `tauri` and `@tauri-apps/api` major.minor match |
+
+---
+
+## Security
+
+Found a vulnerability? Please report it privately. The preferred channel is
+GitHub Security Advisories on
+[okstudio1/MacroVox](https://github.com/okstudio1/MacroVox/security/advisories/new);
+the email fallback is `owenpkent@gmail.com` with `[MacroVox security]` in the
+subject. Response timeline and scope details are in [SECURITY.md](SECURITY.md).
 
 ---
 

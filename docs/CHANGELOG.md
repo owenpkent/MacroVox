@@ -102,6 +102,12 @@ auto-update pipeline, and a working Tauri 2 release workflow.
 - **Dev bypass flags hardened for production** — Netlify proxy functions now check `process.env.CONTEXT !== 'production'` in addition to `DEV_BYPASS_AUTH`, preventing accidental bypass on production deploys.
 - **API usage logging errors caught** — fire-and-forget `.insert()` calls in both proxy functions now have `.catch()` handlers to log failures instead of silently swallowing them.
 - **`.gitignore`** — added `*.key`, `*.key.pub`, `.tauri/` patterns as defense-in-depth so a stray copy of the signing key inside the repo tree can't accidentally be committed.
+- **Supply-chain hardening, 2026-05-10** — third-party audit pass (semgrep, codeql, gitleaks, trufflehog, osv-scanner, scorecard, zizmor, cargo-deny). Cleaned up the actionable findings:
+  - All 13 GitHub Action references in `.github/workflows/ci.yml` and `release.yml` are now pinned to commit SHAs with trailing version comments (closes zizmor `unpinned-uses`). Dependabot's `github-actions` ecosystem keeps the pins fresh.
+  - New `SECURITY.md` documents the private-disclosure flow (advisory link + email fallback, 3-day ack / 7-day assessment / 30-day fix timeline).
+  - New `.github/dependabot.yml` schedules weekly npm + cargo + github-actions updates. Ignores the upstream-pinned gtk-rs family, `glib 0.18.x`, and `rand 0.7.x` so Dependabot doesn't open unmergeable PRs.
+  - New `src-tauri/deny.toml` (project-specific, replaces the audit tool's default): advisory-ignores the same deferred RUSTSEC IDs codified in dependabot.yml, skip-trees Tauri/wry/windows/objc2/ndk for the unavoidable multi-version churn, adds BSL-1.0 exceptions for `clipboard-win` and `error-code`.
+  - New `docs/KEY_ROTATION.md` runbook for the still-pending Anthropic + Deepgram managed-key rotation (referenced from `SECURITY_AUDIT_2026-04-16.md § C2`).
 
 ### Dependencies
 

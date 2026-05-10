@@ -72,7 +72,8 @@ What is *not* fixed:
 
 **Owner follow-up (still required):** rotate the Anthropic + Deepgram keys in their
 dashboards, then update both `.env` and the Netlify environment variables. Until that
-happens this finding stays open.
+happens this finding stays open. Step-by-step runbook at
+[`docs/KEY_ROTATION.md`](KEY_ROTATION.md) (added 2026-05-10).
 
 ### C3. `DEV_BYPASS_AUTH` skips JWT + subscription + rate-limit checks
 `netlify/functions/claude-proxy.ts:47`, `netlify/functions/deepgram-proxy.ts:36`
@@ -467,11 +468,13 @@ These items can't be fixed by editing source — they need human action:
    ```
    Add the public key to `tauri.conf.json`. Sign release artifacts in CI with the
    private key (Netlify env var `TAURI_SIGNING_PRIVATE_KEY`).
-2. **Rotate leaked API keys** (C2)
-   - Anthropic: console → API keys → revoke `sk-ant-api03-YT5n...`, issue new.
-   - Deepgram: console → API keys → revoke `266afe2f...`, issue new.
+2. **Rotate leaked API keys** (C2) — full runbook in
+   [`docs/KEY_ROTATION.md`](KEY_ROTATION.md). Summary:
+   - Anthropic: console → API keys → issue new, swap, then revoke `sk-ant-api03-YT5n...`.
+   - Deepgram: console → API keys → issue new, swap, then revoke `266afe2f...`.
    - Update Netlify env vars `ANTHROPIC_MANAGED_KEY` and `DEEPGRAM_MANAGED_KEY`.
-   - Update Supabase Edge Function env vars (used by `stripe-webhook` to provision).
+   - Update Supabase Edge Function secrets (used by `stripe-webhook` to provision).
+   - UPDATE existing `managed_api_keys` rows so already-subscribed users get the new value.
 3. **Move Deepgram batch + streaming through the proxy** (C5)
    The renderer still calls the Rust backend with a Deepgram key. Migrating both
    call paths to the Netlify proxy would mean the renderer never sees the key. Out of

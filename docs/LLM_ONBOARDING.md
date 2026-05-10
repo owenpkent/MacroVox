@@ -53,6 +53,10 @@ Owen — wheelchair user with muscular dystrophy.
 | `docs/CHANGELOG.md` | Detailed fix history |
 | `docs/SETUP.md` | Backend infrastructure guide (Supabase + Netlify + Stripe) |
 | `docs/RELEASE.md` | Build, sign, release, and auto-update pipeline |
+| `docs/KEY_ROTATION.md` | Runbook for rotating the Anthropic + Deepgram managed keys (covers `.env`, Netlify, Supabase, `managed_api_keys` table) |
+| `SECURITY.md` | Vulnerability disclosure policy (private advisories preferred) |
+| `.github/dependabot.yml` | npm + cargo + github-actions update schedule; ignores upstream-pinned gtk-rs/glib/rand |
+| `src-tauri/deny.toml` | cargo-deny policy: advisory ignores for deferred Tauri transitives, license exceptions, skip-tree for tauri/wry/windows multi-version churn |
 | `.env` | Local env vars — `VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` (not committed) |
 
 ---
