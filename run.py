@@ -31,11 +31,17 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 
 def run(cmd: str, **kwargs) -> int:
     print(f"  > {cmd}")
+    # nosemgrep: python.lang.security.audit.subprocess-shell-true.subprocess-shell-true
+    # Dev launcher only. All callers pass literal source strings (`npm install`,
+    # `npx tauri dev`, etc.); no user input reaches this function. shell=True is
+    # required on Windows for PATH resolution of `npm`/`npx` `.cmd` shims.
     return subprocess.run(cmd, cwd=ROOT, shell=True, **kwargs).returncode
 
 
 def check(cmd: str, label: str) -> bool:
     try:
+        # nosemgrep: python.lang.security.audit.subprocess-shell-true.subprocess-shell-true
+        # Same rationale as run(): dev-launcher PATH resolution, literal-only input.
         out = subprocess.check_output(cmd, shell=True, text=True,
                                       stderr=subprocess.STDOUT).strip()
         first_line = out.splitlines()[0] if out else "(ok)"

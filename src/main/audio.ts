@@ -109,6 +109,11 @@ function findFfmpeg(): string | null {
  * so the parser concatenates stdout + stderr.
  */
 function listWindowsAudioDevices(ffmpegPath: string): string[] {
+  // ffmpegPath is the bundled binary path resolved from app resources,
+  // never user input. spawnSync with shell: false and an argv list means
+  // no shell interpretation; semgrep's detect-child-process heuristic
+  // flags any parameter-driven child_process call regardless of safety.
+  // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process
   const result = spawnSync(
     ffmpegPath,
     ['-list_devices', 'true', '-f', 'dshow', '-i', 'dummy'],
