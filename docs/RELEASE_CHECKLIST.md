@@ -81,6 +81,7 @@ On a Debian/Ubuntu host (and a Fedora host if shipping `.rpm`):
 
 - [ ] EV signing certificate not expiring within 30 days (check the cert's "Valid to" field)
 - [ ] `tauri.conf.json` `plugins.updater.pubkey` matches the private key used to sign the `.sig` artifacts (otherwise installed clients reject the update)
+- [ ] **okstudio1 org Actions budget is non-zero with `Stop usage: No`** ([Budgets and alerts](https://github.com/organizations/okstudio1/settings/billing/budgets)). With GitHub's unified budgets, a `$0 budget` + `Stop usage: Yes` row halts workflow runs the moment any metered usage is recorded — even when usage is fully covered by the included Actions quota. Personal-account budgets (`owenpkent`) are a separate ledger and do **not** unblock org-owned repos. The tag-triggered `release.yml` Linux build won't even start if this row is in stop-usage state, so verify before tagging.
 - [ ] Netlify functions environment variables present and current on the production site (Supabase URL/key, Anthropic key, Deepgram key, Stripe keys if billing is live)
 - [ ] Supabase RLS policies on `subscriptions` and `managed_api_keys` haven't been changed unintentionally this cycle
 - [ ] GitHub release **draft** prepared with notes derived from CHANGELOG; do not publish yet
