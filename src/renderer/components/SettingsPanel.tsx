@@ -2,14 +2,19 @@
  * SettingsPanel — sole UI for all user-facing configuration.
  *
  * Renders the entire settings window content (`settings.tsx` mounts this with
- * `isPopup={true}`). Sections include:
- *   - Account (sign-in, sign-up, OAuth, billing portal, checkout)
- *   - Audio device picker
- *   - Dictation behavior (auto-copy, auto-paste, AI cleanup, auto-cutoff,
- *     transcription mode, language, number format)
- *   - Window behavior (always-on-top, minimize-to-tray, global hotkey)
- *   - Voice buffer management (capacity, browse history via `<VoiceHistory>`)
- *   - Theme picker
+ * `isPopup={true}`). The panel is organized into 5 tabs surfaced by a left
+ * sidebar nav (`NAV_ITEMS`); the active tab is held in the `category` state
+ * and gates which sections render. Tabs:
+ *   - Account — sign-in/account pill, subscription
+ *   - Dictation — audio device, voice recognition, quick dictation, AI cleanup
+ *   - Window — always-on-top, minimize-to-tray, global hotkey
+ *   - History — voice buffer (capacity, usage bar, `<VoiceHistory>`)
+ *   - Appearance — theme picker, About
+ *
+ * Layout: when `isPopup` is true (Tauri settings window), the panel fills the
+ * window with `h-screen w-screen` so it scales as the window is resized. When
+ * `isPopup` is false (embedded as an in-app modal), it falls back to the
+ * legacy centered `max-w-md` card with a dark backdrop.
  *
  * Setting changes are written to `localStorage` immediately and broadcast via
  * `ipc.broadcastSettings()` so the dictation window picks them up live.
@@ -38,7 +43,17 @@ interface SettingsPanelProps {
 
 type SubscriptionStatus = 'free' | 'pro' | 'team' | 'loading'
 
-export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
+type SettingsCategory = 'account' | 'dictation' | 'window' | 'history' | 'appearance'
+
+const NAV_ITEMS: { id: SettingsCategory; label: string; Icon: typeof User }[] = [
+  { id: 'account', label: 'Account', Icon: User },
+  { id: 'dictation', label: 'Dictation', Icon: Mic },
+  { id: 'window', label: 'Window', Icon: Pin },
+  { id: 'history', label: 'History', Icon: HardDrive },
+  { id: 'appearance', label: 'Appearance', Icon: Palette },
+]
+
+export function SettingsPanel({ isOpen, onClose, user, isPopup = false }: SettingsPanelProps) {
   const [authTab, setAuthTab] = useState<'signin' | 'signup'>('signin')
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
@@ -99,6 +114,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
     localStorage.getItem('transcription_language') || 'en'
   )
   const [selectedTheme, setSelectedTheme] = useState(() => getStoredTheme())
+  const [category, setCategory] = useState<SettingsCategory>('account')
   const [voiceBufferEnabled, setVoiceBufferEnabled] = useState(() =>
     localStorage.getItem('voice_buffer_enabled') !== 'false'
   )
@@ -329,8 +345,21 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backgroundColor: 'var(--bg-primary)' }}>
-      <div className="rounded-lg w-full max-w-md mx-4 shadow-xl max-h-[90vh] flex flex-col font-mono" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}>
+    <div
+      className={isPopup ? 'flex flex-col font-mono h-screen w-screen' : 'fixed inset-0 flex items-center justify-center z-50'}
+      style={{ backgroundColor: isPopup ? 'var(--bg-secondary)' : 'var(--bg-primary)' }}
+    >
+      <div
+        className={
+          isPopup
+            ? 'flex flex-col flex-1 min-h-0 w-full font-mono'
+            : 'rounded-lg w-full max-w-md mx-4 shadow-xl max-h-[90vh] flex flex-col font-mono'
+        }
+        style={{
+          backgroundColor: 'var(--bg-secondary)',
+          ...(isPopup ? {} : { border: '1px solid var(--border-primary)' }),
+        }}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ borderBottom: '1px solid var(--border-primary)' }}>
           <div className="flex items-center gap-2">
@@ -342,11 +371,35 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
           </button>
         </div>
 
-        {/* Content - Scrollable */}
-        <div className="p-4 space-y-6 overflow-y-auto flex-1">
+        {/* Content - Sidebar nav + scrollable panel */}
+        <div className="flex flex-1 min-h-0">
+          {/* Sidebar nav */}
+          <nav className="w-[110px] shrink-0 py-2 overflow-y-auto" style={{ borderRight: '1px solid var(--border-primary)' }}>
+            {NAV_ITEMS.map(({ id, label, Icon }) => {
+              const active = category === id
+              return (
+                <button
+                  key={id}
+                  onClick={() => setCategory(id)}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-sm transition-colors text-left"
+                  style={{
+                    backgroundColor: active ? 'var(--bg-primary)' : 'transparent',
+                    color: active ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                    borderLeft: active ? '2px solid var(--accent-primary)' : '2px solid transparent',
+                  }}
+                >
+                  <Icon size={14} style={{ color: active ? 'var(--accent-primary)' : 'var(--text-muted)' }} />
+                  {label}
+                </button>
+              )
+            })}
+          </nav>
+
+          {/* Active category content */}
+          <div className="p-4 space-y-6 overflow-y-auto flex-1">
 
           {/* Sign-In Section */}
-          {!user && (
+          {category === 'account' && !user && (
             <section>
               <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
                 <User size={16} style={{ color: 'var(--accent-secondary)' }} />
@@ -406,7 +459,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
           )}
 
           {/* Signed-in account pill */}
-          {user && (
+          {category === 'account' && user && (
             <section>
               <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
                 <User size={16} style={{ color: 'var(--accent-secondary)' }} />
@@ -430,6 +483,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
           )}
 
           {/* Theme Selector */}
+          {category === 'appearance' && (
           <section>
             <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
               <Palette size={16} style={{ color: 'var(--accent-secondary)' }} />
@@ -455,8 +509,10 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
               ))}
             </div>
           </section>
+          )}
 
           {/* Quick Dictation */}
+          {category === 'dictation' && (
           <section>
             <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
               <MessageSquare size={16} style={{ color: 'var(--accent-secondary)' }} />
@@ -513,8 +569,10 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
               </div>
             </div>
           </section>
+          )}
 
           {/* Voice Recognition */}
+          {category === 'dictation' && (
           <section>
             <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
               <Mic size={16} style={{ color: 'var(--accent-secondary)' }} />
@@ -608,8 +666,10 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
               </div>
             </div>
           </section>
+          )}
 
           {/* AI Post-Processing */}
+          {category === 'dictation' && (
           <section>
             <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
               <Sparkles size={16} style={{ color: 'var(--accent-secondary)' }} />
@@ -675,8 +735,10 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
               </div>
             </div>
           </section>
+          )}
 
           {/* Dictation Window */}
+          {category === 'window' && (
           <section>
             <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
               <Pin size={16} style={{ color: 'var(--accent-secondary)' }} />
@@ -778,8 +840,10 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
               </div>
             </div>
           </section>
+          )}
 
           {/* Audio Input */}
+          {category === 'dictation' && (
           <section>
             <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
               <Mic size={16} style={{ color: 'var(--accent-secondary)' }} />
@@ -805,8 +869,10 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
               </select>
             </div>
           </section>
+          )}
 
           {/* Voice Buffer */}
+          {category === 'history' && (
           <section>
             <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
               <HardDrive size={16} style={{ color: 'var(--accent-secondary)' }} />
@@ -911,9 +977,10 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
               )}
             </div>
           </section>
+          )}
 
           {/* Subscription */}
-          {user && (
+          {category === 'account' && user && (
             <section>
               <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
                 <CreditCard size={16} style={{ color: 'var(--accent-secondary)' }} />
@@ -952,6 +1019,7 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
           )}
 
           {/* About & Shortcuts */}
+          {category === 'appearance' && (
           <section>
             <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>About</h3>
             <div className="rounded p-3 space-y-3" style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)' }}>
@@ -968,6 +1036,8 @@ export function SettingsPanel({ isOpen, onClose, user }: SettingsPanelProps) {
               </div>
             </div>
           </section>
+          )}
+          </div>
         </div>
 
         {/* Footer */}
