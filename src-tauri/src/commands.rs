@@ -435,6 +435,7 @@ pub fn recording_start(state: State<AppState>) -> OkResponse {
 pub async fn recording_stop(
     api_key: String,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<RecordingStopResponse, String> {
     // --- Stop recording and drain the buffer synchronously ---
     *lock_or_recover(&state.is_recording) = false;
@@ -547,11 +548,20 @@ pub async fn recording_stop(
                 let max_size = *lock_or_recover(&state.voice_buffer_max_size);
                 let transcript_clone = transcript_text.clone();
                 if !dir.as_os_str().is_empty() {
+                    // Clone the AppHandle so the background thread can notify
+                    // webviews. Without this, the settings window's recordings
+                    // list stays frozen at whatever was on disk when its
+                    // WebView2 first loaded, since batch mode never round-trips
+                    // through the renderer's voice_buffer_save path.
+                    let app_handle = app.clone();
                     std::thread::spawn(move || {
-                        if let Err(e) = crate::voice_buffer::save_recording(
+                        match crate::voice_buffer::save_recording(
                             &dir, &samples, safe_sample_rate, safe_channels, &transcript_clone, Some(max_size),
                         ) {
-                            warn!("[voice_buffer] Auto-save failed: {e}");
+                            Ok(_) => {
+                                let _ = app_handle.emit("voice-buffer-updated", ());
+                            }
+                            Err(e) => warn!("[voice_buffer] Auto-save failed: {e}"),
                         }
                     });
                 }
