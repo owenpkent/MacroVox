@@ -66,7 +66,7 @@ export function usePostProcessing({ useProxy = false, userId }: UsePostProcessin
         ? '\nAlways write numbers as digits (e.g. "3", "42", "1000"), never spelled out.'
         : numberFormat === 'words'
         ? '\nAlways spell out numbers as words (e.g. "three", "forty-two", "one thousand"), never as digits.'
-        : ''
+        : '\nFormat numbers contextually using standard writing conventions: use digits for currency, measurements, dates, times, percentages, addresses, phone numbers, and any number with a unit (e.g. "$5", "10 km", "3pm", "50%", "2026"); spell out isolated small numbers used colloquially (e.g. "twenty-one people", "three of them", "one or two"). When in doubt for plain numbers under 100, prefer words; for 100 and above, prefer digits.'
       const languageInstruction = language !== 'en'
         ? `\nThe transcript is in ${language}. Clean it up in that language — do not translate to English.`
         : ''

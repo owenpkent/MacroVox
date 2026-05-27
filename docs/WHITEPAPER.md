@@ -151,7 +151,7 @@ The post-processing stage runs Claude Haiku 4.5 against every transcript with a 
 - Normalises punctuation and capitalisation.
 - Resolves obvious dictation commands ("period", "comma", "new line") that did not collapse during STT.
 - Honours per-user "accessibility context" — free-form notes the user provides (e.g., domain vocabulary, names) that the cleanup model is conditioned on.
-- Honours the user's number-formatting preference (digits, words, or "smart" mode).
+- Honours the user's number-formatting preference. "Always digits" and "Always words" enforce a uniform style; "Smart" mode applies a contextual rule (digits for currency, measurements, dates, times, percentages, addresses, phone numbers, and any number carrying a unit; words for isolated small numbers used colloquially; digits at 100 and above). Smart mode is implemented entirely in the Claude prompt because Deepgram Nova-3's `smart_format=true` empirically returns spelled-out words for most non-entity numbers, so leaving the decision to Deepgram alone did not match the user-visible promise.
 
 Haiku was chosen over a Sonnet- or Opus-tier model for two reasons: (1) the task is bounded and well-suited to the smaller model's strengths, and (2) tail latency under load is materially lower, which matters because the user is waiting for the clipboard to update.
 

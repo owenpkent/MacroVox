@@ -211,6 +211,14 @@ describe('usePostProcessing — settings overrides', () => {
   })
   afterEach(() => { vi.unstubAllGlobals() })
 
+  it('tells Claude to format numbers contextually when number_format=smart (default)', async () => {
+    const fetchSpy = mockFetchOk('out')
+    vi.stubGlobal('fetch', fetchSpy)
+    const { result } = renderHook(() => usePostProcessing({ useProxy: true, userId: 'u' }))
+    await result.current.postProcess('x')
+    expect(lastFetchBody(fetchSpy).system).toContain('Format numbers contextually')
+  })
+
   it('adds digit-only number instruction when number_format=digits', async () => {
     localStorage.setItem('number_format', 'digits')
     const fetchSpy = mockFetchOk('out')

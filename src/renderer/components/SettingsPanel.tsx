@@ -716,9 +716,9 @@ export function SettingsPanel({ isOpen, onClose, user, isPopup = false }: Settin
                   ))}
                 </div>
                 <p className="text-[10px] text-slate-600 mt-1.5">
-                  {numberFormat === 'smart' && 'Deepgram decides — e.g. "5 dollars" but "twenty-one"'}
-                  {numberFormat === 'digits' && 'All numbers as digits — e.g. "42", "3", "1000"'}
-                  {numberFormat === 'words' && 'All numbers spelled out — e.g. "forty-two", "three"'}
+                  {numberFormat === 'smart' && 'Context-aware: digits for currency, dates, measurements (e.g. "$5", "3pm"); words for small standalone numbers (e.g. "twenty-one people"). Requires AI cleanup.'}
+                  {numberFormat === 'digits' && 'All numbers as digits, e.g. "42", "3", "1000".'}
+                  {numberFormat === 'words' && 'All numbers spelled out, e.g. "forty-two", "three".'}
                 </p>
               </div>
               <div>

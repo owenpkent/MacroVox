@@ -16,7 +16,7 @@ Active — Tauri 2 production app. Stripe billing, free trial, auto-updater depl
 - **20 languages** — English, Spanish, French, German, Portuguese, Japanese, Korean, Chinese, and more
 - **Custom global hotkey** — configurable shortcut to toggle recording from any app (default Ctrl+Space)
 - **AI post-processing** — Claude Haiku cleans up every transcript automatically, non-blocking (Pro)
-- **Number formatting** — choose digits, words, or smart mode for how numbers appear
+- **Number formatting**: always digits, always words, or context-aware Smart mode (digits for currency, dates, measurements; words for isolated small numbers). Smart mode is Claude-driven and requires AI cleanup.
 - **Auto-copy & auto-paste** — transcript goes straight to clipboard and active app instantly (native key-injection via `enigo`); AI cleanup updates in background. Works on Windows and X11-based Linux; auto-paste is disabled on Wayland (see [Linux notes](#linux-notes))
 - **Keyword boosting** — improve recognition of custom terms
 - **Dictation history** — rolling voice buffer saves recordings as OGG Opus for playback and reprocessing
