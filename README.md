@@ -1,54 +1,144 @@
-# MacroVox — Voice Dictation for Windows & Linux
+<div align="center">
 
-A managed voice dictation app powered by [Deepgram](https://deepgram.com) and [Claude](https://anthropic.com). Speak into your microphone, get text. Sign in, subscribe, and start dictating — all API keys are managed server-side. Windows is the primary release target; Linux (`.deb`, `.rpm`, AppImage) is supported in beta — see [Linux notes](#linux-notes) below.
+<img src="assets/owenpkent_App_icon_for_MACROVOX_minimal_flat_taskbar_icon_sin_39611128-932c-451e-9e58-cc50d23c1b18_1.png" alt="MacroVox logo" width="120" />
 
-> **Managed service** — MacroVox handles all API keys (Deepgram, Claude) for Pro subscribers. No setup friction. See [docs/SETUP.md](docs/SETUP.md) for backend infrastructure guide.
->
-> **Or bring your own keys** — prefer to run without a subscription? Paste your own Deepgram and Anthropic keys under Settings → Keys. They stay on your device and unlock recording + AI cleanup with no sign-in. See [Bring your own API keys](#bring-your-own-api-keys).
+# MacroVox
 
-## Status
+**Speak. It types. Anywhere.**
 
-Active — Tauri 2 production app. Stripe billing, free trial, auto-updater deployed.
+Real-time voice dictation that drops clean, AI-polished text straight into the app you're already using. Built for anyone who finds typing slow, painful, or impractical. Your voice never has to touch a keyboard.
 
-## Download
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/badge/release-v1.0.8-brightgreen.svg)](https://github.com/okstudio1/macrovox-releases/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey.svg)](#install)
+[![Built with Tauri 2](https://img.shields.io/badge/built%20with-Tauri%202-24C8DB.svg)](https://tauri.app)
+[![Powered by Deepgram + Claude](https://img.shields.io/badge/powered%20by-Deepgram%20%2B%20Claude-7c3aed.svg)](#how-it-works)
 
-Signed Windows installers are published to the separate releases repo:
-**[okstudio1/macrovox-releases/releases/latest](https://github.com/okstudio1/macrovox-releases/releases/latest)**.
-Grab `MacroVox_<version>_x64-setup.exe` (EV-signed by OK Studio Inc., so no
-SmartScreen warning) and run it. The `.msi` is for managed/enterprise
-deployment. The in-app updater pulls new versions automatically on launch.
+</div>
+
+---
+
+## Pick your path
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+### 🎙️ I want to use it
+
+You want to talk instead of type, and have it land in any app.
+
+**Go to** [Install](#install), then [First run](#first-run).
+
+</td>
+<td width="33%" valign="top">
+
+### 🔑 I want my own keys
+
+You'd rather plug in your own Deepgram and Anthropic keys and skip the subscription.
+
+**Go to** [Bring your own keys](#bring-your-own-keys).
+
+</td>
+<td width="33%" valign="top">
+
+### 🔧 I want the code
+
+You're evaluating, forking, or contributing.
+
+**Go to** [Build from source](#build-from-source) and [Architecture](#architecture).
+
+</td>
+</tr>
+</table>
+
+---
+
+## Install
+
+### Windows
+
+Grab the latest signed installer from the releases repo:
+
+**[Download MacroVox for Windows](https://github.com/okstudio1/macrovox-releases/releases/latest)**
+
+Run `MacroVox_<version>_x64-setup.exe`. It's EV-signed by OK Studio Inc., so there's no SmartScreen warning. The app updates itself: every launch it checks for a newer signed build and installs it in the background. The `.msi` is there for managed or enterprise deployment.
+
+### Linux (beta)
+
+Download the `.deb`, `.rpm`, or AppImage from the [same releases page](https://github.com/okstudio1/macrovox-releases/releases/latest) and install the one that matches your distro. See [Linux notes](#linux-notes) for runtime dependencies and Wayland caveats.
+
+> Binaries live in a separate repo, [`okstudio1/macrovox-releases`](https://github.com/okstudio1/macrovox-releases). Source, issues, and development live here.
+
+### First run
+
+1. Launch MacroVox. A small always-on-top window appears.
+2. Sign in and start a trial, **or** paste your own keys under [Settings -> Keys](#bring-your-own-keys).
+3. Press the mic (or hit `Ctrl+Space` from any app), talk, and stop. Your words land on the clipboard and, if you enable it, paste straight into the app you were in.
+
+---
+
+## Why MacroVox
+
+Typing is a barrier for a lot of people. Repetitive strain, limited mobility, fatigue, or just the friction of a keyboard between a thought and the screen. MacroVox closes that gap: speak naturally, and get back text that reads like you meant it to, in whatever app you're working in. Accessibility isn't a feature here, it's the whole point.
+
+## How it works
+
+Audio is captured natively in Rust (no browser mic prompts, low latency), streamed to [Deepgram](https://deepgram.com) Nova-3 for transcription, then handed to [Claude](https://anthropic.com) Haiku to fix speech-to-text slips, punctuation, and formatting. The cleaned text replaces the raw text on your clipboard a moment later, so you never wait on the AI pass.
 
 ---
 
 ## Features
 
-- **Voice-to-text dictation** — Deepgram Nova-3, real-time streaming or batch mode
-- **20 languages** — English, Spanish, French, German, Portuguese, Japanese, Korean, Chinese, and more
-- **Custom global hotkey** — configurable shortcut to toggle recording from any app (default Ctrl+Space)
-- **AI post-processing** — Claude Haiku cleans up every transcript automatically, non-blocking (Pro)
-- **Number formatting**: always digits, always words, or context-aware Smart mode (digits for currency, dates, measurements; words for isolated small numbers). Smart mode is Claude-driven and requires AI cleanup.
-- **Auto-copy & auto-paste** — transcript goes straight to clipboard and active app instantly (native key-injection via `enigo`); AI cleanup updates in background. Works on Windows and X11-based Linux; auto-paste is disabled on Wayland (see [Linux notes](#linux-notes))
-- **Keyword boosting** — improve recognition of custom terms
-- **Dictation history** — rolling voice buffer saves recordings as OGG Opus for playback and reprocessing
-- **6 themed UI skins** — MCRN, Mars, Belter, Earth, Protomolecule, Laconia
-- **System tray** — runs in background, toggles with tray icon
-- **Email/password login** — Supabase Auth (Google & Facebook OAuth planned)
-- **Stripe billing** — subscribe to Pro for managed Deepgram + Claude access, 7-day free trial
-- **Bring your own API keys** — skip the subscription entirely: paste your own Deepgram + Anthropic keys under Settings → Keys (stored locally, sent only to those providers)
+- **Real-time dictation.** Deepgram Nova-3 in streaming mode (words as you speak) or batch mode (higher accuracy after you stop).
+- **AI cleanup.** Claude Haiku polishes every transcript in the background: punctuation, capitalization, and obvious mis-hearings, without changing your meaning.
+- **Drop it anywhere.** Auto-copy and auto-paste put text on the clipboard and into the app you were using, the instant you stop. Native key injection via `enigo`.
+- **Global hotkey.** Toggle dictation from any app with a shortcut you choose (default `Ctrl+Space`).
+- **20 languages.** English, Spanish, French, German, Portuguese, Japanese, Korean, Chinese, and more. The cleanup prompt is language-aware.
+- **Smart number formatting.** Always digits, always words, or a context-aware Smart mode (digits for currency, dates, and measurements; words for small standalone numbers).
+- **Keyword boosting.** Teach it your jargon, names, and acronyms so they transcribe correctly.
+- **Dictation history.** A rolling buffer saves recordings as OGG Opus (about 10x smaller than WAV) for playback, copying, and one-click reprocessing.
+- **Bring your own keys.** Run the whole thing on your own Deepgram and Anthropic accounts, no subscription. [Details below](#bring-your-own-keys).
+- **Six themes.** MCRN, Mars, Belter, Earth, Protomolecule, and Laconia.
+- **Stays out of the way.** Lives in the system tray, always-on-top dictation window, drag it wherever you like.
+- **Signed and self-updating.** EV-signed Windows installer plus an in-app auto-updater.
+
+> Screenshots and a short demo clip are on the way. (Want to contribute one? See [Contributing](#contributing).)
 
 ---
 
-## Prerequisites
+## Bring your own keys
+
+MacroVox runs as a managed service by default: sign in, start a trial, and the keys are handled for you. Prefer to use your own provider accounts and skip the subscription? Open **Settings -> Keys** and paste them in.
+
+| Key | Powers | Required? | Get one at |
+|---|---|---|---|
+| **Deepgram** | Speech-to-text | Yes, to record on your own key | [console.deepgram.com](https://console.deepgram.com) |
+| **Anthropic** | AI cleanup of transcripts | Optional (raw transcripts still copy without it) | [console.anthropic.com](https://console.anthropic.com) |
+
+- Keys are stored in the app's local storage on your device. They go only to Deepgram and Anthropic, never to OK Studio's servers.
+- A saved **Deepgram** key takes priority over managed keys and unlocks recording immediately, with no sign-in.
+- A saved **Anthropic** key sends cleanup straight to the Anthropic Messages API instead of the managed proxy.
+- Leave a field blank to fall back to the managed plan for that provider.
+- Usage on your own keys is billed to you by Deepgram and Anthropic directly.
+
+---
+
+## Build from source
+
+MacroVox is a [Tauri 2](https://tauri.app) app: a Rust backend in `src-tauri/` and a React + Vite renderer in `src/renderer/`.
+
+### Prerequisites
 
 | Requirement | Version | Notes |
 |---|---|---|
 | **Node.js** | 20+ LTS | [nodejs.org](https://nodejs.org) |
 | **Rust** | stable | [rustup.rs](https://rustup.rs) |
-| **Git** | Any | For cloning |
+| **Git** | any | for cloning |
 
----
+On Linux you also need the WebKitGTK and ALSA development packages (see [Linux notes](#linux-notes)).
 
-## Quick Start
+### Run it
 
 ```powershell
 git clone https://github.com/okstudio1/MacroVox.git
@@ -56,85 +146,66 @@ cd MacroVox
 python run.py
 ```
 
-`run.py` checks prerequisites, runs `npm install`, and launches `npx tauri dev`. The first run compiles the Rust backend — takes a few minutes.
+`run.py` checks prerequisites, runs `npm install`, and launches `npx tauri dev`. The first run compiles the Rust backend, which takes a few minutes.
 
-### Environment
-
-Create a `.env` file in the project root:
+For auth to work, create a `.env` in the project root:
 
 ```
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_KEY=your-anon-key
 ```
 
----
+To develop against your own provider accounts instead, just paste your keys under Settings -> Keys.
 
-## Bring your own API keys
+### Scripts
 
-MacroVox runs as a managed service by default (sign in, subscribe, keys handled
-server-side). If you'd rather use your own provider accounts and skip the
-subscription, open **Settings → Keys** and paste:
-
-| Key | Powers | Required? | Get one at |
-|---|---|---|---|
-| **Deepgram API key** | Speech-to-text | Yes, to record with your own key | [console.deepgram.com](https://console.deepgram.com) |
-| **Anthropic API key** | AI cleanup of transcripts | Optional (without it, raw transcripts still copy) | [console.anthropic.com](https://console.anthropic.com) |
-
-How it works:
-
-- Keys are stored in the app's `localStorage` on your device. They are sent
-  only to Deepgram and Anthropic, never to OK Studio's servers.
-- A saved **Deepgram** key takes priority over managed keys and unlocks
-  recording immediately, with no sign-in or subscription.
-- A saved **Anthropic** key routes AI cleanup directly to the Anthropic
-  Messages API instead of the managed proxy.
-- Leave a field blank to fall back to the managed plan for that provider.
-- You are billed by Deepgram / Anthropic directly for usage on your own keys.
+| Command | Description |
+|---|---|
+| `python run.py` | Start the dev environment (recommended) |
+| `npx tauri dev` | Start Tauri dev directly |
+| `npm run build:renderer` | Build the renderer only (Vite) |
+| `npx tauri build` | Production build plus installer |
+| `npm test` | Renderer unit tests (Vitest) |
+| `npm run test:rust` | Rust unit tests (cargo) |
+| `npm run check:versions` | Verify `tauri` and `@tauri-apps/api` major.minor match |
 
 ---
 
-## Linux notes
+## Architecture
 
-MacroVox builds `.deb`, `.rpm`, and AppImage bundles on Linux. Install the bundle that matches your distro (produced by `npx tauri build` into `src-tauri/target/release/bundle/`; copy-aggregated by `npm run release:linux` into `release/linux/`).
+```
++---------------------------------------------------+
+|                  Rust / Tauri 2                   |
+|  lib.rs       app lifecycle, tray, global hotkey  |
+|  commands.rs  audio, Deepgram, clipboard, paste   |
+|  audio.rs     cpal WASAPI capture, WAV encoder    |
+|  state.rs     shared AppState (audio, settings)   |
++-----------------------+---------------------------+
+                        |  invoke() / emit()
++-----------------------v---------------------------+
+|               React Renderer (Vite)               |
+|  DictationMode   recording UI                     |
+|  SettingsPanel   all user preferences             |
+|  tauri-ipc.ts    typed IPC bridge                 |
+|  auth.ts         Supabase auth + billing          |
++---------------------------------------------------+
+```
 
-**Runtime dependencies** (Debian/Ubuntu names; see your distro for equivalents):
-- `libwebkit2gtk-4.1-0` — Tauri WebView
-- `libasound2` + `libpulse0` — audio capture (cpal via ALSA/PulseAudio; PipeWire works through its PulseAudio shim)
-- `libayatana-appindicator3-1` — tray icon support (when enabled)
+The renderer never touches the microphone directly. It asks the Rust side to capture, stream, and inject, which keeps latency low and avoids browser permission prompts. See [`src-tauri/ARCHITECTURE.md`](src-tauri/ARCHITECTURE.md) for the full backend tour.
 
-**Display-server caveats:**
-- **X11** — fully supported: global hotkey, auto-paste (`enigo`), clipboard all work as on Windows.
-- **Wayland** — partial support. Global hotkeys depend on the compositor's XDG portal; on some compositors `Ctrl+Space` may not register. Auto-paste via `enigo` is not reliable on Wayland and is disabled automatically — copy your transcript and paste manually, or launch the app from an X11 session for full parity. MacroVox detects the session type at startup (via `XDG_SESSION_TYPE` / `WAYLAND_DISPLAY`) and surfaces the restriction in Settings.
-
-**Microphone picker** — on Linux the settings dropdown filters out ALSA's virtual aliases (`hw:`, `plughw:`, `dmix:`, `surround*:`, `iec958:`, `hdmi:`, monitor taps) so you see only user-meaningful devices (`default`, `pulse`, and named inputs). Your selection is persisted across restarts.
-
----
-
-## Documentation
-
-- **[LLM Onboarding](docs/LLM_ONBOARDING.md)** — Quick reference for AI assistants
-- **[Status & Roadmap](docs/STATUS_AND_ROADMAP.md)** — Current status and next steps
-- **[Setup Guide](docs/SETUP.md)** — Backend infrastructure (Supabase + Netlify + Stripe)
-- **[Release Process](docs/RELEASE.md)** — How to cut a release, build bundles, and generate `latest.json`
-- **[Release Checklist](docs/RELEASE_CHECKLIST.md)** — Preflight gates (tests, smoke tests, signing) before tagging
-- **[Marketing Strategy](docs/MARKETING.md)** — Positioning, pricing, launch playbook, SEO content plan, demo video specs
-- **[Changelog](docs/CHANGELOG.md)** — Release history
-- **[Security Policy](SECURITY.md)** — How to report a vulnerability (private disclosure preferred)
-
----
-
-## Project Structure
+<details>
+<summary><strong>Project structure</strong></summary>
 
 ```
 MacroVox/
 ├── run.py                        # Dev launcher (prerequisites + npx tauri dev)
 ├── src-tauri/                    # Rust / Tauri 2 backend
-│   ├── tauri.conf.json           # App config — windows, devUrl, frontendDist
+│   ├── tauri.conf.json           # App config: windows, devUrl, frontendDist
 │   ├── capabilities/default.json # IPC permissions for all windows
 │   └── src/
-│       ├── main.rs               # Entry point — calls lib::run()
+│       ├── main.rs               # Entry point, calls lib::run()
 │       ├── lib.rs                # App setup, tray, global shortcut, close handler
-│       ├── commands.rs           # All IPC commands (audio, Deepgram, clipboard, windows)
+│       ├── commands.rs           # IPC commands (audio, Deepgram, clipboard, windows)
 │       ├── state.rs              # Shared AppState (Mutex-wrapped)
 │       ├── audio.rs              # cpal WASAPI native audio capture
 │       ├── deepgram_ws.rs        # Deepgram WebSocket streaming
@@ -143,81 +214,60 @@ MacroVox/
 ├── src/renderer/                 # React UI (Vite + Tailwind)
 │   ├── dictation.html/tsx        # Main dictation window entry
 │   ├── settings.html/tsx         # Settings window entry
-│   ├── index.css                 # Tailwind + CSS custom properties (theme vars)
 │   ├── config.ts                 # App configuration constants
-│   ├── themes.ts                 # 6 theme definitions
-│   ├── ThemeContext.tsx          # Theme provider — applies CSS vars, syncs windows
-│   ├── components/
-│   │   ├── DictationMode.tsx     # Main dictation UI (Dictate + Write tabs)
-│   │   ├── AgentiveWriting.tsx   # Write tab — speak → Claude generates
-│   │   ├── VoiceHistory.tsx      # Dictation history — playback, expand, reprocess
-│   │   └── SettingsPanel.tsx     # Settings window UI
-│   ├── hooks/
-│   │   ├── usePostProcessing.ts  # Claude transcript cleanup hook
-│   │   ├── useAgentiveWriting.ts # Claude writing generation hook
-│   │   ├── useDeepgram.ts        # Deepgram streaming hook
-│   │   └── useUpdater.ts         # Auto-updater hook
-│   ├── lib/
-│   │   ├── tauri-ipc.ts          # Typed invoke() / listen() wrappers
-│   │   ├── auth.ts               # Supabase JS SDK auth functions
-│   │   ├── disable-context-menu.ts # Suppresses the WebView2 page context menu
-│   │   └── supabase.ts           # Supabase client singleton
-│   └── types/                    # Shared TypeScript type definitions
-├── netlify/functions/            # Netlify serverless (claude-proxy, deepgram-proxy)
-├── supabase/functions/           # Supabase Edge Functions (checkout, billing, webhook)
+│   ├── themes.ts                 # Theme definitions
+│   ├── components/               # DictationMode, SettingsPanel, VoiceHistory
+│   ├── hooks/                    # usePostProcessing, useDeepgram, useUpdater
+│   └── lib/                      # tauri-ipc, auth, supabase, disable-context-menu
+├── netlify/functions/            # Serverless proxies (claude-proxy, deepgram-proxy)
+├── supabase/functions/           # Edge Functions (checkout, billing, webhook)
 ├── docs/                         # Documentation
-├── vite.config.ts                # Vite + Vitest config
 └── package.json
 ```
 
----
-
-## Architecture
-
-```
-┌──────────────────────────────────────────────────┐
-│                   Rust / Tauri 2                  │
-│  lib.rs       — app lifecycle, tray, hotkey        │
-│  commands.rs  — audio, Deepgram, clipboard, paste  │
-│  audio.rs     — cpal WASAPI capture, WAV encoder   │
-│  state.rs     — AppState (audio buffer, settings)  │
-└───────────────────┬──────────────────────────────┘
-                    │  invoke() / emit()
-┌───────────────────▼──────────────────────────────┐
-│              React Renderer (Vite)                │
-│  DictationMode   — recording UI, tabs             │
-│  SettingsPanel   — all user preferences           │
-│  tauri-ipc.ts    — IPC bridge                     │
-│  auth.ts         — Supabase auth + billing        │
-└──────────────────────────────────────────────────┘
-```
+</details>
 
 ---
 
-## Development Scripts
+## Linux notes
 
-| Command | Description |
-|---|---|
-| `python run.py` | Start dev environment (recommended) |
-| `npx tauri dev` | Start Tauri dev directly |
-| `npm run build:renderer` | Build renderer only (Vite) |
-| `npx tauri build` | Production build + installer |
-| `npm test` | Run JS tests (Vitest) |
-| `npm run test:rust` | Run Rust unit tests |
-| `npm run check:versions` | Verify Cargo.lock `tauri` and `@tauri-apps/api` major.minor match |
+MacroVox builds `.deb`, `.rpm`, and AppImage bundles. Install the one that matches your distro.
+
+**Runtime dependencies** (Debian/Ubuntu names; check your distro for equivalents):
+
+- `libwebkit2gtk-4.1-0` for the Tauri WebView
+- `libasound2` and `libpulse0` for audio capture (cpal via ALSA/PulseAudio; PipeWire works through its PulseAudio shim)
+- `libayatana-appindicator3-1` for tray icon support
+
+**Display server:**
+
+- **X11** is fully supported. Global hotkey, auto-paste, and clipboard all work as on Windows.
+- **Wayland** is partial. Global hotkeys depend on the compositor's XDG portal, and auto-paste via `enigo` is unreliable, so it's disabled automatically (copy and paste manually, or run from an X11 session for full parity). MacroVox detects the session type at startup and reflects the limitation in Settings.
+
+**Microphone picker:** on Linux the dropdown hides ALSA's virtual aliases (`hw:`, `plughw:`, `dmix:`, monitor taps, and friends) so you only see real, named devices. Your choice persists across restarts.
 
 ---
+
+## Contributing
+
+Contributions are welcome, especially from people who use adaptive technology day to day. Start with [CONTRIBUTING.md](CONTRIBUTING.md) for setup, conventions, and the PR flow, and please read the [Code of Conduct](CODE_OF_CONDUCT.md). Bug reports and feature requests have [issue templates](.github/ISSUE_TEMPLATE) ready to go.
 
 ## Security
 
-Found a vulnerability? Please report it privately. The preferred channel is
-GitHub Security Advisories on
-[okstudio1/MacroVox](https://github.com/okstudio1/MacroVox/security/advisories/new);
-the email fallback is `owenpkent@gmail.com` with `[MacroVox security]` in the
-subject. Response timeline and scope details are in [SECURITY.md](SECURITY.md).
+Found a vulnerability? Please report it privately, not in a public issue. The preferred channel is a [GitHub Security Advisory](https://github.com/okstudio1/MacroVox/security/advisories/new); the email fallback is `owenpkent@gmail.com` with `[MacroVox security]` in the subject. Details and scope are in [SECURITY.md](SECURITY.md).
 
----
+## Documentation
+
+- [Setup Guide](docs/SETUP.md): backend infrastructure (Supabase, Netlify, Stripe)
+- [Release Process](docs/RELEASE.md) and [Release Checklist](docs/RELEASE_CHECKLIST.md)
+- [Changelog](docs/CHANGELOG.md): release history
+- [Status and Roadmap](docs/STATUS_AND_ROADMAP.md)
+- [LLM Onboarding](docs/LLM_ONBOARDING.md): quick orientation for AI assistants
 
 ## License
 
-MIT — © 2026 OK Studio
+MIT. Copyright 2026 OK Studio. See [LICENSE](LICENSE).
+
+<div align="center">
+<sub>Built with care for people who'd rather talk than type.</sub>
+</div>
