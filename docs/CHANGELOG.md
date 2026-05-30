@@ -1,6 +1,6 @@
 # MacroVox Changelog
 
-## Unreleased
+## v1.0.8 — 2026-05-30
 
 ### New Features
 
