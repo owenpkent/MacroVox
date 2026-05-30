@@ -73,4 +73,19 @@
   Delete "$DESKTOP\MacroVox.lnk"
   Delete "$SMPROGRAMS\MacroVox\MacroVox.lnk"
   RMDir "$SMPROGRAMS\MacroVox"
+
+  ; --- Offer to remove user data (mirrors alpha-osk's installer.nsh) ---
+  ; The app keeps everything under %LOCALAPPDATA%\com.okstudio.macrovox:
+  ;   - voice-buffer\ : saved dictation recordings (OGG Opus)
+  ;   - EBWebView\     : the WebView2 profile, which holds localStorage -- and
+  ;                      localStorage is where bring-your-own Deepgram /
+  ;                      Anthropic API keys live. Leaving it behind on uninstall
+  ;                      means user secrets linger on disk.
+  ; Silent uninstall (/S) is the auto-updater's upgrade path -- never wipe data
+  ; there. Only prompt during an interactive uninstall.
+  IfSilent keepUserData
+  MessageBox MB_YESNO|MB_ICONQUESTION "Also remove MacroVox's saved data?$\r$\n$\r$\nThis deletes your dictation recordings and saved settings, including any API keys you entered.$\r$\n$\r$\n(Choose No to keep them for a future reinstall.)" IDYES removeUserData IDNO keepUserData
+  removeUserData:
+    RMDir /r "$LOCALAPPDATA\com.okstudio.macrovox"
+  keepUserData:
 !macroend
