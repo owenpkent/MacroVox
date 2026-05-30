@@ -10,6 +10,14 @@ A managed voice dictation app powered by [Deepgram](https://deepgram.com) and [C
 
 Active — Tauri 2 production app. Stripe billing, free trial, auto-updater deployed.
 
+## Download
+
+Signed Windows installers are published to the separate releases repo:
+**[okstudio1/macrovox-releases/releases/latest](https://github.com/okstudio1/macrovox-releases/releases/latest)**.
+Grab `MacroVox_<version>_x64-setup.exe` (EV-signed by OK Studio Inc., so no
+SmartScreen warning) and run it. The `.msi` is for managed/enterprise
+deployment. The in-app updater pulls new versions automatically on launch.
+
 ---
 
 ## Features

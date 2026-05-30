@@ -10,6 +10,14 @@
 
 - **Native right-click behavior** — the WebView2 default page context menu (Back, Reload, Save as, Print, Inspect) is now suppressed app-wide so MacroVox stops feeling like a web page. Implemented as a shared `disableContextMenu()` helper wired into both window entry points. DevTools stays reachable via F12 / the `RUST_LOG` auto-open.
 
+### Installer
+
+- **Uninstall offers to remove user data** — an interactive uninstall now prompts to delete `%LOCALAPPDATA%\com.okstudio.macrovox`, which holds saved dictation recordings (`voice-buffer\`) and the WebView2 `localStorage` profile that stores bring-your-own API keys. Previously these were left on disk after uninstall. Silent uninstall (`/S`, the auto-updater's upgrade path) never wipes data, so updates keep your settings. Mirrors alpha-osk's `installer.nsh`. NSIS installer (`-setup.exe`) only — the Wix `.msi` is unaffected.
+
+### Release notes
+
+- First release published to the separate `okstudio1/macrovox-releases` repo (Windows-only: EV-signed `-setup.exe` + `.msi`). Auto-updater minisign signatures (`latest.json`) were deferred for this first release since no prior clients exist to verify them; the next release will include them.
+
 ## v1.0.7 — 2026-04-26
 
 Major release: Linux beta, voice history with OGG Opus, Wayland support,

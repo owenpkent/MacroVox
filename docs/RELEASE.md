@@ -59,6 +59,41 @@ minisign signatures (`-setup.exe.sig`, `.msi.sig`) from
 In Tauri 2 the installer itself is the updater artifact — there's no
 intermediate `.zip` step like v1 had.
 
+> **Gotcha — shared cargo target dir.** This host redirects all Rust
+> output to `C:\Users\Owen\cargo-target` via `~/.cargo/config.toml`, so
+> bundles actually land in `C:\Users\Owen\cargo-target\release\bundle\{nsis,msi}\`,
+> **not** `src-tauri/target/release/bundle/`. The `release:windows` npm
+> script still reads the `src-tauri` path and will silently copy nothing.
+> Until the script is fixed to honor `CARGO_TARGET_DIR`, copy the artifacts
+> by hand:
+>
+> ```powershell
+> $bundle = "C:\Users\Owen\cargo-target\release\bundle"
+> Copy-Item "$bundle\nsis\MacroVox_<ver>_x64-setup.exe*" release\windows\ -Force
+> Copy-Item "$bundle\msi\MacroVox_<ver>_x64_en-US.msi*"  release\windows\ -Force
+> ```
+
+### First release with no minisign password (EV-only fallback)
+
+A full build requires `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` because
+`createUpdaterArtifacts: true` makes Tauri fail loudly when the minisign
+key can't be unlocked. If you need to cut a build but don't have the
+minisign password available (and there are **no existing clients** that
+would verify a `.sig` — e.g. the very first release in `macrovox-releases`),
+you can ship an EV-signed installer **without** updater artifacts:
+
+1. Temporarily set `bundle.createUpdaterArtifacts` to `false` in
+   `tauri.conf.json`.
+2. `npx tauri build` — only the SafeNet eToken PIN prompts; no minisign
+   password needed. The `-setup.exe` / `.msi` are still EV-signed.
+3. Revert `createUpdaterArtifacts` back to `true`.
+4. Publish the installer, but **omit `latest.json`** (a manifest with an
+   empty signature would be rejected by clients).
+
+This was used for **v1.0.8**. The trade-off: clients on that version can't
+auto-update until a *later* release ships with valid minisign sigs — so the
+**next** release must set both env vars and include `latest.json`.
+
 ### Linux (built in CI, published locally)
 
 The Linux bundle is built automatically by `.github/workflows/release.yml`
