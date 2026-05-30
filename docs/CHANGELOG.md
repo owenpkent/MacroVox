@@ -1,5 +1,15 @@
 # MacroVox Changelog
 
+## Unreleased
+
+### New Features
+
+- **Bring your own API keys** — new **Keys** tab in Settings lets you paste your own Deepgram and Anthropic API keys and run MacroVox without a subscription. Keys are stored in `localStorage` on the device and sent only to Deepgram / Anthropic, never to OK Studio's servers. A saved Deepgram key takes priority over managed keys and unlocks recording with no sign-in; a saved Anthropic key routes AI cleanup directly to the Anthropic Messages API instead of the managed `claude-proxy`. Leave the fields blank to keep using the managed plan. Each field has a show/hide toggle. The dictation window picks up a newly-saved key live via the settings broadcast (both keys added to `ALLOWED_SETTINGS_KEYS`; `connect-src` in `tauri.conf.json` now allows `api.anthropic.com` for the direct-call path).
+
+### UI / UX
+
+- **Native right-click behavior** — the WebView2 default page context menu (Back, Reload, Save as, Print, Inspect) is now suppressed app-wide so MacroVox stops feeling like a web page. Implemented as a shared `disableContextMenu()` helper wired into both window entry points. DevTools stays reachable via F12 / the `RUST_LOG` auto-open.
+
 ## v1.0.7 — 2026-04-26
 
 Major release: Linux beta, voice history with OGG Opus, Wayland support,

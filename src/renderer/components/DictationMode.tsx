@@ -133,6 +133,22 @@ export function DictationMode() {
   }, [])
 
   const loadApiKey = useCallback(async () => {
+    // Bring-your-own-key wins: if the user saved a Deepgram key in Settings →
+    // API Keys, use it directly and skip the managed-key lookup entirely. This
+    // lets the app run with no sign-in / subscription.
+    const ownKey = (localStorage.getItem('user_deepgram_key') || '').trim()
+    if (ownKey) {
+      setApiKey(ownKey)
+      setIsLoadingKey(false)
+      // Still resolve the user (if signed in) so account UI/post-processing
+      // proxy stays available, but don't let a failure block recording.
+      try {
+        const userResult = await auth.getUser()
+        if (userResult.success && userResult.user) setUser(userResult.user)
+      } catch {}
+      return
+    }
+
     try {
       const userResult = await auth.getUser()
       if (userResult.success && userResult.user) {
@@ -173,6 +189,16 @@ export function DictationMode() {
     }, 5000)
     return () => clearInterval(interval)
   }, [loadApiKey, user])
+
+  // Re-resolve the active key the moment a bring-your-own Deepgram key is saved
+  // in the settings window. The periodic re-check above is gated on `!user`, so
+  // a signed-in user wouldn't otherwise pick up a newly-entered key until restart.
+  useEffect(() => {
+    const cleanup = ipc.onSettingsChanged((settings) => {
+      if ('user_deepgram_key' in settings) loadApiKey()
+    })
+    return cleanup
+  }, [loadApiKey])
 
   const handleStartRecording = async () => {
     if (!apiKey || operationInProgressRef.current) return

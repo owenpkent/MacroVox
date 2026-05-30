@@ -15,3 +15,10 @@ export const API = {
 // Haiku for fast cleanup tasks; Sonnet for quality writing generation
 export const ANTHROPIC_MODEL_CLEANUP  = 'claude-haiku-4-5-20251001'
 export const ANTHROPIC_MODEL_WRITING  = 'claude-sonnet-4-20250514'
+
+// Direct Anthropic Messages API — used only when the user supplies their own
+// key in Settings → API Keys (bring-your-own-key mode). Managed/subscriber
+// traffic still goes through `API.claudeProxy` so the org key stays server-side.
+// `connect-src` in tauri.conf.json must allow this origin for the call to land.
+export const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
+export const ANTHROPIC_VERSION = '2023-06-01'

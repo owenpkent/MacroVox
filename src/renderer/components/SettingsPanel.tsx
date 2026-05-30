@@ -23,7 +23,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Settings, Mic, X, RefreshCw, Sparkles, Loader2, CreditCard, MessageSquare, Pin, Palette, LogIn, User, HardDrive, Trash2, FolderOpen } from 'lucide-react'
+import { Settings, Mic, X, RefreshCw, Sparkles, Loader2, CreditCard, MessageSquare, Pin, Palette, LogIn, User, HardDrive, Trash2, FolderOpen, KeyRound, Eye, EyeOff } from 'lucide-react'
 import { THEMES, getStoredTheme, setStoredTheme } from '../themes'
 import { VoiceHistory } from './VoiceHistory'
 import * as ipc from '../lib/tauri-ipc'
@@ -43,10 +43,11 @@ interface SettingsPanelProps {
 
 type SubscriptionStatus = 'free' | 'pro' | 'team' | 'loading'
 
-type SettingsCategory = 'account' | 'dictation' | 'window' | 'history' | 'appearance'
+type SettingsCategory = 'account' | 'apikeys' | 'dictation' | 'window' | 'history' | 'appearance'
 
 const NAV_ITEMS: { id: SettingsCategory; label: string; Icon: typeof User }[] = [
   { id: 'account', label: 'Account', Icon: User },
+  { id: 'apikeys', label: 'Keys', Icon: KeyRound },
   { id: 'dictation', label: 'Dictation', Icon: Mic },
   { id: 'window', label: 'Window', Icon: Pin },
   { id: 'history', label: 'History', Icon: HardDrive },
@@ -123,6 +124,17 @@ export function SettingsPanel({ isOpen, onClose, user, isPopup = false }: Settin
   )
   const [voiceBufferInfo, setVoiceBufferInfo] = useState<ipc.VoiceBufferInfo | null>(null)
   const [deepgramKey, setDeepgramKey] = useState<string | null>(null)
+
+  // Bring-your-own API keys. Persisted to localStorage and broadcast so the
+  // dictation window picks them up live (see ALLOWED_SETTINGS_KEYS in tauri-ipc).
+  const [userDeepgramKey, setUserDeepgramKey] = useState(() =>
+    localStorage.getItem('user_deepgram_key') || ''
+  )
+  const [userAnthropicKey, setUserAnthropicKey] = useState(() =>
+    localStorage.getItem('user_anthropic_key') || ''
+  )
+  const [showDeepgramKey, setShowDeepgramKey] = useState(false)
+  const [showAnthropicKey, setShowAnthropicKey] = useState(false)
 
   // Load voice buffer info and API key for reprocessing
   useEffect(() => {
@@ -328,6 +340,17 @@ export function SettingsPanel({ isOpen, onClose, user, isPopup = false }: Settin
     saveSetting('deepgram_keywords', value)
   }
 
+  // Trim on save so a stray space pasted with the key doesn't break the header.
+  const handleUserDeepgramKeyChange = (value: string) => {
+    setUserDeepgramKey(value)
+    saveSetting('user_deepgram_key', value.trim())
+  }
+
+  const handleUserAnthropicKeyChange = (value: string) => {
+    setUserAnthropicKey(value)
+    saveSetting('user_anthropic_key', value.trim())
+  }
+
   const handleThemeChange = (themeId: string) => {
     setSelectedTheme(themeId)
     setStoredTheme(themeId)
@@ -478,6 +501,83 @@ export function SettingsPanel({ isOpen, onClose, user, isPopup = false }: Settin
                 >
                   Sign out
                 </button>
+              </div>
+            </section>
+          )}
+
+          {/* API Keys — bring your own */}
+          {category === 'apikeys' && (
+            <section>
+              <h3 className="text-sm font-semibold flex items-center gap-2 mb-3 uppercase tracking-wider" style={{ color: 'var(--accent-primary)' }}>
+                <KeyRound size={16} style={{ color: 'var(--accent-secondary)' }} />
+                Your API Keys
+              </h3>
+              <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
+                Bring your own keys to run MacroVox without a subscription. Keys are
+                stored locally on this device and sent only to Deepgram and Anthropic
+                — never to OK Studio's servers. Leave blank to use the managed plan.
+              </p>
+
+              <div className="space-y-4">
+                {/* Deepgram */}
+                <div>
+                  <label className="text-sm text-slate-200">Deepgram API key</label>
+                  <p className="text-xs text-slate-500 mb-1.5">Powers speech-to-text. Required to record with your own key.</p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type={showDeepgramKey ? 'text' : 'password'}
+                      value={userDeepgramKey}
+                      onChange={(e) => handleUserDeepgramKeyChange(e.target.value)}
+                      placeholder="••••••••••••••••••••••••••••••••"
+                      spellCheck={false}
+                      autoComplete="off"
+                      className="flex-1 px-3 py-2 rounded text-sm font-mono focus:outline-none"
+                      style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
+                    />
+                    <button
+                      onClick={() => setShowDeepgramKey(v => !v)}
+                      className="p-2 rounded hover:bg-white/10"
+                      style={{ color: 'var(--text-muted)' }}
+                      title={showDeepgramKey ? 'Hide key' : 'Show key'}
+                    >
+                      {showDeepgramKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-600 mt-1">Get one at console.deepgram.com</p>
+                </div>
+
+                {/* Anthropic */}
+                <div>
+                  <label className="text-sm text-slate-200">Anthropic API key</label>
+                  <p className="text-xs text-slate-500 mb-1.5">Powers AI cleanup. Optional — without it, transcripts are still copied raw.</p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type={showAnthropicKey ? 'text' : 'password'}
+                      value={userAnthropicKey}
+                      onChange={(e) => handleUserAnthropicKeyChange(e.target.value)}
+                      placeholder="sk-ant-••••••••••••••••••••••••"
+                      spellCheck={false}
+                      autoComplete="off"
+                      className="flex-1 px-3 py-2 rounded text-sm font-mono focus:outline-none"
+                      style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)', color: 'var(--text-primary)' }}
+                    />
+                    <button
+                      onClick={() => setShowAnthropicKey(v => !v)}
+                      className="p-2 rounded hover:bg-white/10"
+                      style={{ color: 'var(--text-muted)' }}
+                      title={showAnthropicKey ? 'Hide key' : 'Show key'}
+                    >
+                      {showAnthropicKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-600 mt-1">Get one at console.anthropic.com</p>
+                </div>
+
+                {(userDeepgramKey.trim() || userAnthropicKey.trim()) && (
+                  <p className="text-xs rounded px-3 py-2" style={{ color: 'var(--accent-hover)', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)' }}>
+                    Saved. Your own key{userDeepgramKey.trim() && userAnthropicKey.trim() ? 's are' : ' is'} active — it takes effect on your next recording.
+                  </p>
+                )}
               </div>
             </section>
           )}

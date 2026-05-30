@@ -3,6 +3,8 @@
 A managed voice dictation app powered by [Deepgram](https://deepgram.com) and [Claude](https://anthropic.com). Speak into your microphone, get text. Sign in, subscribe, and start dictating — all API keys are managed server-side. Windows is the primary release target; Linux (`.deb`, `.rpm`, AppImage) is supported in beta — see [Linux notes](#linux-notes) below.
 
 > **Managed service** — MacroVox handles all API keys (Deepgram, Claude) for Pro subscribers. No setup friction. See [docs/SETUP.md](docs/SETUP.md) for backend infrastructure guide.
+>
+> **Or bring your own keys** — prefer to run without a subscription? Paste your own Deepgram and Anthropic keys under Settings → Keys. They stay on your device and unlock recording + AI cleanup with no sign-in. See [Bring your own API keys](#bring-your-own-api-keys).
 
 ## Status
 
@@ -24,6 +26,7 @@ Active — Tauri 2 production app. Stripe billing, free trial, auto-updater depl
 - **System tray** — runs in background, toggles with tray icon
 - **Email/password login** — Supabase Auth (Google & Facebook OAuth planned)
 - **Stripe billing** — subscribe to Pro for managed Deepgram + Claude access, 7-day free trial
+- **Bring your own API keys** — skip the subscription entirely: paste your own Deepgram + Anthropic keys under Settings → Keys (stored locally, sent only to those providers)
 
 ---
 
@@ -55,6 +58,30 @@ Create a `.env` file in the project root:
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_KEY=your-anon-key
 ```
+
+---
+
+## Bring your own API keys
+
+MacroVox runs as a managed service by default (sign in, subscribe, keys handled
+server-side). If you'd rather use your own provider accounts and skip the
+subscription, open **Settings → Keys** and paste:
+
+| Key | Powers | Required? | Get one at |
+|---|---|---|---|
+| **Deepgram API key** | Speech-to-text | Yes, to record with your own key | [console.deepgram.com](https://console.deepgram.com) |
+| **Anthropic API key** | AI cleanup of transcripts | Optional (without it, raw transcripts still copy) | [console.anthropic.com](https://console.anthropic.com) |
+
+How it works:
+
+- Keys are stored in the app's `localStorage` on your device. They are sent
+  only to Deepgram and Anthropic, never to OK Studio's servers.
+- A saved **Deepgram** key takes priority over managed keys and unlocks
+  recording immediately, with no sign-in or subscription.
+- A saved **Anthropic** key routes AI cleanup directly to the Anthropic
+  Messages API instead of the managed proxy.
+- Leave a field blank to fall back to the managed plan for that provider.
+- You are billed by Deepgram / Anthropic directly for usage on your own keys.
 
 ---
 
@@ -125,6 +152,7 @@ MacroVox/
 │   ├── lib/
 │   │   ├── tauri-ipc.ts          # Typed invoke() / listen() wrappers
 │   │   ├── auth.ts               # Supabase JS SDK auth functions
+│   │   ├── disable-context-menu.ts # Suppresses the WebView2 page context menu
 │   │   └── supabase.ts           # Supabase client singleton
 │   └── types/                    # Shared TypeScript type definitions
 ├── netlify/functions/            # Netlify serverless (claude-proxy, deepgram-proxy)

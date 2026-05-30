@@ -284,6 +284,11 @@ const ALLOWED_SETTINGS_KEYS = new Set([
   'post_processing_context',
   'writing_style_profile',
   'global_hotkey',
+  // Bring-your-own API keys. Credentials, not prompt content — they're attached
+  // as request headers, never interpolated into a Claude prompt, so they don't
+  // carry the prompt-injection risk the other entries guard against.
+  'user_deepgram_key',
+  'user_anthropic_key',
 ])
 
 export const onSettingsChanged = (

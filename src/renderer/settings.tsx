@@ -8,12 +8,15 @@ import { ThemeProvider } from './ThemeContext'
 import { SettingsPanel } from './components/SettingsPanel'
 import type { AppUser } from './lib/auth'
 import { getUser } from './lib/auth'
+import { disableContextMenu } from './lib/disable-context-menu'
 import './index.css'
 
 window.addEventListener('unhandledrejection', (event) => {
   console.error('[UnhandledRejection]', event.reason)
   event.preventDefault()
 })
+
+disableContextMenu()
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
   state = { error: null as string | null }
