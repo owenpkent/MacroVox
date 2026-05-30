@@ -1,0 +1,82 @@
+name: Bug report
+description: Report something that doesn't work the way it should.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in as much
+        as you can. If this is a **security issue**, stop here and follow
+        [SECURITY.md](https://github.com/okstudio1/MacroVox/blob/main/SECURITY.md)
+        instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. What did you do, what did you expect, what happened instead?
+      placeholder: |
+        1. I clicked ...
+        2. I expected ...
+        3. Instead ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: MacroVox version
+      description: Visible in Settings -> Appearance -> About.
+      placeholder: e.g. 1.0.8
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - Linux (X11)
+        - Linux (Wayland)
+        - Other (mention in description)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: keys
+    attributes:
+      label: How are you using API keys?
+      description: Managed (signed-in subscriber) or your own keys under Settings -> Keys?
+      options:
+        - Managed (subscription)
+        - My own keys (bring-your-own)
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: target-app
+    attributes:
+      label: Foreground application (if relevant)
+      description: Which app were you dictating into when the bug occurred? Some bugs are app-specific (auto-paste into IDEs, browsers, remote desktop).
+      placeholder: e.g. VS Code, Chrome, Word
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or error output
+      description: Run `python run.py debug` (or set `RUST_LOG=debug`) from a terminal to capture console output, and paste anything relevant here.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched existing issues and didn't find a duplicate.
+          required: true
+        - label: This is not a security vulnerability (those go through SECURITY.md).
+          required: true
