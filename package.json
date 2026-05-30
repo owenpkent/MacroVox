@@ -20,7 +20,8 @@
     "check:versions": "node scripts/check-tauri-versions.mjs",
     "release:linux": "mkdir -p release/linux && cp -v src-tauri/target/release/bundle/deb/*.deb src-tauri/target/release/bundle/rpm/*.rpm release/linux/ 2>/dev/null; cp -v src-tauri/target/release/bundle/appimage/*.AppImage src-tauri/target/release/bundle/appimage/*.AppImage.sig src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz* release/linux/ 2>/dev/null; ls -lh release/linux/",
     "release:windows": "node -e \"const fs=require('fs'),path=require('path');fs.mkdirSync('release/windows',{recursive:true});const src='src-tauri/target/release/bundle';['nsis','msi'].forEach(d=>{const dir=path.join(src,d);if(fs.existsSync(dir))for(const f of fs.readdirSync(dir))if(/(\\.exe|\\.exe\\.sig|\\.msi|\\.msi\\.sig)$/.test(f))fs.copyFileSync(path.join(dir,f),path.join('release/windows',f))});console.log(fs.readdirSync('release/windows'))\"",
-    "release:manifest": "node scripts/generate-latest.mjs"
+    "release:manifest": "node scripts/generate-latest.mjs",
+    "release:sbom": "node scripts/generate-sbom.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.51.0",

@@ -185,6 +185,28 @@ which clients on the current pubkey will reject, breaking auto-update.
 
 ---
 
+## 3b. Generate SBOMs
+
+Each release ships a CycloneDX Software Bill of Materials so downstream
+users can audit exactly what's inside the binary. MacroVox has two
+dependency graphs, so there are two SBOMs:
+
+```
+npm run release:sbom
+```
+
+This writes, into `release/sbom/`:
+
+- `MacroVox_<ver>_sbom.npm.cyclonedx.json` (renderer, production deps only)
+- `MacroVox_<ver>_sbom.cargo.cyclonedx.json` (every crate compiled into the backend)
+
+The npm side runs `@cyclonedx/cyclonedx-npm` via `npx` (nothing to install).
+The cargo side needs `cargo-cyclonedx` once: `cargo install cargo-cyclonedx`.
+Both files are attached to the GitHub release in Section 4 so the SBOM
+travels with the binary it describes.
+
+---
+
 ## 4. Publish
 
 1. Tag the commit: `git tag v1.0.7 && git push --tags`. CI starts the
@@ -209,8 +231,9 @@ which clients on the current pubkey will reject, breaking auto-update.
      --draft \
      --title "MacroVox 1.0.7" \
      --notes "MacroVox 1.0.7 — see CHANGELOG.md in the source repo." \
-     release/windows/* release/linux/* release/latest.json
+     release/windows/* release/linux/* release/sbom/* release/latest.json
    ```
+   (`release/sbom/*` are the CycloneDX SBOMs from Section 3b.)
 6. Walk `RELEASE_CHECKLIST.md` Section 6 (post-build verify), then
    click Publish on the draft release.
 7. The `tauri.conf.json → plugins.updater.endpoints` entry points at
