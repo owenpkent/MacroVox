@@ -1,5 +1,11 @@
 # MacroVox Changelog
 
+## Unreleased
+
+### Fixes
+
+- **Smart number formatting now recognizes item labels.** In `Smart` number mode, numbers that label or identify a specific item (e.g. "survey 3", "step 2", "question 9") now render as digits instead of words. Previously the AI-cleanup prompt treated these as small standalone counts and spelled them out ("surveys three and four"). The prompt also propagates digit formatting across a list when the noun is implied, so "I updated surveys 3 and 4; still waiting on 7, 5, and 6" formats consistently. Genuine colloquial counts ("twenty-one people", "three of them") still spell out. Applies to the `Smart` mode only and requires AI cleanup. See `src/renderer/hooks/usePostProcessing.ts`.
+
 ## v1.0.8 — 2026-05-30
 
 ### New Features
