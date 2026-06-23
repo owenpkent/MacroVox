@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use crate::deepgram_ws::DgSender;
 
@@ -111,6 +112,13 @@ pub struct AppState {
 
     /// Maximum voice buffer size in bytes (default 100 MB).
     pub voice_buffer_max_size: Mutex<u64>,
+
+    // ── Perf instrumentation ──────────────────────────────────────────────────
+
+    /// Wall-clock instant captured when `AppState` is constructed, very early in
+    /// `run()`. Used as the zero point for the `perf_mark` command so the
+    /// renderer can report time-to-first-paint relative to process start.
+    pub started_at: Instant,
 }
 
 impl Default for AppState {
@@ -134,6 +142,7 @@ impl Default for AppState {
             voice_buffer_dir: Mutex::new(PathBuf::new()),
             voice_buffer_enabled: Mutex::new(false),
             voice_buffer_max_size: Mutex::new(100 * 1024 * 1024), // 100 MB
+            started_at: Instant::now(),
         }
     }
 }

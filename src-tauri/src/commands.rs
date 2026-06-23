@@ -12,7 +12,7 @@
 ///   ✅ Phase 6 — auth stubs removed; Supabase JS SDK used from renderer
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
-use log::{debug, warn};
+use log::{debug, info, warn};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
@@ -237,6 +237,11 @@ pub fn audio_set_device(device_name: String, state: State<AppState>) -> OkRespon
 pub fn audio_start(state: State<AppState>) -> OkResponse {
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
+    // Perf: time-to-first-capture is the latency a user feels at the record
+    // toggle. We break it down (config / build / play) because the platform
+    // deltas live in different stages — see `RUST_LOG=info` output.
+    let t0 = std::time::Instant::now();
+
     let host = cpal::default_host();
     let device_name = lock_or_recover(&state.selected_mic_device).clone();
     debug!("[audio] audio_start called, selected device: {:?}", device_name);
@@ -276,6 +281,7 @@ pub fn audio_start(state: State<AppState>) -> OkResponse {
             return OkResponse::err(format!("Failed to get input config: {e}"));
         }
     };
+    let t_config = t0.elapsed();
 
     // Persist stream parameters for WAV encoding in recording_stop.
     *lock_or_recover(&state.audio_sample_rate) = config.sample_rate().0;
@@ -289,11 +295,22 @@ pub fn audio_start(state: State<AppState>) -> OkResponse {
 
     match crate::audio::build_input_stream(&device, &config, level, buffer, is_recording, dg_sender) {
         Ok(stream) => {
+            let t_build = t0.elapsed();
             if let Err(e) = stream.play() {
                 warn!("[audio] Failed to start stream: {e}");
                 return OkResponse::err(format!("Failed to start stream: {e}"));
             }
+            let t_play = t0.elapsed();
             debug!("[audio] Stream started successfully");
+            info!(
+                "[perf] audio_start total={}ms (config={}ms build={}ms play={}ms) {}ch@{}Hz",
+                t_play.as_millis(),
+                t_config.as_millis(),
+                t_build.saturating_sub(t_config).as_millis(),
+                t_play.saturating_sub(t_build).as_millis(),
+                config.channels(),
+                config.sample_rate().0,
+            );
             *lock_or_recover(&state.audio_stream) = Some(crate::state::AudioStream(stream));
             OkResponse::ok()
         }
@@ -759,49 +776,84 @@ pub fn clipboard_write(app: AppHandle, text: String) -> OkResponse {
 
 /// Hides the dictation window and sends Ctrl+V to the previously focused app.
 ///
-/// Uses `enigo` for native `SendInput` key injection — no subprocess, no JIT
-/// assembly load.  A 50 ms delay gives the OS time to re-focus the target window
-/// after we hide ours; that is all the latency budget this path needs.
+/// Uses `enigo` for native key injection on Windows, macOS, and Linux/X11 — no
+/// subprocess, no JIT assembly load. A 50 ms delay gives the OS time to re-focus
+/// the target window after we hide ours; that is all the latency budget this
+/// path needs.
 ///
-/// On Wayland, `enigo` has no reliable key-injection path, so we skip the
-/// simulated keystroke and return an explanatory error. The clipboard copy
-/// done upstream still succeeds, so the user can paste manually.
+/// On Wayland, `enigo` cannot synthesise input, so we fall back to a
+/// Wayland-native tool (`wtype` or `ydotool`) when one is installed. If neither
+/// is present we return an explanatory error; the clipboard copy done upstream
+/// still succeeded, so the user can paste manually.
+///
+/// Logs the end-to-end inject latency at `info` level (`[perf] auto_paste …`).
 #[tauri::command]
 pub fn dictation_auto_paste(app: AppHandle) -> OkResponse {
-    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+    let t0 = std::time::Instant::now();
 
+    // Wayland: enigo's XTEST path is inert — route through wtype/ydotool instead.
+    #[cfg(target_os = "linux")]
     if crate::platform::is_wayland() {
-        return OkResponse::err(
-            "Auto-paste is not supported on Wayland — the transcript is on your \
-             clipboard; press Ctrl+V manually.",
-        );
+        let tool = match crate::platform::wayland_paste_tool() {
+            Some(t) => t,
+            None => {
+                return OkResponse::err(
+                    "Auto-paste on Wayland needs `wtype` or `ydotool` installed — \
+                     the transcript is on your clipboard; press Ctrl+V to paste, \
+                     or install one of those tools to enable auto-paste.",
+                );
+            }
+        };
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.hide();
+        }
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            match crate::platform::wayland_send_paste(tool) {
+                Ok(()) => info!(
+                    "[perf] auto_paste(wayland:{tool:?}) injected in {}ms",
+                    t0.elapsed().as_millis()
+                ),
+                Err(e) => warn!("[auto-paste] {tool:?} failed: {e}"),
+            }
+        });
+        return OkResponse::ok();
     }
+
+    // Windows, macOS, Linux/X11: native enigo key injection.
+    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.hide();
     }
 
     // Background thread: wait for focus to shift, then inject Ctrl+V.
-    std::thread::spawn(|| {
+    std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(50));
         if let Ok(mut enigo) = Enigo::new(&Settings::default()) {
             let _ = enigo.key(Key::Control, Direction::Press);
             let _ = enigo.key(Key::Unicode('v'), Direction::Click);
             let _ = enigo.key(Key::Control, Direction::Release);
         }
+        info!(
+            "[perf] auto_paste(enigo) completed in {}ms",
+            t0.elapsed().as_millis()
+        );
     });
 
     OkResponse::ok()
 }
 
-/// Reports runtime platform facts the renderer needs to adjust its UI —
-/// today just whether the user is on Wayland so Settings can disable
-/// auto-paste and explain why.
+/// Reports runtime platform facts the renderer needs to adjust its UI: whether
+/// the user is on Wayland, and whether auto-paste can actually inject a
+/// keystroke (false on Wayland with no `wtype`/`ydotool`). Settings uses
+/// `auto_paste_available` to enable or disable the "Auto-paste on stop" toggle.
 #[tauri::command]
 pub fn platform_info() -> PlatformInfo {
     PlatformInfo {
         os: std::env::consts::OS.to_string(),
         is_wayland: crate::platform::is_wayland(),
+        auto_paste_available: crate::platform::auto_paste_available(),
     }
 }
 
@@ -809,6 +861,20 @@ pub fn platform_info() -> PlatformInfo {
 pub struct PlatformInfo {
     pub os: String,
     pub is_wayland: bool,
+    pub auto_paste_available: bool,
+}
+
+/// Perf marker: logs `label` with the elapsed time since process start.
+///
+/// The renderer calls this once it has painted its first frame so we can measure
+/// real time-to-first-paint (`[perf] dictation_first_paint …`) instead of
+/// relying on folklore about WebView engine cold-start. Surfaced at `info` level
+/// — run with `RUST_LOG=info` (or `debug`) to see it.
+#[tauri::command]
+pub fn perf_mark(state: State<AppState>, label: String) -> OkResponse {
+    let ms = state.started_at.elapsed().as_millis();
+    info!("[perf] {label}: {ms}ms since process start");
+    OkResponse::ok()
 }
 
 // ── Window settings ✅ Phase 2 ────────────────────────────────────────────────
