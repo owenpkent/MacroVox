@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Security
+
+- **Dependabot advisories cleared.** Resolved all 7 open npm advisories via `npm audit fix`, all within existing semver ranges so `package.json` is unchanged (only `package-lock.json` moved): `shell-quote` 1.8.4 (fixes the critical newline-escape bypass in `quote()`), `undici` 7.28.0, `ws` 8.21.0, `vite` 6.4.3, `qs` 6.15.3, `@babel/core` 7.29.7. `npm audit` now reports 0 vulnerabilities. On the Rust side, lock-only bumps of `openssl` 0.10.80 (with `openssl-sys` 0.9.117; out-of-bounds write in AES-KW-PAD `cipher_update_inplace`) and `tar` 0.4.46 (PAX header desync). Verified green: `tsc --noEmit`, 110 vitest, `vite build`, and 75 cargo tests. `glib` 0.18.5 and `rand` 0.7.3 stay pinned by the `tauri 2.11.1` dependency tree (gtk 0.18 and phf/kuchikiki) and can only move on an upstream Tauri bump.
+
+### Chore
+
+- **Version synced to 1.0.8 across manifests.** `Cargo.toml`, `Cargo.lock`, and `package-lock.json` lagged at 1.0.7 while `package.json` and `tauri.conf.json` (the authoritative updater version) were already 1.0.8 for the published release. All four now agree.
+
 ### Fixes
 
 - **Smart number formatting now recognizes item labels.** In `Smart` number mode, numbers that label or identify a specific item (e.g. "survey 3", "step 2", "question 9") now render as digits instead of words. Previously the AI-cleanup prompt treated these as small standalone counts and spelled them out ("surveys three and four"). The prompt also propagates digit formatting across a list when the noun is implied, so "I updated surveys 3 and 4; still waiting on 7, 5, and 6" formats consistently. Genuine colloquial counts ("twenty-one people", "three of them") still spell out. Applies to the `Smart` mode only and requires AI cleanup. See `src/renderer/hooks/usePostProcessing.ts`.

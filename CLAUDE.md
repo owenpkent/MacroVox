@@ -60,7 +60,7 @@ Release is split-host and mostly manual (see [docs/RELEASE.md](docs/RELEASE.md))
 
 **Wayland:** auto-paste and global hotkeys have no reliable path. [src-tauri/src/platform.rs](src-tauri/src/platform.rs)::`is_wayland()` gates this; `dictation_auto_paste` short-circuits with an error (clipboard copy still works for manual paste). X11 has full parity.
 
-**Version fields drift across three files:** package.json (1.0.8), [src-tauri/tauri.conf.json](src-tauri/tauri.conf.json) (1.0.8, the authoritative user/updater version), and [src-tauri/Cargo.toml](src-tauri/Cargo.toml) (1.0.7 in this snapshot). Bump all three on release. `npm run check:versions` only compares the tauri crate vs `@tauri-apps/api` major.minor, NOT the app version.
+**Version is set in three manifests that must be bumped together** (their lockfiles follow): package.json, [src-tauri/tauri.conf.json](src-tauri/tauri.conf.json) (the authoritative user/updater version), and [src-tauri/Cargo.toml](src-tauri/Cargo.toml). All aligned at 1.0.8 now, but nothing enforces it: `npm run check:versions` only compares the tauri crate vs `@tauri-apps/api` major.minor, NOT the app version. On release, bump all three (and let `npm install` / `cargo build` update package-lock.json / Cargo.lock).
 
 **CSP is an explicit allowlist** in [src-tauri/tauri.conf.json](src-tauri/tauri.conf.json) `connect-src` (self, Supabase host, macrovox.tech, Deepgram, api.anthropic.com), duplicated in the `<meta>` tags of dictation.html/settings.html. Adding a backend host means editing all of them or requests are blocked.
 
